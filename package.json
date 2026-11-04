@@ -1,0 +1,34 @@
+{
+  "name": "playpick",
+  "private": true,
+  "version": "0.1.0",
+  "description": "플레이픽(PlayPick) - 인원수·플랫폼·장르 기반 맞춤형 게임 큐레이션 웹사이트",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prestart": "node scripts/build.mjs",
+    "start": "node server/index.js",
+    "dev": "node scripts/dev.mjs",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "node --test e2e/*.test.js",
+    "check:apis": "node scripts/check-apis.mjs",
+    "check:search": "node scripts/check-search.mjs",
+    "check:gemini": "node scripts/check-gemini.mjs",
+    "prefill:players": "node scripts/prefill-players.mjs",
+    "prefill:images": "node scripts/prefill-images.mjs",
+    "import:status": "node scripts/import-status.mjs",
+    "prefill:ended": "node scripts/prefill-ended.mjs",
+    "check:game": "node scripts/check-game.mjs"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "xml-js": "^1.6.11"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0"
+  }
+}

@@ -1,0 +1,13 @@
+node_modules/
+client/dist/
+.env
+*.log
+api-check.log
+.cache/
+.data/
+search-check.log
+gemini-check.log
+server/data/app-store.json.tmp
+
+# 작업용 스크린샷·압축 파일
+Claude outputs/
