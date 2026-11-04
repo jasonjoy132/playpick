@@ -78,6 +78,13 @@ export function Layout({ meta, children }) {
             {meta?.isDemo && ' · 시연용 가상 데이터'}
             {meta && !meta.isDemo && meta.translation && ' · 소개 번역: DeepL'}
           </p>
+          <nav className="footer-links" aria-label="사이트 정보">
+            <Link to="/terms">이용약관</Link>
+            <Link to="/privacy">
+              <b>개인정보처리방침</b>
+            </Link>
+            <Link to="/sources">데이터 출처</Link>
+          </nav>
         </div>
       </footer>
     </div>

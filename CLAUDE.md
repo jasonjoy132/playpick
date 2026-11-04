@@ -78,7 +78,8 @@
    - 게관위 색인 `.cache/grac-index.json`(git 제외 중)을 배포에 포함하는 방법 정하기(서버 시작마다 3만 건 다시 받으면 너무 느림)
    - 메모리 기반 요청 제한(rateLimit)은 인스턴스마다 따로라는 점 고려
    - `vercel.json`, 환경 변수 목록 정리
-2. 개인정보처리방침·이용약관 페이지, 데이터 출처 표기(IGDB·게관위·App Store·AI 추정)
-3. 안 쓰는 파일 정리: `client/src/components/GameCard.jsx`, `Steps.jsx`, `client/src/pages/WishlistPage.jsx`(사용자 PC에만 남아 있을 수 있음)
-4. GitHub commit·push (`.gitignore`가 `.env`, `.data/`, `.cache/`, `node_modules/`, `client/dist/` 제외 중 — push 전 `git status`로 확인)
+   - 전환하면 개인정보처리방침(`client/src/pages/InfoPages.jsx`) '처리 위탁'에 Vercel(호스팅)·Supabase(DB·사진 저장) 추가
+2. 문의 연락처: `InfoPages.jsx`의 `CONTACT_EMAIL`이 비어 있음('연락처 준비 중'으로 표시) — 사용자에게 받아 넣기. 회원 탈퇴 기능은 아직 없음(지금은 문의로 삭제)
+3. 깨진 테스트(전환 전부터): `test/api.test.js` 2개, `e2e/flow.test.js` live 모드 1개 — 실제 `.env` 설정을 읽어서 생기는 것으로 보임. `e2e/paging.test.js`는 전체 실행 때 가끔 시간 초과
+4. GitHub: 공개 저장소 `jasonjoy132/playpick`(main). push 전 `git status`로 `.env`·`.data/`·`.cache/` 안 올라가는지 확인
 5. (선택) 제보 승인·거절 알림, 관리자 메뉴에 대기 건수, 모바일 화면 점검, 게임 상세 페이지 제목·미리보기, 친구와 같이 고르는 '파티 투표'

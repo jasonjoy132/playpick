@@ -17,6 +17,7 @@ import { MyPage } from './pages/MyPage.jsx';
 import { PopularPage, NewPage, RankingPage, GenrePage } from './pages/BrowsePages.jsx';
 import { SubmitPage } from './pages/SubmitPage.jsx';
 import { AdminPage } from './pages/AdminPage.jsx';
+import { PrivacyPage, TermsPage, SourcesPage } from './pages/InfoPages.jsx';
 
 export function App() {
   const { pathname } = useLocation();
@@ -50,6 +51,9 @@ function route(pathname, options) {
   if (pathname === '/genres') return <GenrePage options={options} />;
   if (pathname === '/submit') return <SubmitPage options={options} />;
   if (pathname === '/admin') return <AdminPage options={options} />;
+  if (pathname === '/privacy') return <PrivacyPage />;
+  if (pathname === '/terms') return <TermsPage />;
+  if (pathname === '/sources') return <SourcesPage />;
   if (pathname === '/login') return <LoginPage />;
   if (pathname === '/signup') return <SignupPage />;
   if (pathname === '/find-id') return <FindIdPage />;

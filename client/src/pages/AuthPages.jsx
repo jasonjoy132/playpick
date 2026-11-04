@@ -88,6 +88,9 @@ export function SignupPage() {
             {error}
           </p>
         )}
+        <p className="form-note muted" data-testid="signup-consent">
+          가입하면 <Link to="/terms">이용약관</Link>과 <Link to="/privacy">개인정보처리방침</Link>에 동의하는 것으로 봅니다.
+        </p>
         <button type="submit" className="btn btn-gold btn-block btn-lg" disabled={busy}>
           {busy ? '가입 중…' : '가입하기'}
         </button>
