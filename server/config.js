@@ -67,7 +67,9 @@ export function getConfig() {
       artFile: path.join(root, 'server', 'data', 'app-store.json'),
     },
     rawg: {
+      // 키는 npm run prefill:playtime 을 돌릴 때만 필요. 서버는 아래 파일만 읽음
       apiKey: env('RAWG_API_KEY'),
+      dataFile: path.join(root, 'server', 'data', 'rawg-playtime.json'),
     },
     // 추천 인원 AI 추정 (Google Gemini). 키가 없으면 AI 없이 IGDB 값만 사용
     gemini: {

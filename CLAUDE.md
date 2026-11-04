@@ -13,7 +13,8 @@
 3. AI 추정값은 항상 출처를 구분해 표시(`source: 'ai'` → 화면에 'AI 추정'). 회원 제보는 '사용자 제보 · 관리자 확인'.
 4. `node_modules`, `.data`(회원 DB·업로드 이미지), `.cache`는 건드리지 않기(캐시 삭제가 필요하면 먼저 물어보기).
 5. 기능을 바꾸면 테스트도 함께 고치고 `npm test`, `npm run test:e2e` 통과 확인.
-6. `prefill:*` / `import:status` 스크립트는 같은 파일(`server/data/party-size.json`)에 쓰므로 **동시에 두 개 돌리지 않기**.
+6. `prefill:players`·`prefill:ended`·`import:status` 스크립트는 같은 파일(`server/data/party-size.json`)에 쓰므로 **동시에 두 개 돌리지 않기**. (`prefill:images`·`prefill:playtime`은 각자 다른 파일)
+7. 미리 만드는 데이터(`server/data/*.json`)는 git 파일로 배포(Vercel에서 읽기만). Supabase에는 회원이 만드는 데이터만.
 
 ## 스택
 
@@ -37,13 +38,14 @@
 | `npm run prefill:players -- [--igdb N] [--grac N] [--recheck] [--recheck-unknown] [--model M]` | AI 추천 인원·플레이 시간·게관위 서비스 상태 미리 저장 |
 | `npm run prefill:ended -- [--igdb N] [--online N] [--only grac\|popular\|online] [--export] [--rescan]` | IGDB 게임 서비스 종료 여부 AI 확인(후보는 `.cache/ended-candidates.json`에 24시간 저장) |
 | `npm run prefill:images` | 게관위 모바일 게임 App Store 아이콘·스크린샷 저장 |
+| `npm run prefill:playtime -- [--limit N] [--pages N] [--dry] [--retry]` | RAWG 평균 플레이 시간 저장(인기·랭킹·신작·장르별 IGDB 게임, 기본 500개). RAWG 월 2만 건·게임당 최대 2건 |
 | `npm run import:status -- <결과.csv>` | 외부 AI 결과(게관위 '모름'·IGDB 종료) 반영. `--dry`, `--force` |
 
 ## 데이터 출처와 구조
 
 - **IGDB**(주 데이터, 전체 게임 실시간 조회): `server/providers/igdbProvider.js` (Apicalypse, 초당 4회 제한 `slot()`)
 - **게임물관리위원회(게관위)**: 전체 목록 색인 `.cache/grac-index.json`(약 3.3만 건, 매일 증분·주 1회 전체), IGDB에 있는지 확인 캐시 `.cache/grac-igdb-check.json`. IGDB에 없는 게관위 게임만 '게관위 카드'로 보임
-- **RAWG**: 평균 플레이 시간 / **DeepL**: 소개 번역·검색어 번역 / **App Store 검색 API**: 게관위 모바일 게임 아이콘(이름+개발사 모두 일치할 때만)
+- **RAWG**: 평균 플레이 시간 — 서버는 실시간으로 부르지 않고 `server/data/rawg-playtime.json`(`prefill:playtime`)만 읽음. 파일에 없으면 AI 추정 → '정보 없음' (2026-11 RAWG 서버 522 다운으로 상세가 8초씩 걸려서 바꿈) / **DeepL**: 소개 번역·검색어 번역 / **App Store 검색 API**: 게관위 모바일 게임 아이콘(이름+개발사 모두 일치할 때만)
 - **Gemini**(기본 `gemini-flash-lite-latest`): 서버는 실시간으로 부르지 않고 **미리 저장한 파일만 읽음**
   - `server/data/party-size.json`: 추천 인원·플레이 시간·서비스 상태(게관위 `status`, IGDB `ended`)·근거
   - `server/data/app-store.json`: App Store 아이콘·스크린샷

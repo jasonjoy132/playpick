@@ -188,7 +188,7 @@ if (config.deepl.apiKey) {
 // ── 6. RAWG 평균 플레이 시간 (진단) ──
 section('6. RAWG 평균 플레이 시간');
 if (!config.rawg.apiKey) {
-  log('⏭ .env 에 RAWG_API_KEY 가 없어 건너뜀 → 상세 화면의 플레이 시간은 모두 정보 없음으로 표시됨');
+  log('⏭ .env 에 RAWG_API_KEY 가 없어 건너뜀 → npm run prefill:playtime 으로 플레이 시간을 받을 수 없음');
 } else if (!config.igdb.clientId || !config.igdb.clientSecret) {
   log('⏭ IGDB 설정이 없어 건너뜀');
 } else {

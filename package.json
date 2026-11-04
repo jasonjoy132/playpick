@@ -19,6 +19,7 @@
     "check:gemini": "node scripts/check-gemini.mjs",
     "prefill:players": "node scripts/prefill-players.mjs",
     "prefill:images": "node scripts/prefill-images.mjs",
+    "prefill:playtime": "node scripts/prefill-playtime.mjs",
     "import:status": "node scripts/import-status.mjs",
     "prefill:ended": "node scripts/prefill-ended.mjs",
     "check:game": "node scripts/check-game.mjs"

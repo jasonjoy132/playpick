@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { createApp } from '../server/app.js';
 import { getConfig } from '../server/config.js';
+import { createRawgPlaytime } from '../server/services/rawgPlaytime.js';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -282,11 +283,12 @@ test('번역된 소개 표시 + 원문 보기 (DeepL 응답 모의)', async () =
     if (u.includes('grac.or.kr')) return reply(u.includes('gametitle') ? '<result><tcount>0</tcount><pageno>1</pageno></result>' : GUIDE_SAMPLE);
     if (u.includes('oauth2/token')) return reply({ access_token: 't', expires_in: 3600 });
     if (u.includes('deepl.com')) return reply({ translations: [{ text: '협동 요리 게임입니다.', detected_source_language: 'EN' }] });
-    if (u.includes('api.rawg.io')) return reply({ results: [{ name: 'Test Kitchen', slug: 'test-kitchen', released: null, playtime: 7 }] });
     if (u.endsWith('/games')) return reply([igdbGame]);
-    throw new Error(u);
+    throw new Error(u); // RAWG(api.rawg.io)를 실시간으로 부르면 여기서 실패
   };
-  const live = createApp({ ...getConfig(), dataSource: 'live', dbFile: ':memory:', igdb: { clientId: 'id', clientSecret: 's' }, deepl: { apiKey: 'k:fx' }, rawg: { apiKey: 'r' } }, { fetchImpl });
+  // RAWG 플레이 시간은 미리 받아 둔 파일(rawg-playtime.json)에서만 읽음
+  const rawgPlaytime = createRawgPlaytime(null, { entries: { 'igdb-101': { hours: 7, url: 'https://rawg.io/games/test-kitchen', name: 'Test Kitchen' } } });
+  const live = createApp({ ...getConfig(), dataSource: 'live', dbFile: ':memory:', igdb: { clientId: 'id', clientSecret: 's' }, deepl: { apiKey: 'k:fx' }, rawg: { apiKey: 'r' } }, { fetchImpl, rawgPlaytime });
   await new Promise((r) => live.listen(0, r));
   const page = await browser.newPage();
   try {

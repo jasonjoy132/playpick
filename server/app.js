@@ -18,7 +18,7 @@ import { createSubmissions } from './community/submissions.js';
 import { createBadges } from './community/badges.js';
 import { createImageSubmissions } from './community/imageSubmissions.js';
 import { createReports } from './community/reports.js';
-import { createRawgProvider } from './providers/rawgProvider.js';
+import { createRawgPlaytime } from './services/rawgPlaytime.js';
 import { createPartySize } from './services/partySize.js';
 import { createAppStoreProvider } from './providers/appStoreProvider.js';
 import { createAppArt, pickArt } from './services/appArt.js';
@@ -76,7 +76,8 @@ async function readJson(req, limit = 16 * 1024) {
 export function createApp(config, deps = {}) {
   const catalog = deps.catalog ?? createCatalog(config, deps);
   const translator = deps.translator ?? createTranslator(config.deepl ?? {}, deps);
-  const rawg = deps.rawg ?? createRawgProvider(config.rawg ?? {}, deps);
+  // RAWG 평균 플레이 시간: 미리 받아 둔 파일만 읽음 (npm run prefill:playtime)
+  const rawgTimes = deps.rawgPlaytime ?? createRawgPlaytime(config.rawg?.dataFile ?? null);
   const partySize = deps.partySize ?? createPartySize(config.gemini ?? {}, { ...deps, log: (m) => console.log(m) });
   const appArt = deps.appArt ?? createAppArt(config.appStore?.artFile ?? null);
   const appStore = deps.appStore ?? createAppStoreProvider(config.appStore ?? { enabled: config.dataSource === 'live' }, deps);
@@ -114,7 +115,7 @@ export function createApp(config, deps = {}) {
     signup: createRateLimiter({ limit: 10, windowMs: 60 * 60e3 }),
     write: createRateLimiter({ limit: 60, windowMs: 60e3 }),
   };
-  const meta = () => ({ ...catalog.meta, translation: translator.configured, mail: mailer.configured || mailer.devLog, rawg: rawg.configured, aiPlayers: partySize.configured });
+  const meta = () => ({ ...catalog.meta, translation: translator.configured, mail: mailer.configured || mailer.devLog, rawg: rawgTimes.size > 0, aiPlayers: partySize.configured });
   const RESULT_PAGE = 24;
   const IGDB_SCAN = 48; // 추천 인원으로 다시 거르면 줄어드므로 한 번에 넉넉히 훑음
 const SLIDES = 5;
@@ -548,20 +549,13 @@ const SLIDES = 5;
       const [decorated] = decorate(await withKoreanSummaries(translator, [withParty]), user);
       if (found.source === '사용자 제보') decorated.submitterBadge = badges.displayFor(found.submittedById); // 제보자 닉네임 옆 뱃지
       if (decorated.imageSource === '사용자 제보' && decorated.imageBy) decorated.imageByBadge = badges.displayFor(imageSubs.submitterOf(decorated.id));
-      // 평균 플레이 시간 (RAWG). 실패해도 상세 화면은 그대로 표시
-      let playtime = null;
-      if (!decorated.isDemo && decorated.source !== '사용자 제보') {
-        try {
-          playtime = await rawg.playtime({ names: [...(decorated.altNames || []), decorated.originalTitle, decorated.title], releaseDate: decorated.releaseDate });
-        } catch {
-          playtime = null;
-        }
-      }
+      // 평균 플레이 시간 (RAWG): 미리 받아 둔 파일에서만 찾음 (실시간 호출 없음 → RAWG가 느리거나 멈춰도 상세는 바로 열림)
+      let playtime = !decorated.isDemo && decorated.source !== '사용자 제보' ? rawgTimes.get(decorated.id) : null;
       // RAWG에 없으면 미리 정리해 둔 AI 추정(메인 스토리 기준)으로 대신, 출처를 구분해 표시
       if (decorated.userPlaytime) playtime = { hours: decorated.userPlaytime, source: 'user' }; // 회원 정보 수정 제보(관리자 확인)가 가장 우선
       else if (playtime) playtime = { ...playtime, source: 'rawg' };
       else if (decorated.aiPlaytime) playtime = { hours: decorated.aiPlaytime, source: 'ai' };
-      let game = { ...decorated, playtime, playtimeAvailable: rawg.configured };
+      let game = { ...decorated, playtime, playtimeAvailable: rawgTimes.size > 0 };
       // 게임위 전용 게임: App Store에서 같은 앱(제목+개발사 일치)을 찾으면 아이콘·App Store 링크 보완
       // (목록과 같은 미리 받아 둔 아이콘은 decorate 에서 이미 붙음. 확인한 적 없는 게임만 그 자리에서 찾아봄)
       if (game.source === '게임물관리위원회' && !game.imageUrl && !game.isDemo && !appArt.has(game)) {
