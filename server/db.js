@@ -126,6 +126,15 @@ CREATE TABLE IF NOT EXISTS review_reports (
   UNIQUE (review_id, reporter_id)
 );
 CREATE INDEX IF NOT EXISTS idx_review_reports_status ON review_reports(status, created_at);
+-- 상세 화면에서 로그인한 회원이 열 때 AI에게 물은 플레이 시간 (한 게임 한 번만, hours NULL = AI가 모름)
+CREATE TABLE IF NOT EXISTS ai_playtime (
+  game_id TEXT PRIMARY KEY,
+  hours INTEGER,
+  model TEXT,
+  requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_playtime_created ON ai_playtime(created_at);
 `;
 
 // 기존 DB 파일에 나중에 추가된 열 보충

@@ -19,6 +19,7 @@ import { createBadges } from './community/badges.js';
 import { createImageSubmissions } from './community/imageSubmissions.js';
 import { createReports } from './community/reports.js';
 import { createRawgPlaytime } from './services/rawgPlaytime.js';
+import { createAiPlaytime, canAskPlaytime } from './services/aiPlaytime.js';
 import { createPartySize } from './services/partySize.js';
 import { createAppStoreProvider } from './providers/appStoreProvider.js';
 import { createAppArt, pickArt } from './services/appArt.js';
@@ -114,7 +115,22 @@ export function createApp(config, deps = {}) {
     mail: createRateLimiter({ limit: 5, windowMs: 10 * 60e3 }),
     signup: createRateLimiter({ limit: 10, windowMs: 60 * 60e3 }),
     write: createRateLimiter({ limit: 60, windowMs: 60e3 }),
+    aiPlaytime: createRateLimiter({ limit: 30, windowMs: 60 * 60e3 }), // 회원 한 명이 AI 플레이 시간을 새로 물을 수 있는 수(시간당)
   };
+  const aiPlaytime = deps.aiPlaytime ?? createAiPlaytime(db, config.aiPlaytime ?? {}, { ...deps, log: (m) => console.log(m) });
+  /**
+   * 평균 플레이 시간 고르기 (출처 구분)
+   * 회원 정보 수정 제보(관리자 확인) → RAWG(미리 받은 파일) → AI 추정(미리 받은 파일) → AI 추정(상세에서 물어 DB에 저장한 값)
+   */
+  function playtimeOf(g) {
+    if (g.userPlaytime) return { hours: g.userPlaytime, source: 'user' };
+    if (g.isDemo || g.source === '사용자 제보') return null;
+    const r = rawgTimes.get(g.id);
+    if (r) return { ...r, source: 'rawg' };
+    if (g.aiPlaytime) return { hours: g.aiPlaytime, source: 'ai' };
+    const asked = aiPlaytime.cached(g.id);
+    return asked ? { hours: asked, source: 'ai' } : null;
+  }
   const meta = () => ({ ...catalog.meta, translation: translator.configured, mail: mailer.configured || mailer.devLog, rawg: rawgTimes.size > 0, aiPlayers: partySize.configured });
   const RESULT_PAGE = 24;
   const IGDB_SCAN = 48; // 추천 인원으로 다시 거르면 줄어드므로 한 번에 넉넉히 훑음
@@ -415,6 +431,27 @@ const SLIDES = 5;
       return sendJson(res, 404, { error: { code: 'NOT_FOUND', message: '요청한 API를 찾을 수 없습니다.' } });
     }
 
+    // 상세 화면 AI 플레이 시간: 로그인한 회원이 플레이 시간 없는 게임을 열면 그 자리에서 물어 저장(다음부터는 저장된 값)
+    const ptm = p.match(/^\/api\/games\/([^/]+)\/playtime$/);
+    if (ptm && method === 'POST') {
+      const u = requireUser();
+      let id;
+      try {
+        id = decodeURIComponent(ptm[1]);
+      } catch {
+        throw apiError('BAD_ID', '잘못된 게임 ID입니다.', 400);
+      }
+      const [g] = decorate([await findGame(id)], u);
+      const known = playtimeOf(g);
+      if (known) return sendJson(res, 200, { playtime: known, status: 'known' });
+      if (!canAskPlaytime(g)) return sendJson(res, 200, { playtime: null, status: 'none' });
+      if (aiPlaytime.cached(g.id) !== undefined) return sendJson(res, 200, { playtime: null, status: 'cached' }); // AI가 모른다고 한 게임
+      if (!aiPlaytime.enabled) return sendJson(res, 200, { playtime: null, status: 'off' });
+      if (!limits.aiPlaytime.hit(`t|${u.id}`)) return sendJson(res, 200, { playtime: null, status: 'limit' });
+      const r = await aiPlaytime.ask(g, u.id);
+      return sendJson(res, 200, { playtime: r.hours ? { hours: r.hours, source: 'ai' } : null, status: r.status });
+    }
+
     if (method !== 'GET') throw apiError('NOT_FOUND', '요청한 API를 찾을 수 없습니다.', 404);
 
     // ── 게임 데이터 ──
@@ -549,13 +586,10 @@ const SLIDES = 5;
       const [decorated] = decorate(await withKoreanSummaries(translator, [withParty]), user);
       if (found.source === '사용자 제보') decorated.submitterBadge = badges.displayFor(found.submittedById); // 제보자 닉네임 옆 뱃지
       if (decorated.imageSource === '사용자 제보' && decorated.imageBy) decorated.imageByBadge = badges.displayFor(imageSubs.submitterOf(decorated.id));
-      // 평균 플레이 시간 (RAWG): 미리 받아 둔 파일에서만 찾음 (실시간 호출 없음 → RAWG가 느리거나 멈춰도 상세는 바로 열림)
-      let playtime = !decorated.isDemo && decorated.source !== '사용자 제보' ? rawgTimes.get(decorated.id) : null;
-      // RAWG에 없으면 미리 정리해 둔 AI 추정(메인 스토리 기준)으로 대신, 출처를 구분해 표시
-      if (decorated.userPlaytime) playtime = { hours: decorated.userPlaytime, source: 'user' }; // 회원 정보 수정 제보(관리자 확인)가 가장 우선
-      else if (playtime) playtime = { ...playtime, source: 'rawg' };
-      else if (decorated.aiPlaytime) playtime = { hours: decorated.aiPlaytime, source: 'ai' };
-      let game = { ...decorated, playtime, playtimeAvailable: rawgTimes.size > 0 };
+      const playtime = playtimeOf(decorated);
+      // 플레이 시간이 아무 데도 없고 AI에게 아직 안 물어본 게임 → 화면이 따로 물어봄(로그인한 회원만, POST …/playtime)
+      const playtimeAsk = !playtime && canAskPlaytime(decorated) && aiPlaytime.enabled && aiPlaytime.cached(decorated.id) === undefined;
+      let game = { ...decorated, playtime, playtimeAsk, playtimeAvailable: rawgTimes.size > 0 };
       // 게임위 전용 게임: App Store에서 같은 앱(제목+개발사 일치)을 찾으면 아이콘·App Store 링크 보완
       // (목록과 같은 미리 받아 둔 아이콘은 decorate 에서 이미 붙음. 확인한 적 없는 게임만 그 자리에서 찾아봄)
       if (game.source === '게임물관리위원회' && !game.imageUrl && !game.isDemo && !appArt.has(game)) {

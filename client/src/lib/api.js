@@ -45,6 +45,8 @@ export const api = {
   search: (q) => get(`/api/search?q=${encodeURIComponent(q)}`),
   recommendations: (qs) => get(`/api/recommendations?${qs}`),
   game: (id, qs = '') => get(`/api/games/${gid(id)}${qs ? `?${qs}` : ''}`),
+  /** 플레이 시간이 없는 게임: AI에게 물어 저장 (로그인 필요) */
+  playtime: (id) => request('POST', `/api/games/${gid(id)}/playtime`, {}),
 
   browse: (kind, params = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();

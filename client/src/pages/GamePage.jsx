@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
 import { Link, useLocation } from '../lib/router.jsx';
@@ -74,6 +74,81 @@ function Summary({ game }) {
   );
 }
 
+/** 평균 플레이 시간 값 표시 (출처 구분) */
+function PlaytimeValue({ playtime }) {
+  if (playtime.source === 'user') {
+    return (
+      <>
+        약 {playtime.hours}시간 <span className="muted small">(출처: 사용자 제보 · 관리자 확인)</span>
+      </>
+    );
+  }
+  if (playtime.source === 'ai') {
+    return (
+      <>
+        약 {playtime.hours}시간 <span className="muted small">(메인 스토리 기준)</span>{' '}
+        <span className="pill pill-ai" title="RAWG에 기록이 없어 AI(Google Gemini)가 추정한 값이에요. 틀릴 수 있어요." data-testid="playtime-ai">
+          AI 추정
+        </span>
+      </>
+    );
+  }
+  return (
+    <>
+      약 {playtime.hours}시간{' '}
+      <span className="muted small">
+        (출처:{' '}
+        <a href={playtime.url} target="_blank" rel="noopener noreferrer">
+          RAWG
+        </a>
+        )
+      </span>
+    </>
+  );
+}
+
+/**
+ * 평균 플레이 시간 칸
+ *  - 값이 있으면 그대로
+ *  - 없고 AI에게 물어볼 수 있는 게임(playtimeAsk): 로그인했으면 화면을 띄운 뒤 AI에게 물어 채움, 아니면 로그인 안내
+ */
+function Playtime({ game }) {
+  const { user, ready } = useAuth();
+  const { pathname, search } = useLocation();
+  const [state, setState] = useState({ status: 'idle', playtime: null });
+  const ask = Boolean(game.playtimeAsk && !game.playtime);
+  useEffect(() => {
+    if (!ask || !user) return undefined;
+    let alive = true;
+    setState({ status: 'loading', playtime: null });
+    api
+      .playtime(game.id)
+      .then((r) => alive && setState({ status: 'done', playtime: r.playtime }))
+      .catch(() => alive && setState({ status: 'done', playtime: null }));
+    return () => {
+      alive = false;
+    };
+  }, [ask, user, game.id]);
+
+  if (game.playtime) return <PlaytimeValue playtime={game.playtime} />;
+  if (!ask || !ready) return NO_INFO;
+  if (!user) {
+    return (
+      <span className="muted small" data-testid="playtime-login">
+        <Link to={`/login?next=${encodeURIComponent(pathname + search)}`}>로그인</Link> 후 AI 추정 플레이 시간을 확인할 수 있어요.
+      </span>
+    );
+  }
+  if (state.status !== 'done') {
+    return (
+      <span className="muted small" data-testid="playtime-loading" aria-live="polite">
+        AI 추정 중…
+      </span>
+    );
+  }
+  return state.playtime ? <PlaytimeValue playtime={state.playtime} /> : NO_INFO;
+}
+
 function GameDetail({ data, options }) {
   const { game, evaluation } = data;
   const [rating, setRating] = useState(game.userRating);
@@ -89,31 +164,7 @@ function GameDetail({ data, options }) {
     ...(fromIgdb ? [['출시일', orNoInfo(game.releaseDate)]] : []),
     [
       '평균 플레이 시간',
-      game.playtime?.source === 'user' ? (
-        <>
-          약 {game.playtime.hours}시간 <span className="muted small">(출처: 사용자 제보 · 관리자 확인)</span>
-        </>
-      ) : game.playtime?.source === 'ai' ? (
-        <>
-          약 {game.playtime.hours}시간 <span className="muted small">(메인 스토리 기준)</span>{' '}
-          <span className="pill pill-ai" title="RAWG에 기록이 없어 AI(Google Gemini)가 추정한 값이에요. 틀릴 수 있어요." data-testid="playtime-ai">
-            AI 추정
-          </span>
-        </>
-      ) : game.playtime ? (
-        <>
-          약 {game.playtime.hours}시간{' '}
-          <span className="muted small">
-            (출처:{' '}
-            <a href={game.playtime.url} target="_blank" rel="noopener noreferrer">
-              RAWG
-            </a>
-            )
-          </span>
-        </>
-      ) : (
-        NO_INFO
-      ),
+      <Playtime key={game.id} game={game} />,
     ],
     ...(hasGrac || (!fromIgdb && game.source !== '사용자 제보')
       ? [
