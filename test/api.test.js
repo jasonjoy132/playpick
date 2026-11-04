@@ -45,7 +45,8 @@ test('GET /api/games/:id 및 404', async () => {
 
 test('live 모드: 게임위 API 응답으로 추천·상세 동작, 인원수는 정보 없음', async () => {
   const fetchImpl = async () => ({ ok: true, status: 200, text: async () => GUIDE_SAMPLE });
-  const s = createApp({ ...getConfig(), dataSource: 'live', dbFile: ':memory:' }, { fetchImpl });
+  // 샘플 게임은 AI 데이터 파일에 없어 상태 '모름' → 기본 규칙이면 숨겨지므로 이 테스트에서는 끔
+  const s = createApp({ ...getConfig(), dataSource: 'live', dbFile: ':memory:', hideUnknownGrac: false }, { fetchImpl });
   await new Promise((r) => s.listen(0, r));
   const b = `http://127.0.0.1:${s.address().port}`;
   try {

@@ -14,7 +14,8 @@ function loadDotEnv(file) {
     if (process.env[key] === undefined) process.env[key] = raw.replace(/^["']|["']$/g, '');
   }
 }
-loadDotEnv(path.join(root, '.env'));
+// 테스트(node --test)에서는 실제 .env(API 키 등)를 읽지 않음 → PC마다 설정이 달라도 같은 결과
+if (!process.env.NODE_TEST_CONTEXT) loadDotEnv(path.join(root, '.env'));
 
 const env = (k, d = '') => (process.env[k] ?? d).trim();
 const int = (k, d) => {

@@ -21,6 +21,8 @@
 - DB: `node:sqlite`(SQLite, 동기 API) — `.data/playpick.db`, 스키마·열 추가는 `server/db.js`(시작할 때 자동 생성·보충)
 - 화면: React 19 + esbuild(`scripts/build.mjs`, `client/public` 파일은 `client/dist`로 평평하게 복사), 자체 라우터 `client/src/lib/router.jsx`
 - 테스트: `node:test` 단위(`test/`), Playwright E2E(`e2e/`, 가짜 카탈로그 주입 방식)
+  - 테스트 중에는 `.env`를 읽지 않음(`NODE_TEST_CONTEXT`, `server/config.js`). 테스트 서버는 항상 `dbFile: ':memory:'`
+  - E2E의 '더 보기'는 `dispatchEvent('click')`으로 누르기(`click()`은 스크롤해서 자동 불러오기와 겹침)
 - 요구: Node 20+ (node:sqlite 사용)
 
 ## 명령어
@@ -80,6 +82,5 @@
    - `vercel.json`, 환경 변수 목록 정리
    - 전환하면 개인정보처리방침(`client/src/pages/InfoPages.jsx`) '처리 위탁'에 Vercel(호스팅)·Supabase(DB·사진 저장) 추가
 2. 문의 연락처: `InfoPages.jsx`의 `CONTACT_EMAIL`이 비어 있음('연락처 준비 중'으로 표시) — 사용자에게 받아 넣기. 회원 탈퇴 기능은 아직 없음(지금은 문의로 삭제)
-3. 깨진 테스트(전환 전부터): `test/api.test.js` 2개, `e2e/flow.test.js` live 모드 1개 — 실제 `.env` 설정을 읽어서 생기는 것으로 보임. `e2e/paging.test.js`는 전체 실행 때 가끔 시간 초과
-4. GitHub: 공개 저장소 `jasonjoy132/playpick`(main). push 전 `git status`로 `.env`·`.data/`·`.cache/` 안 올라가는지 확인
-5. (선택) 제보 승인·거절 알림, 관리자 메뉴에 대기 건수, 모바일 화면 점검, 게임 상세 페이지 제목·미리보기, 친구와 같이 고르는 '파티 투표'
+3. GitHub: 공개 저장소 `jasonjoy132/playpick`(main). push 전 `git status`로 `.env`·`.data/`·`.cache/` 안 올라가는지 확인
+4. (선택) 제보 승인·거절 알림, 관리자 메뉴에 대기 건수, 모바일 화면 점검, 게임 상세 페이지 제목·미리보기, 친구와 같이 고르는 '파티 투표'

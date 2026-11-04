@@ -10,6 +10,8 @@ import { evaluateGame } from '../server/services/recommend.js';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 
+// '더 보기'는 dispatchEvent('click')으로 누름: 보통 click()은 버튼까지 스크롤해서 스크롤 자동 불러오기(AutoMore)가 같이 일어나
+// 페이지를 미리 다 받아 버리거나 버튼이 밀려나 가끔 실패했음
 const TOTAL = 60;
 const fake = (i) => ({
   id: `igdb-${9000 + i}`, title: `테스트 게임 ${i + 1}`, source: 'IGDB',
@@ -77,9 +79,9 @@ test('전체 검색: 개수 표시, 더 보기로 다음 페이지 요청', asyn
   await full.waitFor();
   assert.match(await page.getByTestId('result-count').innerText(), /IGDB와 게임물관리위원회 전체에서 찾았어요.*약 60개/);
   assert.equal(await full.getByTestId('game-card').count(), 24);
-  await page.getByTestId('more-full').click(); // 받아 둔 48개 중 나머지
+  await page.getByTestId('more-full').dispatchEvent('click'); // 받아 둔 48개 중 나머지
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="section-full"] [data-testid="game-card"]').length === 48);
-  await page.getByTestId('more-full').click(); // 서버에서 다음 페이지
+  await page.getByTestId('more-full').dispatchEvent('click'); // 서버에서 다음 페이지
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="section-full"] [data-testid="game-card"]').length === 60);
   assert.equal(await page.getByTestId('more-full').count(), 0, '마지막 페이지면 버튼 없음');
   assert.deepEqual(calls, [0, 48]);
@@ -105,7 +107,7 @@ test('인원을 안 고르면 게임위 게임이 모든 조건 일치 목록에
   const titles = await full.getByTestId('game-card').allInnerTexts();
   assert.equal(titles.length, 24, '첫 화면 24개');
   assert.ok(titles[4].includes('국내 테스트 게임 1'), 'IGDB 4개마다 게임위 1개');
-  await full.getByTestId('more-full').click();
+  await full.getByTestId('more-full').dispatchEvent('click');
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="section-full"] [data-testid="game-card"]').length === 48);
 });
 

@@ -162,7 +162,8 @@ test('API 키가 브라우저 번들에 포함되지 않음', async () => {
 
 test('live 모드 화면(게임위 가이드 샘플 응답): 데모 배너 없음, 인원 정보 없음, 구매처 정보 없음', async () => {
   const { GUIDE_SAMPLE } = await import('../test/fixtures.js');
-  const live = createApp({ ...getConfig(), dataSource: 'live' }, { fetchImpl: async () => ({ ok: true, status: 200, text: async () => GUIDE_SAMPLE }) });
+  // 메모리 DB 사용(실제 .data 건드리지 않음). 샘플 게임은 AI 데이터에 없어 '모름' → 숨김 규칙 끔
+  const live = createApp({ ...getConfig(), dataSource: 'live', dbFile: ':memory:', hideUnknownGrac: false }, { fetchImpl: async () => ({ ok: true, status: 200, text: async () => GUIDE_SAMPLE }) });
   await new Promise((r) => live.listen(0, r));
   const b = `http://127.0.0.1:${live.address().port}`;
   const page = await browser.newPage();
@@ -243,7 +244,8 @@ test('결과가 많으면 24개씩 더 보기', async () => {
   const cards = page.getByTestId('section-full').getByTestId('game-card');
   await cards.first().waitFor();
   assert.equal(await cards.count(), 24);
-  await page.getByTestId('more-full').click();
+  // dispatchEvent: 스크롤하지 않고 눌러 자동 불러오기와 겹치지 않게
+  await page.getByTestId('more-full').dispatchEvent('click');
   assert.equal(await cards.count(), 30);
   assert.equal(await page.getByTestId('more-full').count(), 0);
   await page.close();
