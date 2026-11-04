@@ -375,3 +375,45 @@ test('IGDB 서비스 종료 확인: 온라인 모드 게임만 대상, 종료만
   assert.equal(b.aiPlaytime, 20);
   assert.equal(ps.needsEndedCheck(online), false, '같은 모델로 다시 묻지 않음');
 });
+
+test('게임위 게임 추천 인원만 묻기: 상태·플레이 시간은 그대로, AI가 안다고 한 게임만 저장', async () => {
+  const fsm = await import('node:fs');
+  const os = await import('node:os');
+  const pathm = await import('node:path');
+  const { buildPlayersPrompt } = await import('../server/services/partySize.js');
+  const dir = fsm.mkdtempSync(pathm.join(os.tmpdir(), 'pp-party-'));
+  const dataFile = pathm.join(dir, 'party-size.json');
+  const grac = (title) => ({ ...gracItemToGame({ gametitle: title, rateno: title, entname: '테스트사', platform: '모바일 게임', genre: '퍼즐' }) });
+  const known = grac('유명 게임');
+  const guess = grac('작은 게임');
+  const ended = grac('끝난 게임');
+  // 예전 형식: 상태·플레이 시간만 있고 인원 답이 없음
+  fsm.writeFileSync(dataFile, JSON.stringify({
+    [cacheKey(known)]: { hours: 10, status: 'released', ended: false, statusV: 2, model: 'm', date: '2026-10-01', at: 1 },
+    [cacheKey(guess)]: { hours: null, status: 'released', ended: false, model: 'm', date: '2026-10-01', at: 1 },
+    [cacheKey(ended)]: { hours: null, status: 'ended', ended: true, model: 'm', date: '2026-10-01', at: 1 },
+  }));
+  const calls = [];
+  // 작은 게임은 known:false 인데 숫자를 줘도(장르로 짐작) 저장하면 안 됨
+  const fetchImpl = gemini(() => [{ id: 1, known: true, min: 1, max: 4 }, { id: 2, known: false, min: 1, max: 1 }], calls);
+  const ps = createPartySize({ apiKey: 'K', dataFile }, { fetchImpl, now: () => Date.parse('2026-11-05T00:00:00Z') });
+  assert.equal(ps.isMissing(known), true, '상태만 있고 인원 답이 없으면 아직 안 물은 것');
+  assert.equal(ps.needsPlayers(known), true);
+  assert.equal(ps.needsPlayers(ended), false, '종료된 게임은 묻지 않음');
+  assert.equal(ps.needsPrefill(known), false, '전체 다시 묻기 대상은 아님(상태를 덮어쓰지 않게)');
+
+  assert.deepEqual(await ps.askPlayersBatch([known, guess]), { known: 1, unknown: 1 });
+  const prompt = JSON.parse(calls[0].init.body).contents[0].parts[0].text;
+  assert.match(prompt, /"known": true ONLY if you specifically recognize/);
+  assert.equal(prompt, buildPlayersPrompt([known, guess]));
+  const saved = JSON.parse(fsm.readFileSync(dataFile, 'utf8'));
+  assert.deepEqual(saved[cacheKey(known)], { hours: 10, status: 'released', ended: false, statusV: 2, model: 'm', date: '2026-10-01', at: 1, min: 1, max: 4, playersModel: 'gemini-flash-lite-latest', playersDate: '2026-11-05' });
+  assert.equal(saved[cacheKey(guess)].unknown, true);
+  assert.equal(saved[cacheKey(guess)].min, undefined, '짐작한 숫자는 저장 안 함');
+  assert.equal(saved[cacheKey(guess)].status, 'released', '상태 그대로');
+
+  const [a, b] = ps.applyCached([known, guess]);
+  assert.deepEqual(a.recommendedPlayers, { min: 1, max: 4, source: 'ai' });
+  assert.equal(b.recommendedPlayers, null);
+  assert.equal(ps.needsPlayers(guess), false, '모름도 다시 묻지 않음');
+});

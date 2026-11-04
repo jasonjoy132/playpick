@@ -129,6 +129,35 @@ export function buildEndedPrompt(games, today = new Date().toISOString().slice(0
   ].join('\n');
 }
 
+/**
+ * 추천 인원만 묻는 프롬프트 (이미 상태·플레이 시간은 받아 둔 게임위 게임에 인원만 채울 때)
+ * 작은 국내 게임은 AI가 모르는 경우가 많으므로 '모르면 null'을 강하게 지시
+ */
+export function buildPlayersPrompt(games) {
+  const lines = games.map((g, i) =>
+    JSON.stringify(
+      g.source === 'IGDB'
+        ? { id: i + 1, name: g.originalTitle || g.title, year: g.firstYear ?? null, modes: g.gameModes ?? [], igdbMaxPlayers: g.players?.max ?? null }
+        : { id: i + 1, name: g.title, note: 'Korean title from the Korean game rating board (GRAC)', publisher: g.publisher ?? null, platform: g.platformsRaw ?? null, genre: g.genresRaw ?? null },
+    ),
+  );
+  return [
+    'For each video game below, give the recommended party size: how many people usually play it TOGETHER as one group of friends',
+    '(e.g. squad/team/party/co-op group, or people on one couch), NOT the total number of players in a match or on a server.',
+    'Examples: PUBG: BATTLEGROUNDS -> min 1, max 4 (solo/duo/squad). League of Legends -> min 1, max 5. Minecraft -> min 1, max 8. A single-player-only game -> min 1, max 1.',
+    'min is the smallest group that commonly plays (1 if it can be played alone).',
+    'Many games are given by their Korean title only and are small Korean mobile/online games.',
+    'First decide "known": true ONLY if you specifically recognize this exact game (you know what it is and how it is played), false otherwise.',
+    'If known is false, return null for min and max. Never infer from the title, publisher or genre.',
+    'Return a JSON array with one object {id, known, min, max} per game, using the same id.',
+    '',
+    ...lines,
+  ].join('\n');
+}
+
+/** 저장된 항목에 추천 인원 답(숫자 또는 '모름')이 들어 있는지 */
+export const hasPlayersAnswer = (e) => Boolean(e && (Number.isInteger(e.min) || e.unknown));
+
 /** AI 플레이 시간 검증: 1~1000시간 정수만 */
 export function sanitizeHours(h) {
   return Number.isInteger(h) && h >= 1 && h <= 1000 ? h : null;
@@ -211,7 +240,10 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
     const useModel = model; // 묻는 도중 모델이 바뀌어도 이 요청은 같은 모델로 기록
     const statusOnly = mode === 'status';
     const endedOnly = mode === 'ended';
-    const schemaItem = statusOnly
+    const playersOnly = mode === 'players';
+    const schemaItem = playersOnly
+      ? { type: 'OBJECT', properties: { id: { type: 'INTEGER' }, known: { type: 'BOOLEAN' }, min: { type: 'INTEGER', nullable: true }, max: { type: 'INTEGER', nullable: true } }, required: ['id', 'known', 'min', 'max'] }
+      : statusOnly
       ? { type: 'OBJECT', properties: { id: { type: 'INTEGER' }, status: { type: 'STRING', nullable: true, enum: ['released', 'upcoming', 'ended'] } }, required: ['id', 'status'] }
       : endedOnly
         ? { type: 'OBJECT', properties: { id: { type: 'INTEGER' }, ended: { type: 'BOOLEAN', nullable: true } }, required: ['id', 'ended'] }
@@ -238,7 +270,7 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': cfg.apiKey },
           body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: statusOnly ? buildStatusPrompt(games) : endedOnly ? buildEndedPrompt(games) : buildPrompt(games) }] }],
+            contents: [{ role: 'user', parts: [{ text: playersOnly ? buildPlayersPrompt(games) : statusOnly ? buildStatusPrompt(games) : endedOnly ? buildEndedPrompt(games) : buildPrompt(games) }] }],
             generationConfig: {
               temperature: 0,
               ...(thinkingConfig ? { thinkingConfig } : {}),
@@ -285,6 +317,21 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
     const byId = new Map(arr.map((x) => [x?.id, x]));
     let known = 0;
     const day = new Date(now()).toISOString().slice(0, 10);
+    if (playersOnly) {
+      // 추천 인원만: 기존 항목(서비스 상태·플레이 시간·종료 여부)은 그대로 두고 인원만 더함. 모르면 unknown
+      // AI가 이 게임을 정확히 안다고(known: true) 한 경우만 저장 — 작은 게임은 장르로 짐작해 '1~1'을 내는 일이 많았음
+      for (const [i, g] of games.entries()) {
+        const item = byId.get(i + 1);
+        const v = item?.known === true ? sanitize(item, g) : null;
+        if (v) known++;
+        const k = cacheKey(g);
+        const prev = cache.get(k) ?? {};
+        cache.set(k, { ...prev, ...(v ?? { unknown: true }), playersModel: ver, playersDate: day, ...(prev.at ? {} : { at: now() }) });
+        dirty = true;
+      }
+      save();
+      return { known, unknown: games.length - known };
+    }
     if (endedOnly) {
       // IGDB 게임 서비스 종료 여부만: 기존 항목(인원·플레이 시간)은 그대로
       const count = { ended: 0, alive: 0, unknown: 0 };
@@ -410,7 +457,18 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
       return lastError?.message ?? null;
     },
     /** 추천 인원을 아직 AI에게 안 물은 게임인지 */
-    isMissing: (g) => needsAi(g) && !fresh(g),
+    isMissing: (g) => needsAi(g) && !hasPlayersAnswer(fresh(g)),
+    /**
+     * 추천 인원만 아직 안 물은 게임 (스크립트용, --grac-players)
+     * 예: 게임위 게임은 서비스 상태·플레이 시간만 저장돼 있고 인원 답이 없음. 이미 '종료'로 판단된 게임은 제외
+     */
+    needsPlayers: (g) => {
+      if (!needsAi(g)) return false;
+      const e = cache.get(cacheKey(g));
+      return !hasPlayersAnswer(e) && e?.ended !== true;
+    },
+    /** 추천 인원만 묻기(스크립트용) */
+    askPlayersBatch: (games) => ask(games, { pauseOnQuota: false, mode: 'players' }),
     /** 미리 정리 대상인지: 정리 안 됐거나, 예전 형식(추천 인원만 있고 플레이 시간은 안 물음) */
     needsPrefill: (g) => {
       if (g.source !== 'IGDB' && g.source !== GRAC) return false;

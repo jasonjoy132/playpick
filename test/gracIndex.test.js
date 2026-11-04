@@ -94,3 +94,13 @@ test('나만의 게임 찾기: IGDB에 없는 게임위 게임만, 플랫폼·�
   const building = createCatalog({ dataSource: 'live', grac: {} }, { igdb, gracIndex: { ensure() {}, snapshot: () => ({ status: 'building', progress: { done: 3, total: 34 } }) }, grac: { label: 'G' }, kr: { configured: false } });
   assert.deepEqual((await building.gracMatches(criteria)).progress, { done: 3, total: 34 });
 });
+
+test('예전 색인 파일(recommendedPlayers 키 없음)도 AI 추천 인원 대상이 되게 채워서 읽음', () => {
+  const file = tmp();
+  const old = { id: 'grac-OLD1', title: '옛 게임', source: '게임물관리위원회', ratingNo: 'OLD1', ratingDate: '2020-01-01', platforms: ['mobile'], genres: ['puzzle'], players: null, domesticRating: true, stores: [], imageUrl: null };
+  fs.writeFileSync(file, JSON.stringify({ fullAt: Date.now(), updatedAt: Date.now(), games: [old] }));
+  const idx = createGracIndex({ grac: fakeGrac([]), cacheFile: file });
+  const [game] = idx.snapshot().games;
+  assert.equal('recommendedPlayers' in game, true);
+  assert.equal(game.recommendedPlayers, null);
+});

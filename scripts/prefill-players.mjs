@@ -12,6 +12,8 @@
 //   npm run prefill:players -- --recheck --model gemini-flash-latest   더 큰 모델로(더 정확, 한도는 더 적음)
 //   npm run prefill:players -- --recheck-unknown  게임위 게임 중 AI가 '모름'이라고 한 게임만 더 큰 모델(기본 gemini-flash-latest)로 다시 물음
 //                                                 (같은 모델로 이미 물어본 게임은 건너뜀. --model 로 다른 모델 지정 가능)
+//   npm run prefill:players -- --grac-players 500 화면에 보이는 게임위 게임 중 추천 인원을 아직 안 물은 게임 500개(숫자 없으면 전부)에 인원만 물음
+//                                                 (서비스 상태·플레이 시간은 그대로 두고 인원만 더함. AI가 모르면 '모름'으로 저장해 다시 묻지 않음)
 //   npm run prefill:players -- --dry              묻지 않고 몇 개인지만 계산
 //   npm run prefill:players -- --rpm 30           더 빠르게(분당 호출 수 상한, 기본 15. 한도를 넘으면 429 → 자동으로 1분 쉼)
 //   npm run prefill:players -- --parallel 5       동시에 보내는 묶음 수(기본 3)
@@ -35,12 +37,15 @@ const opt = (name, d) => {
   const v = args[i + 1];
   return v == null || v.startsWith('--') ? true : Number.isNaN(Number(v)) ? v : Number(v);
 };
+// --grac-players: 화면에 보이는 게임위 게임 중 추천 인원을 아직 안 물은 게임만 인원만 물음(상태·플레이 시간은 그대로)
+const GRAC_PLAYERS_N = opt('grac-players', 0) === true ? Infinity : Number(opt('grac-players', 0));
+const PLAYERS_ONLY = GRAC_PLAYERS_N > 0;
 // --grac 만 주면 IGDB 게임은 훑지 않음(이미 정리했다면 할 필요 없음)
-const IGDB_N = opt('igdb', opt('grac', 0) > 0 ? 0 : 3000);
-const GRAC_N = opt('grac', 0);
+const IGDB_N = opt('igdb', opt('grac', 0) > 0 || PLAYERS_ONLY ? 0 : 3000);
+const GRAC_N = PLAYERS_ONLY ? 0 : opt('grac', 0);
 const MIN_RATINGS = opt('min-ratings', 1);
 // 한 번에 묻는 게임 수. 게임위만 정리할 때는 하루 호출 수를 아끼려고 100개씩
-const BATCH = Math.min(Math.max(opt('batch', args.includes('--recheck-unknown') || args.includes('--model') ? 20 : (opt('grac', 0) > 0 && !args.includes('--igdb')) || args.includes('--recheck') ? 100 : 50), 5), 100);
+const BATCH = Math.min(Math.max(opt('batch', args.includes('--recheck-unknown') || args.includes('--model') ? 20 : (opt('grac', 0) > 0 && !args.includes('--igdb')) || args.includes('--recheck') || PLAYERS_ONLY ? 100 : 50), 5), 100);
 // 속도: 여러 묶음을 동시에(--parallel) 보내되, 분당 호출 수(--rpm)를 넘지 않게. 429가 나면 모두 1분 쉼
 // 큰 모델('모름' 재확인)은 무료 분당 한도가 작아 천천히(기본 동시 1개, 분당 5번)
 const BIG = args.includes('--recheck-unknown') || args.includes('--model');
@@ -56,7 +61,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // 응답 기다리는 시간: 기본 60초, 큰 모델('모름' 재확인·--model 지정)은 느려서 3분 (--timeout 초로 바꿀 수 있음)
 const TIMEOUT_MS = Math.max(Number(opt('timeout', BIG || MODEL ? 180 : 60)), 10) * 1000;
 const ps = createPartySize({ ...config.gemini, ...(MODEL ? { model: MODEL } : {}), timeoutMs: TIMEOUT_MS, live: false }, { log: (m) => console.log(m) });
-const needs = (g) => (UNKNOWN ? ps.needsUnknownRecheck(g) : RECHECK ? ps.needsStatusRecheck(g) : ps.needsPrefill(g));
+const needs = (g) => (PLAYERS_ONLY ? ps.needsPlayers(g) : UNKNOWN ? ps.needsUnknownRecheck(g) : RECHECK ? ps.needsStatusRecheck(g) : ps.needsPrefill(g));
 
 console.log(`추천 인원·플레이 시간 미리 정리 · 모델 ${ps.model} · 저장 파일 ${config.gemini.dataFile}`);
 console.log(`이미 정리된 게임 ${ps.size}개`);
@@ -96,6 +101,38 @@ if (RECHECK) {
   console.log(UNKNOWN
     ? `게임위 '모름' 재확인 대상 ${todo.length}개 (모델 ${ps.model}로 아직 안 물어본 게임, App Store에 있는 게임 제외)`
     : `게임위 상태 재확인 대상 ${todo.length}개 (예전에 '서비스 중'으로 받은 게임, App Store에 있는 게임 제외)`);
+}
+// 0-2) (--grac-players) 화면에 보이는 게임위 게임(IGDB에 없음, 종료·출시 예정 아님, AI '서비스 중' 또는 App Store에 있음) 중 인원 답이 없는 게임
+if (PLAYERS_ONLY) {
+  const index = createGracIndex({ grac: createGracProvider(config.grac), cacheFile: config.grac.indexFile, log: (m) => console.log(m) });
+  let snap = index.snapshot();
+  if (snap.status !== 'ready') {
+    await index.ensure();
+    snap = index.snapshot();
+  }
+  if (snap.status !== 'ready') {
+    console.log(`게임위 목록을 받지 못했어요 (${snap.error ?? ''})`);
+    process.exit(1);
+  }
+  let exists = {};
+  try {
+    exists = JSON.parse(fs.readFileSync(config.grac.igdbCheckFile, 'utf8'));
+  } catch {
+    /* 없음 */
+  }
+  const art = createAppArt(config.appStore.artFile);
+  const seen = new Set();
+  const visible = art
+    .applyAll(ps.applyCached(snap.games.filter((g) => !exists[g.title]?.exists)))
+    .filter((g) => !g.aiEnded && !g.aiUpcoming && (g.aiAlive || g.appStoreUrl))
+    .sort((a, b) => String(b.ratingDate || '').localeCompare(String(a.ratingDate || '')));
+  for (const g of visible) {
+    if (seen.has(cacheKey(g))) continue;
+    seen.add(cacheKey(g));
+    if (ps.needsPlayers(g)) todo.push(g);
+  }
+  todo.splice(GRAC_PLAYERS_N);
+  console.log(`화면에 보이는 게임위 게임 ${visible.length}개 중 추천 인원을 물을 게임 ${todo.length}개 (인원만 묻고 서비스 상태·플레이 시간은 그대로)`);
 }
 if (IGDB_N > 0 && !RECHECK) {
   if (!igdb.configured) console.log('IGDB 설정이 없어 IGDB 게임은 건너뜀');
@@ -225,8 +262,11 @@ async function worker() {
       await rateSlot();
       if (stop) return;
       try {
-        const r = RECHECK ? await ps.askStatusBatch(batch) : await ps.askBatch(batch);
-        if (RECHECK) {
+        const r = PLAYERS_ONLY ? await ps.askPlayersBatch(batch) : RECHECK ? await ps.askStatusBatch(batch) : await ps.askBatch(batch);
+        if (PLAYERS_ONLY) {
+          known += r.known;
+          unknown += r.unknown;
+        } else if (RECHECK) {
           known += r.status.released;
           unknown += r.status.unknown;
         } else {

@@ -23,7 +23,10 @@ export function createGracIndex({ grac, cacheFile, now = () => Date.now(), concu
     if (!cacheFile) return null;
     try {
       const d = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-      return Array.isArray(d?.games) ? d : null;
+      if (!Array.isArray(d?.games)) return null;
+      // 예전에 저장된 항목에는 recommendedPlayers 키가 없음 → 있어야 AI 추천 인원 대상(needsAi)·적용이 됨
+      d.games = d.games.map((g) => ('recommendedPlayers' in g ? g : { ...g, players: g.players ?? null, recommendedPlayers: null }));
+      return d;
     } catch {
       return null;
     }
