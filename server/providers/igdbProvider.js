@@ -225,7 +225,7 @@ export const titleKeys = (t) => [...new Set([normTitle(t), normTitle(baseTitle(t
 // 게임위 제목 앞뒤에 붙는 플랫폼 표기: 'PC_몬스터 헌터', 'Portal 2_PC', '레프트 4 데드-PC', '(PC스팀)', '(닌텐도 스위치 버전)'
 const PLATFORM_HEAD = /^\s*(?:pc|ns|ps[345]|steam)\s*[_:\-–]\s*/i;
 // 끝의 플랫폼 표기는 앞에 구분자(공백·_·-)가 있을 때만 (예: 'Champions' 끝의 'ns'를 지우지 않게)
-const PLATFORM_TAIL = /[\s_\-–,]+(?:pc\s*스팀|pc|ns|steam|ps[345]|xbox(?:\s*(?:one|series\s*[xs|/]*))?|닌텐도\s*스위치(?:\s*버전)?|스위치\s*버전|nintendo\s*switch)\s*$/i;
+const PLATFORM_TAIL = /[\s_\-–,]+(?:pc\s*스팀|pc|ns|steam|ps[345]|psp|ps\s*vita|vita|3ds|wii\s*u?|xbox(?:\s*(?:360|one|series\s*[xs|/]*))?|닌텐도\s*스위치(?:\s*버전)?|스위치\s*버전|nintendo\s*switch)\s*$/i;
 // 괄호 안에 혼자 있으면 이름이 아닌 것
 const NOT_A_NAME = /^(?:pc|pc\s*스팀|ns|ps[345]|steam|xbox.*|nintendo.*|닌텐도.*|스위치.*|mobile|모바일|체험판|한글판|정식판|데모|demo|lite|beta|베타|무료|free|dlc|ost|.*버전|.*에디션|.*edition)$/i;
 

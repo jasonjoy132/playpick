@@ -238,6 +238,18 @@ test('중복 제거: 괄호·플랫폼 표기가 붙은 게임위 제목도 같�
   assert.equal(out[0].ratingNo, 'B', '가장 최근 등급분류');
 });
 
+test('중복 제거: 괄호 안 영문명·_PC 표기로도 합침(플랫폼 겹칠 때만), 한글 이름은 깔끔하게', () => {
+  const ig = igdbToGame({ ...IGDB_GAME, game_localizations: [] }); // Test Kitchen, PC·콘솔
+  const pc = { id: 'grac-k', title: '테스트 부엌 (Test Kitchen)_PC', platforms: ['pc'], ratingNo: 'K', rating: '전체이용가', ratingDate: '2024-01-01', stores: [] };
+  const out = mergeGames([ig], [pc]);
+  assert.deepEqual(out.map((g) => g.id), ['igdb-101'], '게임위 카드를 따로 만들지 않음');
+  assert.equal(out[0].ratingNo, 'K', '국내 등급 보완');
+  assert.equal(out[0].originalTitle, '테스트 부엌', "'테스트 부엌 (Test Kitchen)_PC'가 아니라 한글 이름만");
+  // 괄호 안 이름으로만 맞는데 플랫폼이 안 겹치면 다른 게임으로 봄
+  const arcade = { ...pc, id: 'grac-x', title: '키친 기계 (Test Kitchen)', platforms: ['arcade'], ratingNo: 'X' };
+  assert.deepEqual(mergeGames([ig], [arcade]).map((g) => g.id).sort(), ['grac-x', 'igdb-101']);
+});
+
 test('중복 제거: IGDB에 없는 같은 제목의 게임위 항목 여러 개 → 카드 하나', () => {
   const out = mergeGames([], [
     { id: 'grac-1', title: '하루 퍼즐', platforms: ['mobile'], platformsRaw: '모바일 게임', genres: ['puzzle'], genresRaw: '퍼즐', ratingNo: '1', ratingDate: '2025-01-01', rating: '전체이용가', stores: [] },
@@ -412,6 +424,7 @@ test('게임위 제목 → IGDB 이름 후보·slug (괄호 안 이름, 플랫�
   assert.deepEqual(titleVariants('카트라이더 드리프트 (Kartrider Drift) [PC]'), ['카트라이더 드리프트', 'Kartrider Drift']);
   assert.deepEqual(titleVariants('PC_MONSTER HUNTER RISE (몬스터 헌터 라이즈)'), ['MONSTER HUNTER RISE', '몬스터 헌터 라이즈']);
   assert.deepEqual(titleVariants('오버워치 (NS) (Overwatch (NS))'), ['오버워치', 'Overwatch']);
+  assert.deepEqual(titleVariants('LEFT4DEAD 2(레프트 4 데드 2)_Xbox360'), ['LEFT4DEAD 2', '레프트 4 데드 2']);
   assert.deepEqual(titleVariants('해리 포터: 퀴디치 챔피언 (Harry Potter Quidditch Champions))(닌텐도 스위치 버전)'), ['해리 포터: 퀴디치 챔피언', 'Harry Potter Quidditch Champions'], "끝의 'ns'를 플랫폼으로 지우지 않음");
   assert.deepEqual(titleSlugs('Kartrider Drift'), ['kartrider-drift']);
   assert.deepEqual(titleSlugs("Baldur's Gate 3"), ['baldurs-gate-3']);

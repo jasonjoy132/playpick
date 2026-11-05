@@ -6,7 +6,7 @@
 //  - 모두 실패: 오류 반환
 import { createDemoProvider } from '../providers/demoProvider.js';
 import { createGracProvider } from '../providers/gracProvider.js';
-import { createIgdbProvider, normTitle, baseTitle, titleKeys, titleVariants } from '../providers/igdbProvider.js';
+import { createIgdbProvider, normTitle, baseTitle, titleKeys, titleVariants, platformClasses } from '../providers/igdbProvider.js';
 import { createKrGameDbProvider } from '../providers/krGameDbProvider.js';
 import { DataSourceError } from '../providers/errors.js';
 import { createGracIndex } from '../providers/gracIndex.js';
@@ -99,10 +99,25 @@ export function mergeGames(igdbGames, gracGames) {
     const keys = titleKeys(gr.title);
     let i = keys.map((k) => index.get(k)).find((x) => x != null);
     // 번역한 영문 이름(enTitle)으로도 찾되, 번역은 틀릴 수 있어 플랫폼이 겹칠 때만 같은 게임으로 봄
+    // 플랫폼 비교: 분류값(pc·mobile·console·arcade)으로, 안 겹치면 IGDB 원래 플랫폼 이름(예: Xbox 360 — 분류에 없는 옛 기기)으로 한 번 더
+    const samePlatforms = (ig) =>
+      !ig.platforms?.length ||
+      !gr.platforms?.length ||
+      gr.platforms.some((p) => ig.platforms.includes(p)) ||
+      (Boolean(ig.platformsRaw) && gr.platforms.some((p) => platformClasses(ig.platformsRaw.split(/,\s*/)).includes(p)));
     if (i == null && gr.enTitle) {
       const j = titleKeys(gr.enTitle).map((k) => index.get(k)).find((x) => x != null);
-      const ig = j != null ? result[j] : null;
-      if (ig && (!ig.platforms?.length || !gr.platforms?.length || gr.platforms.some((p) => ig.platforms.includes(p)))) i = j;
+      if (j != null && samePlatforms(result[j])) i = j;
+    }
+    // 제목에서 꺼낸 이름 후보로도('Portal 2(포탈 2)_PC' → Portal 2·포탈 2) — 목록의 IGDB 확인과 같은 규칙, 플랫폼이 겹칠 때만
+    if (i == null) {
+      for (const v of titleVariants(gr.title)) {
+        const j = index.get(normTitle(v));
+        if (j != null && samePlatforms(result[j])) {
+          i = j;
+          break;
+        }
+      }
     }
     if (i != null) {
       if (!matched.has(i)) matched.set(i, []);
@@ -121,11 +136,13 @@ export function mergeGames(igdbGames, gracGames) {
     const gr = entries
       .filter(overlaps)
       .sort((x, y) => String(y.ratingDate || '').localeCompare(String(x.ratingDate || '')))[0];
-    const koTitle = entries.find((e) => /[\uac00-\ud7a3]/.test(e.title))?.title;
+    // 게임위 한글 제목: 'Portal 2(포탈 2)_PC' 처럼 섞여 있으면 한글 이름 후보(포탈 2)만
+    const hangul = /[\uac00-\ud7a3]/;
+    const koTitle = entries.flatMap((e) => (hangul.test(e.title) ? titleVariants(e.title).filter((v) => hangul.test(v)) : []))[0];
     result[i] = {
       ...ig,
       // IGDB 제목이 한글이 아니면 게임위 한글 제목을 함께 표시
-      originalTitle: ig.originalTitle ?? (koTitle && normTitle(baseTitle(koTitle)) !== normTitle(ig.title) ? baseTitle(koTitle) : null),
+      originalTitle: ig.originalTitle ?? (koTitle && normTitle(koTitle) !== normTitle(ig.title) ? koTitle : null),
       ...(gr
         ? {
             rating: gr.rating ?? ig.rating,
