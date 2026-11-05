@@ -41,7 +41,18 @@ export function GamePage({ id, options }) {
         )}
       </nav>
       {status === 'loading' && <Loading message="게임 정보를 불러오는 중이에요…" />}
-      {status === 'error' && <ErrorState title={error.status === 404 ? '게임을 찾을 수 없어요' : undefined} error={error} onRetry={error.status === 404 ? null : retry} />}
+      {status === 'error' &&
+        (error.code === 'ENDED' ? (
+          <div className="state" data-testid="game-ended">
+            <h1>서비스가 종료된 게임이에요</h1>
+            <p className="muted">더 이상 플레이할 수 없는 게임이라 보여 드리지 않아요.</p>
+            <Link to="/" className="btn btn-primary">
+              홈으로
+            </Link>
+          </div>
+        ) : (
+          <ErrorState title={error.status === 404 ? '게임을 찾을 수 없어요' : undefined} error={error} onRetry={error.status === 404 ? null : retry} />
+        ))}
       {status === 'success' && <GameDetail data={data} options={options} />}
     </>
   );

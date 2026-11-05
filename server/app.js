@@ -158,6 +158,15 @@ const SLIDES = 5;
    *    (AI 판단 데이터가 아예 없으면 — 키·정리 파일 없이 실행 — 숨기지 않음)
    */
   const hideUnknown = () => Boolean(config.hideUnknownGrac) && partySize.size > 0;
+  /** 서비스가 끝난 게임: AI·외부 AI 판단, 회원 제보 승인, IGDB 상태(Offline 등) → 목록뿐 아니라 상세·찜·최근 본 게임에서도 안 보임 */
+  const isEnded = (g) => Boolean(g?.aiEnded || g?.userEnded || g?.hidden);
+  /** 저장된 목록(찜·최근 본·내 리뷰)에서 서비스 종료 게임 빼기 — 저장된 id·제목으로 AI 판단·회원 제보를 확인 */
+  const withoutEnded = (items) => {
+    if (!items.length) return items;
+    const probe = items.map((x) => ({ id: x.gameId, title: x.title ?? '', source: String(x.gameId).startsWith('igdb-') ? 'IGDB' : String(x.gameId).startsWith('grac-') ? '게임물관리위원회' : '기타', recommendedPlayers: null }));
+    const ended = new Set(reports.applyAll(partySize.applyCached(probe)).filter(isEnded).map((g) => g.id));
+    return items.filter((x) => !ended.has(x.gameId));
+  };
   const listable = (g) =>
     !g.aiEnded && !g.userEnded && !isOffTopic(g) && (g.source !== '게임물관리위원회' || (!g.aiUpcoming && (!hideUnknown() || g.aiAlive === true || Boolean(g.appStoreUrl))));
   const listableRaw = (g) => listable(appArt.apply(partySize.applyCached([g])[0]));
@@ -302,8 +311,8 @@ const SLIDES = 5;
       if (!limits.login.hit(`pw|${u.id}`)) throw apiError('RATE_LIMIT', '시도가 너무 많습니다. 10분 뒤 다시 시도해 주세요.', 429);
       return sendJson(res, 200, accounts.changePassword(u.id, token, await readJson(req)));
     }
-    if (p === '/api/me/reviews' && method === 'GET') return sendJson(res, 200, { items: community.myReviews(requireUser().id) });
-    if (p === '/api/me/recent' && method === 'GET') return sendJson(res, 200, { items: community.recent(requireUser().id) });
+    if (p === '/api/me/reviews' && method === 'GET') return sendJson(res, 200, { items: withoutEnded(community.myReviews(requireUser().id)) });
+    if (p === '/api/me/recent' && method === 'GET') return sendJson(res, 200, { items: withoutEnded(community.recent(requireUser().id)) });
     if (p === '/api/me/recent' && method === 'DELETE') {
       community.clearRecent(requireUser().id);
       return sendJson(res, 200, { items: [] });
@@ -312,14 +321,14 @@ const SLIDES = 5;
     if (recm && method === 'DELETE') {
       const u = requireUser();
       community.removeRecent(u.id, decodeURIComponent(recm[1]));
-      return sendJson(res, 200, { items: community.recent(u.id) });
+      return sendJson(res, 200, { items: withoutEnded(community.recent(u.id)) });
     }
 
     // ── 찜 ──
     if (p === '/api/wishlist' && method === 'GET') {
       const u = requireUser();
       const stats = community.statsAll();
-      const items = community.wishlist(u.id).map((w) => ({ ...w, userRating: stats.get(w.gameId) ?? { count: 0, avg: null } }));
+      const items = withoutEnded(community.wishlist(u.id)).map((w) => ({ ...w, userRating: stats.get(w.gameId) ?? { count: 0, avg: null } }));
       return sendJson(res, 200, { items });
     }
     const wm = p.match(/^\/api\/wishlist\/([^/]+)$/);
@@ -566,7 +575,8 @@ const SLIDES = 5;
       const top = community.topRated({ minCount: 1, limit: 50 });
       const extra = new Map((await catalog.getMany(top.map((g) => g.id))).map((g) => [g.id, g]));
       const games = top.map((g) => ({ ...(extra.get(g.id) ?? {}), ...g, imageUrl: extra.get(g.id)?.imageUrl ?? g.imageUrl, title: extra.get(g.id)?.title ?? g.title }));
-      return sendJson(res, 200, { meta: meta(), games: decorate(games, user).map((g, i) => ({ ...g, userRating: top[i].userRating })), warnings: [] });
+      const ranked = decorate(games, user).map((g, i) => ({ ...g, userRating: top[i].userRating }));
+      return sendJson(res, 200, { meta: meta(), games: ranked.filter((g) => !isEnded(g)), warnings: [] });
     }
 
     if (p === '/api/search') {
@@ -594,6 +604,7 @@ const SLIDES = 5;
       if (!found) return sendJson(res, 404, { error: { code: 'NOT_FOUND', message: '게임 정보를 찾을 수 없습니다.' } });
       const [withParty] = (await partySize.fill([found])).games;
       const [decorated] = decorate(await withKoreanSummaries(translator, [withParty]), user);
+      if (isEnded(decorated) && !user?.isAdmin) return sendJson(res, 410, { error: { code: 'ENDED', message: '서비스가 종료된 게임이에요.' } });
       if (found.source === '사용자 제보') decorated.submitterBadge = badges.displayFor(found.submittedById); // 제보자 닉네임 옆 뱃지
       if (decorated.imageSource === '사용자 제보' && decorated.imageBy) decorated.imageByBadge = badges.displayFor(imageSubs.submitterOf(decorated.id));
       const playtime = playtimeOf(decorated, await ttbP);

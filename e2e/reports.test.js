@@ -110,8 +110,12 @@ test('서비스 종료·정보 수정 제보, 리뷰 신고 → 관리자 처리
   await user.getByTestId('game-card').first().waitFor();
   const titles = await user.getByTestId('game-card').allInnerTexts();
   assert.ok(!titles.some((t) => t.includes('종료될 온라인 게임')), '종료 게임은 검색에서 빠짐');
+  // 종료 게임은 상세도 안 보임(회원) — 관리자에게만 종료 안내와 함께 열림
   await user.goto(`${base}/games/igdb-81`);
-  await user.getByTestId('user-ended-notice').waitFor();
+  await user.getByTestId('game-ended').waitFor();
+  assert.equal(await user.getByTestId('game-detail').count(), 0);
+  await admin.goto(`${base}/games/igdb-81`);
+  await admin.getByTestId('user-ended-notice').waitFor();
   await user.goto(`${base}/games/igdb-82`);
   const detail = await user.getByTestId('game-detail').innerText();
   assert.match(detail, /추천 인원\s*2~4명[\s\S]*사용자 제보/);

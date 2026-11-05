@@ -69,11 +69,19 @@ test('서비스 종료 제보 → 승인 → 목록·검색에서 숨김, 내리
   const list = await admin('GET', '/api/admin/reports?kind=ended');
   assert.equal(list.body.counts.pending, 1);
   assert.equal(list.body.items[0].submitter, 'ender1');
+  await user('PUT', '/api/wishlist/igdb-71');
+  await user('GET', '/api/games/igdb-71'); // 최근 본 게임
   await admin('POST', `/api/admin/reports/${c.body.item.id}/approve`, {});
   assert.deepEqual(ids(await user('GET', '/api/search?q=x')), ['igdb-72'], '승인되면 검색에서 숨김');
   assert.deepEqual(ids(await user('GET', '/api/browse/popular')), ['igdb-72'], '목록에서도');
-  const d = (await user('GET', '/api/games/igdb-71')).body.game;
-  assert.equal(d.userEnded, true, '상세는 열리고 종료 표시');
+  // 상세도 안 보임(서비스 종료), 찜·최근 본 게임에서도 빠짐. 관리자는 확인용으로 열 수 있음
+  assert.deepEqual((await user('GET', '/api/wishlist')).body.items.map((w) => w.gameId), [], '찜 목록에서 빠짐');
+  assert.deepEqual((await user('GET', '/api/me/recent')).body.items.map((w) => w.gameId), [], '최근 본 게임에서 빠짐');
+  const gone = await user('GET', '/api/games/igdb-71');
+  assert.equal(gone.status, 410);
+  assert.equal(gone.body.error.code, 'ENDED');
+  const d = (await admin('GET', '/api/games/igdb-71')).body.game;
+  assert.equal(d.userEnded, true, '관리자에게는 열리고 종료 표시');
   assert.equal(d.endedSourceUrl, 'https://notice.example.com/1');
   assert.equal((await user('GET', '/api/me/reports')).body.items[0].status, 'approved');
   const b1 = (await user('GET', '/api/me/badges')).body;
@@ -85,6 +93,8 @@ test('서비스 종료 제보 → 승인 → 목록·검색에서 숨김, 내리
   await admin('POST', `/api/admin/reports/${c.body.item.id}/reject`, { reason: '아직 서비스 중' });
   assert.equal((await user('GET', '/api/me/badges')).body.stats.reports, 0, '되돌리면 실적에서 빠짐');
   assert.deepEqual(ids(await user('GET', '/api/search?q=x')), ['igdb-71', 'igdb-72'], '내리면 다시 보임');
+  assert.deepEqual((await user('GET', '/api/wishlist')).body.items.map((w) => w.gameId), ['igdb-71'], '찜 목록에도 다시');
+  assert.equal((await user('GET', '/api/games/igdb-71')).status, 200, '상세도 다시 열림');
 });
 
 test('정보 수정 제보 → 승인 → 추천 인원·플레이 시간·구매처 반영, 관리자는 바로 반영', async () => {
