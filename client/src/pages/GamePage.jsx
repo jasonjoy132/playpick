@@ -77,11 +77,17 @@ function Summary({ game }) {
 /** 평균 플레이 시간 값 표시 (출처 구분) */
 function PlaytimeValue({ playtime }) {
   if (playtime.source === 'igdb') {
-    // IGDB 이용자들이 기록한 시간: 보통(부가 요소 조금) 기준, 빠르게(메인만)·완전히(100%)도 함께
-    const extra = [playtime.normally && playtime.hastily ? `빠르게 ${playtime.hastily}시간` : null, playtime.completely ? `완전히 ${playtime.completely}시간` : null].filter(Boolean);
+    // IGDB 이용자들이 기록한 시간 (IGDB의 hastily·normally·completely 를 뜻으로 풀어 씀)
+    //  - 큰 값: 메인 스토리 + 서브 퀘스트 조금(normally), 없으면 메인 스토리만(hastily)
+    //  - 아래 줄: 메인 스토리만 · 모든 요소 100% 완료(completely)
+    const extra = [
+      playtime.normally && playtime.hastily ? `메인 스토리만 약 ${playtime.hastily}시간` : null,
+      playtime.completely ? `모든 요소 100% 완료 약 ${playtime.completely}시간` : null,
+    ].filter(Boolean);
     return (
       <span data-testid="playtime-igdb">
-        약 {playtime.hours}시간 <span className="muted small">({playtime.normally ? '보통 플레이' : '메인 스토리'}{extra.length ? ` · ${extra.join(' · ')}` : ''})</span>{' '}
+        약 {playtime.hours}시간 <span className="muted small">({playtime.normally ? '메인 스토리 + 서브 퀘스트 조금' : '메인 스토리만'})</span>
+        {extra.length > 0 && <span className="muted small playtime-extra">{extra.join(' · ')}</span>}
         <span className="muted small">
           (출처:{' '}
           {playtime.url ? (

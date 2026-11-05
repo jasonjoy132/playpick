@@ -837,3 +837,6 @@ img { max-width: 100%; }
 .badge-picker.is-compact .badge-pick-icon { width: 26px; height: 26px; }
 .pp-pick { margin: -4px 0 10px; }
 .pp-pick .badge-picker { margin-top: 8px; }
+
+/* 상세: IGDB 플레이 시간 아래 줄(메인 스토리만 · 100% 완료) */
+.playtime-extra { display: block; margin-top: 2px; }

@@ -9,9 +9,12 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 
 const GAME = { id: 'igdb-501', title: 'Quiet Quest', source: 'IGDB', platforms: ['pc'], genres: ['rpg'], players: null, stores: [], imageUrl: null, altNames: [] };
+const GAME2 = { ...GAME, id: 'igdb-502', title: 'Recorded Quest' };
 const catalog = {
   meta: { dataSource: 'live', isDemo: false, sources: ['IGDB'] },
-  getGame: async (id) => (id === GAME.id ? GAME : null),
+  getGame: async (id) => (id === GAME.id ? GAME : id === GAME2.id ? GAME2 : null),
+  // 가짜 IGDB 이용자 기록 (실제 자료 아님)
+  timeToBeat: async (id) => (id === GAME2.id ? { hastily: 8, normally: 12, completely: 30, count: 5 } : null),
   browse: async () => ({ games: [], hasMore: false }),
   search: async () => ({ games: [], warnings: [] }),
   featured: async () => [],
@@ -78,4 +81,17 @@ test('로그인함: AI 추정 중… → AI 추정 값, 다시 열면 바로 보
   assert.deepEqual(errors, []);
   await anon.close();
   await ctx.close();
+});
+
+test('IGDB 이용자 기록 플레이 시간: 뜻을 풀어 쓴 표시', async () => {
+  const page = await browser.newPage({ locale: 'ko-KR' });
+  await page.goto(`${base}/games/${GAME2.id}`);
+  const p = page.getByTestId('playtime-igdb');
+  await p.waitFor();
+  const text = await p.textContent();
+  assert.ok(text.includes('약 12시간 (메인 스토리 + 서브 퀘스트 조금)'), text);
+  assert.match(text, /메인 스토리만 약 8시간 · 모든 요소 100% 완료 약 30시간/);
+  assert.match(text, /IGDB 이용자 5명 기록/);
+  assert.equal(await page.getByTestId('playtime-login').count(), 0, 'IGDB 값이 있으면 로그인 안내 없음');
+  await page.close();
 });
