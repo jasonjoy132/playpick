@@ -112,6 +112,8 @@ for (const f of files) {
       }
       const ended = n.st === 'ended' ? true : n.st === 'released' ? false : null; // 출시 예정은 IGDB 자체 표시를 따름
       igdbCount[ended === true ? 'ended' : ended === false ? 'alive' : 'unknown']++;
+      // '모름'은 저장하지 않음 → 기존 값 그대로, 나중에 --recheck-alive 로 다시 확인할 수 있게(외부 AI 확인 완료로 표시하지 않음)
+      if (ended === null) continue;
       const evidence = String(r.evidence || '').slice(0, 300) || undefined;
       data[key] = {
         ...e,
@@ -156,7 +158,7 @@ for (const f of files) {
   }
 }
 if (igdbCount.ended + igdbCount.alive + igdbCount.unknown + igdbCount.skipped) {
-  console.log(`\nIGDB 게임: 서비스 종료 ${igdbCount.ended}개(목록에서 숨김) · 서비스 중 ${igdbCount.alive}개 · 모름 ${igdbCount.unknown}개(그대로 보임)${igdbCount.skipped ? ` · 이미 반영돼 건너뜀 ${igdbCount.skipped}개(--force 로 덮어쓰기)` : ''}`);
+  console.log(`\nIGDB 게임: 서비스 종료 ${igdbCount.ended}개(목록에서 숨김) · 서비스 중 ${igdbCount.alive}개 · 모름 ${igdbCount.unknown}개(저장 안 함 — 그대로 보이고 나중에 다시 확인 가능)${igdbCount.skipped ? ` · 이미 반영돼 건너뜀 ${igdbCount.skipped}개(--force 로 덮어쓰기)` : ''}`);
 }
 console.log(`\n게임위 게임: 서비스 중 ${count.released}개(목록에 보임) · 종료 ${count.ended}개(숨김) · 출시 예정 ${count.upcoming}개(출시 예정 목록에) · 모름 ${count.unknown}개`);
 if (count.skipped) console.log(`이미 상태가 정해져 건너뜀 ${count.skipped}개 (--force 로 덮어쓰기)`);
