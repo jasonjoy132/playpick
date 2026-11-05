@@ -48,8 +48,11 @@ test('경고: 안다고 한 답이 거의 다 1~1이면 짐작했을 수 있다�
     map[i] = `grac:${i}`;
     lines.push(`${i},true,1,1,`);
   }
-  const r = applyPlayersResults(data, map, parseResults(lines.join('\n')));
+  const r = applyPlayersResults(structuredClone(data), map, parseResults(lines.join('\n')));
   assert.equal(r.warnings.length, 2);
-  assert.match(r.warnings[0], /1~1명/);
+  assert.match(r.warnings[0], /근거 없는 1~1명/);
   assert.match(r.warnings[1], /근거/);
+  // 스토어 근거가 붙은 1~1(싱글 전용 확인)은 경고 안 함
+  const withEvidence = lines.map((l, i) => (i ? `${l}https://store.steampowered.com/app/${i}/ Single-player only` : l));
+  assert.deepEqual(applyPlayersResults(structuredClone(data), map, parseResults(withEvidence.join('\n'))).warnings, []);
 });

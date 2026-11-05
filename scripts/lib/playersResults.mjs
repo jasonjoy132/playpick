@@ -111,9 +111,11 @@ export function applyPlayersResults(data, idToKey, rows, { force = false, day = 
     }
   }
   const warnings = [];
-  const ones = known.filter((k) => k.min === 1 && k.max === 1).length;
-  if (known.length >= 10 && ones / known.length >= 0.8) {
-    warnings.push(`안다고 한 ${known.length}개 중 ${ones}개(${Math.round((ones / known.length) * 100)}%)가 1~1명이에요. 장르만 보고 짐작했을 수 있으니 근거를 확인해 보세요.`);
+  // 1~1이 대부분이면서 근거도 대부분 없을 때만 '짐작' 경고 (스토어 기능 목록 'Single-player'만 있다는 근거가 붙은 1~1은 정상)
+  const ones = known.filter((k) => k.min === 1 && k.max === 1);
+  const onesNoEvidence = ones.filter((k) => !k.evidence).length;
+  if (known.length >= 10 && ones.length / known.length >= 0.8 && onesNoEvidence / ones.length > 0.5) {
+    warnings.push(`안다고 한 ${known.length}개 중 ${ones.length}개(${Math.round((ones.length / known.length) * 100)}%)가 근거 없는 1~1명이에요. 장르만 보고 짐작했을 수 있으니 확인해 보세요.`);
   }
   if (known.length && count.noEvidence / known.length > 0.5) warnings.push(`안다고 한 ${known.length}개 중 ${count.noEvidence}개는 근거(evidence)가 비어 있어요.`);
   return { count, bad, known, warnings };
