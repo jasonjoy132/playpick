@@ -31,7 +31,7 @@ import { createGracIndex } from '../server/providers/gracIndex.js';
 import { createPartySize, cacheKey } from '../server/services/partySize.js';
 import { createExistenceCache } from '../server/services/catalog.js';
 import { createAppArt } from '../server/services/appArt.js';
-import { isArcadeOnly } from '../server/services/taxonomy.js';
+import { isOffTopic } from '../server/services/taxonomy.js';
 
 const args = process.argv.slice(2);
 const opt = (name, d) => {
@@ -128,7 +128,7 @@ if (PLAYERS_ONLY) {
   const seen = new Set();
   const visible = art
     .applyAll(ps.applyCached(snap.games.filter((g) => !exists[g.title]?.exists)))
-    .filter((g) => !g.aiEnded && !g.aiUpcoming && !isArcadeOnly(g) && (g.aiAlive || g.appStoreUrl))
+    .filter((g) => !g.aiEnded && !g.aiUpcoming && !isOffTopic(g) && (g.aiAlive || g.appStoreUrl))
     .sort((a, b) => String(b.ratingDate || '').localeCompare(String(a.ratingDate || '')));
   for (const g of visible) {
     if (seen.has(cacheKey(g))) continue;

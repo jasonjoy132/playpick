@@ -74,3 +74,15 @@ export function isArcadeOnly(g) {
   const raw = String(g?.platformsRaw ?? '');
   return /아케이드/.test(raw) && !/pc|온라인|모바일|비디오/i.test(raw);
 }
+
+/** 게임위 장르 '교육용'(타자·퀴즈·학습 앱) — 친구와 같이 노는 게임과 맞지 않음 */
+export const isEducational = (g) => String(g?.genresRaw ?? '').split(',').some((x) => x.replace(/\s+/g, '') === '교육용');
+
+/** 체험판(본편이 따로 있는 데모) — 제목에 '체험판'·'데모 버전'·'(Demo)' 등 */
+export const isDemoVersion = (g) => /체험판|데모\s*버전|[([]\s*demo\s*[)\]]|\bdemo\s+version\b/i.test(String(g?.title ?? ''));
+
+/**
+ * 사이트 목적(친구와 같이 할 게임)과 맞지 않아 목록·검색·나만의 게임 찾기에서 빼는 게임
+ *  - 아케이드 기계 전용(오락실·인형뽑기) · 교육용 앱 · 체험판. 상세 페이지는 링크로 열림
+ */
+export const isOffTopic = (g) => isArcadeOnly(g) || isEducational(g) || isDemoVersion(g);

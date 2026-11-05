@@ -74,3 +74,14 @@ test('아케이드: 고를 수 없음(예전 링크의 arcade는 조용히 뺌),
   assert.equal(isArcadeOnly({ platforms: null, platformsRaw: '아케이드 게임, 모바일 게임' }), false);
   assert.equal(isArcadeOnly({ platforms: null, platformsRaw: null }), false);
 });
+
+test('목적과 안 맞는 게임 빼기: 교육용(게임위 장르)·체험판', async () => {
+  const { isOffTopic, isEducational, isDemoVersion } = await import('../server/services/taxonomy.js');
+  assert.equal(isEducational({ genresRaw: '교육용' }), true);
+  assert.equal(isEducational({ genresRaw: '퍼즐, 교육용' }), true);
+  assert.equal(isEducational({ genresRaw: '퍼즐' }), false);
+  for (const t of ['용과 같이 6 체험판', 'SHAKING!(Demo)', '[DEMO] 테스트', 'Game Demo Version']) assert.equal(isDemoVersion({ title: t }), true, t);
+  for (const t of ['Demon Slayer', 'Demolition Derby', '데몬 헌터']) assert.equal(isDemoVersion({ title: t }), false, t);
+  assert.equal(isOffTopic({ title: '보통 게임', platforms: ['pc'], genresRaw: '액션' }), false);
+  assert.equal(isOffTopic({ title: '인형뽑기', platforms: ['arcade'] }), true);
+});

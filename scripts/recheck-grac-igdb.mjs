@@ -8,7 +8,7 @@
 //   npm run recheck:grac-igdb -- --limit 2000 2000개만
 //   npm run recheck:grac-igdb -- --dry        몇 개인지만
 //
-// - 대상: 화면에 보이는 게임위 게임만(목록의 숨김 규칙과 같음, 아케이드 전용 기계 제외) — AI가 '서비스 중'이라 했거나 App Store에 있거나 '출시 예정'.
+// - 대상: 화면에 보이는 게임위 게임만(목록의 숨김 규칙과 같음, 아케이드 기계·교육용·체험판 제외) — AI가 '서비스 중'이라 했거나 App Store에 있거나 '출시 예정'.
 //   AI가 '종료'로 판단한 게임, 상태를 모르는 게임(HIDE_UNKNOWN_GRAC=on일 때)은 어차피 안 보이므로 건너뜀
 // - 결과는 .cache/grac-igdb-check.json 에 저장(20묶음마다). 중간에 꺼도 다시 실행하면 이어서 합니다.
 import { getConfig } from '../server/config.js';
@@ -18,7 +18,7 @@ import { createGracProvider } from '../server/providers/gracProvider.js';
 import { createExistenceCache } from '../server/services/catalog.js';
 import { createPartySize } from '../server/services/partySize.js';
 import { createAppArt } from '../server/services/appArt.js';
-import { isArcadeOnly } from '../server/services/taxonomy.js';
+import { isOffTopic } from '../server/services/taxonomy.js';
 
 const args = process.argv.slice(2);
 const opt = (name, d) => {
@@ -47,7 +47,7 @@ const ps = createPartySize({ ...config.gemini, live: false });
 const art = createAppArt(config.appStore.artFile);
 const visible = art
   .applyAll(ps.applyCached(snap.games))
-  .filter((g) => !g.aiEnded && !isArcadeOnly(g) && (g.aiUpcoming || g.aiAlive || g.appStoreUrl || !config.hideUnknownGrac));
+  .filter((g) => !g.aiEnded && !isOffTopic(g) && (g.aiUpcoming || g.aiAlive || g.appStoreUrl || !config.hideUnknownGrac));
 const before = snap.games.filter((g) => cache.known(g.title) === true).length;
 const todo = visible.filter((g) => cache.known(g.title) === undefined).slice(0, LIMIT);
 console.log(`게임위 게임 ${snap.games.length}개 (IGDB에 있음 ${before}개) · 화면에 보이는 게임 ${visible.length}개 중 다시 확인할 게임 ${todo.length}개`);
