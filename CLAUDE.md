@@ -56,7 +56,7 @@
   - `server/data/app-store.json`: App Store 아이콘·스크린샷
   - `server/data/status-review/`: 외부 AI용 내보내기 CSV와 질문(PROMPT*.md), 결과 CSV
   - **예외: 상세 화면 AI 플레이 시간**(`server/services/aiPlaytime.js`) — 플레이 시간이 아무 데도 없는 게임을 **로그인한 회원**이 열면 화면이 `POST /api/games/:id/playtime`으로 그 게임 하나만 Gemini에 물어 DB `ai_playtime`에 저장(한 게임 한 번, '모름'도 저장). 로그인 안 하면 '로그인 후 확인' 안내. 하루 상한 `AI_PLAYTIME_DAILY_LIMIT`(기본 300), 회원당 시간당 30번, `AI_PLAYTIME_LIVE=off`로 끔. AI 오류·상한 초과는 저장 안 함
-  - 플레이 시간 우선순위: 회원 정보 수정 제보 → RAWG 파일 → AI 파일(`party-size.json`) → AI DB(`ai_playtime`) → 정보 없음 (`app.js`의 `playtimeOf`)
+  - 플레이 시간 우선순위: 회원 정보 수정 제보 → **IGDB 이용자 기록(Time To Beat, 기록 3명 이상, 상세에서 실시간 조회·1000시간 넘는 값 버림)** → RAWG 파일 → AI 파일(`party-size.json`) → AI DB(`ai_playtime`) → 정보 없음 (`app.js`의 `playtimeOf`·`IGDB_TTB_MIN`)
 - 서버가 켜져 있으면 데이터 파일 변경을 30초 안에 다시 읽음
 
 ### 목록에서 숨기는 규칙 (`server/app.js`의 `listable`)

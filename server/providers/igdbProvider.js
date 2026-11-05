@@ -530,6 +530,27 @@ export function createIgdbProvider(cfg, { fetchImpl = globalThis.fetch, now = ()
       const rows = await query('games', `fields ${GAME_FIELDS}; where id = ${n}; limit 1;`);
       return rows[0] ? mark(igdbToGame(rows[0])) : null;
     },
+    /**
+     * IGDB 이용자가 기록한 플레이 시간(Time To Beat): 시간 단위로
+     * { hastily: 빠르게(메인만), normally: 보통(부가 요소 조금), completely: 완전히(100%), count: 기록한 사람 수 } 또는 null
+     */
+    async timeToBeat(id) {
+      const n = Number(String(id).replace(/^igdb-/, ''));
+      if (!Number.isInteger(n) || n <= 0) return null;
+      const key = `ttb:${n}`;
+      const hit = cache.get(key);
+      if (hit && now() - hit.at < cacheTtlSec * 1000) return hit.value;
+      const rows = await query('game_time_to_beats', `fields hastily,normally,completely,count; where game_id = ${n}; limit 1;`);
+      const r = rows[0];
+      // 이용자가 넣은 값이라 터무니없는 값이 섞임(예: 5,650시간) → 1~1000시간만 (AI 값과 같은 범위)
+      const hours = (s) => {
+        const h = Math.max(1, Math.round(Number(s) / 3600));
+        return Number(s) > 0 && h <= 1000 ? h : null;
+      };
+      const value = r && (r.hastily || r.normally || r.completely) ? { hastily: hours(r.hastily), normally: hours(r.normally), completely: hours(r.completely), count: Number(r.count) || 0 } : null;
+      cache.set(key, { at: now(), value });
+      return value;
+    },
     /** 첫 화면용 인기 게임 (표지 있는 게임, 평가 수 많은 순) */
     async featured(limit = 30) {
       const key = `featured:${limit}`;

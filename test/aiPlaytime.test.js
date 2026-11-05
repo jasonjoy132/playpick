@@ -14,10 +14,15 @@ const GAMES = {
   'igdb-4': game('igdb-4', 'Fourth'),
   'igdb-5': game('igdb-5', 'Fifth'),
   'igdb-6': game('igdb-6', 'Broken'),
+  'igdb-7': game('igdb-7', 'Many Records', { igdbUrl: 'https://www.igdb.com/games/many' }),
+  'igdb-8': game('igdb-8', 'Few Records'),
 };
+// 가짜 IGDB 이용자 기록 플레이 시간 (실제 자료 아님)
+const TTB = { 'igdb-7': { hastily: 8, normally: 12, completely: 30, count: 5 }, 'igdb-8': { hastily: 5, normally: 6, completely: null, count: 2 } };
 const catalog = {
   meta: { dataSource: 'live', isDemo: false, sources: ['IGDB'] },
   getGame: async (id) => GAMES[id] ?? null,
+  timeToBeat: async (id) => TTB[id] ?? null,
   browse: async () => ({ games: [], hasMore: false }),
   search: async () => ({ games: [], warnings: [] }),
 };
@@ -130,4 +135,18 @@ test('데모 게임·없는 게임', async () => {
   const u = client();
   await u('POST', '/api/auth/signup', { loginId: 'timer5', password: 'secret123', nickname: 'timer5', email: 't5@example.com' });
   assert.equal((await u('POST', '/api/games/igdb-999/playtime', {})).status, 404);
+});
+
+test('IGDB 이용자 기록 플레이 시간: 3명 이상이면 맨 먼저(AI 안 부름), 2명 이하면 쓰지 않음', async () => {
+  const u = client();
+  await u('POST', '/api/auth/signup', { loginId: 'timer6', password: 'secret123', nickname: 'timer6', email: 't6@example.com' });
+  const before = asked.length;
+  const d = (await u('GET', '/api/games/igdb-7')).body.game;
+  assert.deepEqual(d.playtime, { hours: 12, hastily: 8, normally: 12, completely: 30, count: 5, url: 'https://www.igdb.com/games/many', source: 'igdb' });
+  assert.equal(d.playtimeAsk, false);
+  assert.equal((await u('POST', '/api/games/igdb-7/playtime', {})).body.status, 'known');
+  assert.equal(asked.length, before, 'IGDB 값이 있으면 AI를 부르지 않음');
+  const few = (await u('GET', '/api/games/igdb-8')).body.game;
+  assert.equal(few.playtime, null, '기록한 사람이 2명이면 쓰지 않음');
+  assert.equal(few.playtimeAsk, true, '→ AI에게 물어볼 수 있음');
 });

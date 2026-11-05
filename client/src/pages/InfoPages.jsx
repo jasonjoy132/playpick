@@ -140,9 +140,9 @@ export function TermsPage() {
 }
 
 const SOURCES = [
-  { name: 'IGDB', url: 'https://www.igdb.com', use: '게임 이름·소개·장르·플랫폼·출시일·표지 이미지·평점 (주 데이터)' },
+  { name: 'IGDB', url: 'https://www.igdb.com', use: '게임 이름·소개·장르·플랫폼·출시일·표지 이미지·평점(주 데이터), 이용자가 기록한 플레이 시간(3명 이상 기록한 게임만)' },
   { name: '게임물관리위원회 Open API', url: 'https://www.grac.or.kr', use: '국내 등급분류 게임 목록과 등급 정보' },
-  { name: 'RAWG', url: 'https://rawg.io', use: '평균 플레이 시간' },
+  { name: 'RAWG', url: 'https://rawg.io', use: '평균 플레이 시간 (IGDB 기록이 없을 때)' },
   { name: 'App Store (Apple 검색 API)', url: 'https://www.apple.com/kr/app-store/', use: '국내 모바일 게임 아이콘·스크린샷·App Store 링크 (이름과 개발사가 모두 일치할 때만)' },
   { name: 'DeepL', url: 'https://www.deepl.com', use: '영어 게임 소개와 검색어 번역' },
   { name: 'Google Gemini', url: 'https://ai.google.dev', use: "데이터에 없는 추천 인원·플레이 시간·서비스 상태 추정. 화면에 'AI 추정'으로 표시" },

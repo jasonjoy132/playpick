@@ -118,13 +118,22 @@ export function createApp(config, deps = {}) {
     aiPlaytime: createRateLimiter({ limit: 30, windowMs: 60 * 60e3 }), // 회원 한 명이 AI 플레이 시간을 새로 물을 수 있는 수(시간당)
   };
   const aiPlaytime = deps.aiPlaytime ?? createAiPlaytime(db, config.aiPlaytime ?? {}, { ...deps, log: (m) => console.log(m) });
+  // IGDB 이용자 기록 플레이 시간은 기록한 사람이 이만큼 이상일 때만 씀(적으면 한두 사람 값에 크게 흔들림)
+  const IGDB_TTB_MIN = 3;
+  /** 상세용: IGDB 이용자 기록 플레이 시간 (기준 인원 이상일 때만, 아니면 null) */
+  async function igdbTimeToBeat(g) {
+    if (g.isDemo || g.source !== 'IGDB' || !catalog.timeToBeat) return null;
+    const t = await catalog.timeToBeat(g.id);
+    return t && t.count >= IGDB_TTB_MIN && (t.hastily || t.normally) ? t : null;
+  }
   /**
    * 평균 플레이 시간 고르기 (출처 구분)
-   * 회원 정보 수정 제보(관리자 확인) → RAWG(미리 받은 파일) → AI 추정(미리 받은 파일) → AI 추정(상세에서 물어 DB에 저장한 값)
+   * 회원 정보 수정 제보 → IGDB 이용자 기록(3명 이상) → RAWG(미리 받은 파일) → AI 추정(미리 받은 파일) → AI 추정(상세에서 물어 DB에 저장한 값)
    */
-  function playtimeOf(g) {
+  function playtimeOf(g, ttb = null) {
     if (g.userPlaytime) return { hours: g.userPlaytime, source: 'user' };
     if (g.isDemo || g.source === '사용자 제보') return null;
+    if (ttb) return { hours: ttb.normally ?? ttb.hastily, hastily: ttb.hastily, normally: ttb.normally, completely: ttb.completely, count: ttb.count, url: g.igdbUrl ?? null, source: 'igdb' };
     const r = rawgTimes.get(g.id);
     if (r) return { ...r, source: 'rawg' };
     if (g.aiPlaytime) return { hours: g.aiPlaytime, source: 'ai' };
@@ -442,7 +451,7 @@ const SLIDES = 5;
         throw apiError('BAD_ID', '잘못된 게임 ID입니다.', 400);
       }
       const [g] = decorate([await findGame(id)], u);
-      const known = playtimeOf(g);
+      const known = playtimeOf(g, await igdbTimeToBeat(g).catch(() => null));
       if (known) return sendJson(res, 200, { playtime: known, status: 'known' });
       if (!canAskPlaytime(g)) return sendJson(res, 200, { playtime: null, status: 'none' });
       if (aiPlaytime.cached(g.id) !== undefined) return sendJson(res, 200, { playtime: null, status: 'cached' }); // AI가 모른다고 한 게임
@@ -581,12 +590,13 @@ const SLIDES = 5;
         throw apiError('BAD_ID', '잘못된 게임 ID입니다.', 400);
       }
       const found = await getAnyGame(id);
+      const ttbP = found ? igdbTimeToBeat(found).catch(() => null) : null; // 번역 등과 동시에
       if (!found) return sendJson(res, 404, { error: { code: 'NOT_FOUND', message: '게임 정보를 찾을 수 없습니다.' } });
       const [withParty] = (await partySize.fill([found])).games;
       const [decorated] = decorate(await withKoreanSummaries(translator, [withParty]), user);
       if (found.source === '사용자 제보') decorated.submitterBadge = badges.displayFor(found.submittedById); // 제보자 닉네임 옆 뱃지
       if (decorated.imageSource === '사용자 제보' && decorated.imageBy) decorated.imageByBadge = badges.displayFor(imageSubs.submitterOf(decorated.id));
-      const playtime = playtimeOf(decorated);
+      const playtime = playtimeOf(decorated, await ttbP);
       // 플레이 시간이 아무 데도 없고 AI에게 아직 안 물어본 게임 → 화면이 따로 물어봄(로그인한 회원만, POST …/playtime)
       const playtimeAsk = !playtime && canAskPlaytime(decorated) && aiPlaytime.enabled && aiPlaytime.cached(decorated.id) === undefined;
       let game = { ...decorated, playtime, playtimeAsk, playtimeAvailable: rawgTimes.size > 0 };

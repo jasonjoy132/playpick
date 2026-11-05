@@ -509,3 +509,18 @@ test('스크린샷: 이미 받은 IGDB 응답에서 주소만 (최대 6장, 없�
   assert.deepEqual(a.screenshots, ['https://images.igdb.com/igdb/image/upload/t_screenshot_big/art.jpg']);
   assert.equal(igdbToGame({ ...IGDB_GAME, screenshots: [], artworks: [] }).screenshots, undefined);
 });
+
+test('IGDB 플레이 시간(Time To Beat): 초 → 시간, 없으면 null, 결과 캐시', async () => {
+  const fetchImpl = mockFetch([
+    [IGDB_TOKEN_URL, tokenOk],
+    ['/v4/game_time_to_beats', (url, init) => json(String(init.body).includes('game_id = 72') ? [{ hastily: 16560, normally: 37440, completely: 97560, count: 36 }] : String(init.body).includes('game_id = 74') ? [{ hastily: 3600, normally: 7200, completely: 20340000, count: 9 }] : [])],
+  ]);
+  const p = createIgdbProvider(cfg, { fetchImpl });
+  assert.deepEqual(await p.timeToBeat('igdb-72'), { hastily: 5, normally: 10, completely: 27, count: 36 });
+  assert.equal(await p.timeToBeat('igdb-73'), null);
+  const n = fetchImpl.calls.length;
+  await p.timeToBeat('igdb-72');
+  assert.equal(fetchImpl.calls.length, n, '캐시');
+  assert.equal(await p.timeToBeat('grac-1'), null);
+  assert.deepEqual(await p.timeToBeat('igdb-74'), { hastily: 1, normally: 2, completely: null, count: 9 }, '1000시간 넘는 값은 버림');
+});

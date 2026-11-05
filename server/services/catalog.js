@@ -410,6 +410,16 @@ export function createCatalog(config, deps = {}) {
       return { games: rankSearch([...gracShown, ...igdbGames], queries), warnings, translatedQuery: alt };
     },
 
+    /** IGDB 이용자 기록 플레이 시간 (IGDB 게임만, 실패하면 null) */
+    async timeToBeat(id) {
+      if (!String(id).startsWith('igdb-') || !igdb.configured || !igdb.timeToBeat) return null;
+      try {
+        return await igdb.timeToBeat(id);
+      } catch {
+        return null;
+      }
+    },
+
     async getGame(id) {
       if (id.startsWith('igdb-')) {
         if (!igdb.configured) return null;

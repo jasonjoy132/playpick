@@ -76,6 +76,26 @@ function Summary({ game }) {
 
 /** 평균 플레이 시간 값 표시 (출처 구분) */
 function PlaytimeValue({ playtime }) {
+  if (playtime.source === 'igdb') {
+    // IGDB 이용자들이 기록한 시간: 보통(부가 요소 조금) 기준, 빠르게(메인만)·완전히(100%)도 함께
+    const extra = [playtime.normally && playtime.hastily ? `빠르게 ${playtime.hastily}시간` : null, playtime.completely ? `완전히 ${playtime.completely}시간` : null].filter(Boolean);
+    return (
+      <span data-testid="playtime-igdb">
+        약 {playtime.hours}시간 <span className="muted small">({playtime.normally ? '보통 플레이' : '메인 스토리'}{extra.length ? ` · ${extra.join(' · ')}` : ''})</span>{' '}
+        <span className="muted small">
+          (출처:{' '}
+          {playtime.url ? (
+            <a href={playtime.url} target="_blank" rel="noopener noreferrer">
+              IGDB
+            </a>
+          ) : (
+            'IGDB'
+          )}{' '}
+          이용자 {playtime.count}명 기록)
+        </span>
+      </span>
+    );
+  }
   if (playtime.source === 'user') {
     return (
       <>
