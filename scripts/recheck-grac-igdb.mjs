@@ -4,16 +4,20 @@
 //  - 괄호 안 이름 등 '꺼낸 이름'으로만 맞을 때는 플랫폼(PC·모바일·콘솔·아케이드)도 맞아야 같은 게임으로 봄
 //  - IGDB에 있으면 게임위 카드 대신 IGDB 카드로 보임(표지·평점·인원 정보가 더 많음)
 //
-//   npm run recheck:grac-igdb                 확인 안 된 것 전부 (IGDB 초당 4회 제한 때문에 1만 개에 1시간쯤)
+//   npm run recheck:grac-igdb                 화면에 보이는 게임위 게임 중 확인 안 된 것 전부 (약 9천 개, 20분 안팎)
 //   npm run recheck:grac-igdb -- --limit 2000 2000개만
 //   npm run recheck:grac-igdb -- --dry        몇 개인지만
 //
+// - 대상: 화면에 보이는 게임위 게임만(목록의 숨김 규칙과 같음) — AI가 '서비스 중'이라 했거나 App Store에 있거나 '출시 예정'.
+//   AI가 '종료'로 판단한 게임, 상태를 모르는 게임(HIDE_UNKNOWN_GRAC=on일 때)은 어차피 안 보이므로 건너뜀
 // - 결과는 .cache/grac-igdb-check.json 에 저장(20묶음마다). 중간에 꺼도 다시 실행하면 이어서 합니다.
 import { getConfig } from '../server/config.js';
 import { createIgdbProvider } from '../server/providers/igdbProvider.js';
 import { createGracIndex } from '../server/providers/gracIndex.js';
 import { createGracProvider } from '../server/providers/gracProvider.js';
 import { createExistenceCache } from '../server/services/catalog.js';
+import { createPartySize } from '../server/services/partySize.js';
+import { createAppArt } from '../server/services/appArt.js';
 
 const args = process.argv.slice(2);
 const opt = (name, d) => {
@@ -37,9 +41,15 @@ if (snap.status !== 'ready') {
   process.exit(1);
 }
 const cache = createExistenceCache(config.grac.igdbCheckFile);
+// 화면에 보이는 게임위 게임 (server/app.js 의 listable 과 같은 기준)
+const ps = createPartySize({ ...config.gemini, live: false });
+const art = createAppArt(config.appStore.artFile);
+const visible = art
+  .applyAll(ps.applyCached(snap.games))
+  .filter((g) => !g.aiEnded && (g.aiUpcoming || g.aiAlive || g.appStoreUrl || !config.hideUnknownGrac));
 const before = snap.games.filter((g) => cache.known(g.title) === true).length;
-const todo = snap.games.filter((g) => cache.known(g.title) === undefined).slice(0, LIMIT);
-console.log(`게임위 게임 ${snap.games.length}개 · IGDB에 있음 ${before}개 · 다시 확인할 게임 ${todo.length}개`);
+const todo = visible.filter((g) => cache.known(g.title) === undefined).slice(0, LIMIT);
+console.log(`게임위 게임 ${snap.games.length}개 (IGDB에 있음 ${before}개) · 화면에 보이는 게임 ${visible.length}개 중 다시 확인할 게임 ${todo.length}개`);
 if (DRY || !todo.length) process.exit(0);
 
 const chunks = [];
@@ -67,7 +77,8 @@ const worker = async () => {
     }
   }
 };
-await Promise.all([worker(), worker(), worker()]);
+// 동시에 6묶음 (IGDB 초당 4회 제한은 igdbProvider 의 slot() 이 지킴. 동시 요청 한도 8개를 넘지 않게 6)
+await Promise.all(Array.from({ length: 6 }, worker));
 cache.save();
 console.log(`\n✅ 끝: ${todo.length}개 중 IGDB에서 찾음 ${found}개${failed ? ` · 실패 ${failed}묶음(다시 실행하면 이어서)` : ''}`);
 console.log('서버가 켜져 있으면 껐다 켜야 반영돼요(확인 결과는 서버가 켤 때 읽음).');
