@@ -425,6 +425,7 @@ test('게임위 제목 → IGDB 이름 후보·slug (괄호 안 이름, 플랫�
   assert.deepEqual(titleVariants('PC_MONSTER HUNTER RISE (몬스터 헌터 라이즈)'), ['MONSTER HUNTER RISE', '몬스터 헌터 라이즈']);
   assert.deepEqual(titleVariants('오버워치 (NS) (Overwatch (NS))'), ['오버워치', 'Overwatch']);
   assert.deepEqual(titleVariants('LEFT4DEAD 2(레프트 4 데드 2)_Xbox360'), ['LEFT4DEAD 2', '레프트 4 데드 2']);
+  assert.deepEqual(titleVariants('Resistance Retribution (레지스탕스 레트리뷰션) ＜PS5＞'), ['Resistance Retribution', '레지스탕스 레트리뷰션'], '전각 꺾쇠도 괄호');
   assert.deepEqual(titleVariants('해리 포터: 퀴디치 챔피언 (Harry Potter Quidditch Champions))(닌텐도 스위치 버전)'), ['해리 포터: 퀴디치 챔피언', 'Harry Potter Quidditch Champions'], "끝의 'ns'를 플랫폼으로 지우지 않음");
   assert.deepEqual(titleSlugs('Kartrider Drift'), ['kartrider-drift']);
   assert.deepEqual(titleSlugs("Baldur's Gate 3"), ['baldurs-gate-3']);

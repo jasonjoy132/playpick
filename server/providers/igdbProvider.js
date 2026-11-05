@@ -240,7 +240,15 @@ export function titleVariants(t) {
     for (let k = 0; k < 2; k++) x = x.replace(PLATFORM_HEAD, '').replace(PLATFORM_TAIL, '').trim();
     return x.replace(/[\s_\-–:]+$/, '').trim();
   };
-  const s = clean(String(t || '').normalize('NFKC').replace(/[™®©]/g, ''));
+  // 꺾쇠도 괄호로 봄: 'Resistance Retribution ＜PS5＞'(NFKC 후 <PS5>), '〈…〉'
+  // (「」·『』은 '「진·삼국무쌍」 오리진'처럼 제목의 일부라 그대로 둠)
+  const s = clean(
+    String(t || '')
+      .normalize('NFKC')
+      .replace(/[™®©]/g, '')
+      .replace(/[<〈]/g, '(')
+      .replace(/[>〉]/g, ')'),
+  );
   if (!s) return [];
   // 괄호 안 이름을 안쪽부터 꺼냄: '오버워치 (NS) (Overwatch (NS))' → NS, NS, Overwatch / 괄호 밖: 오버워치
   const BR = /[([{【]([^()[\]{}【】]*)[)\]}】]/g;
