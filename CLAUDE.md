@@ -41,6 +41,8 @@
 | `npm run prefill:images` | 게관위 모바일 게임 App Store 아이콘·스크린샷 저장 |
 | `npm run prefill:playtime -- [--limit N] [--pages N] [--dry] [--retry]` | RAWG 평균 플레이 시간 저장(인기·랭킹·신작·장르별 IGDB 게임, 기본 500개). RAWG 월 2만 건·게임당 최대 2건 |
 | `npm run import:status -- <결과.csv>` | 외부 AI 결과(게관위 '모름'·IGDB 종료) 반영. `--dry`, `--force` |
+| `npm run prefill:players -- --grac-players --export` | 게관위 게임 추천 인원 외부 AI용 CSV 내보내기 → `server/data/players-review/players-partN.csv`(300개씩) + `players.map.json`. 질문은 `PROMPT-PLAYERS.md` |
+| `npm run import:players -- <결과.csv> [--dry] [--force]` | 외부 AI 추천 인원 결과 반영(`known: true`이고 1≤min≤max≤32만, 출처 `external`). 이미 숫자 있으면 건너뜀. 거의 다 1~1이면 '짐작' 경고 |
 
 ## 데이터 출처와 구조
 

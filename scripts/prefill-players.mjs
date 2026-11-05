@@ -14,6 +14,7 @@
 //                                                 (같은 모델로 이미 물어본 게임은 건너뜀. --model 로 다른 모델 지정 가능)
 //   npm run prefill:players -- --grac-players 500 화면에 보이는 게임위 게임 중 추천 인원을 아직 안 물은 게임 500개(숫자 없으면 전부)에 인원만 물음
 //                                                 (서비스 상태·플레이 시간은 그대로 두고 인원만 더함. AI가 모르면 '모름'으로 저장해 다시 묻지 않음)
+//   npm run prefill:players -- --grac-players --export   AI에게 묻지 않고 대상 목록을 server/data/players-review/ 에 CSV(300개씩)로 내보내기(외부 AI용)
 //   npm run prefill:players -- --dry              묻지 않고 몇 개인지만 계산
 //   npm run prefill:players -- --rpm 30           더 빠르게(분당 호출 수 상한, 기본 15. 한도를 넘으면 429 → 자동으로 1분 쉼)
 //   npm run prefill:players -- --parallel 5       동시에 보내는 묶음 수(기본 3)
@@ -22,6 +23,7 @@
 // - 무료 사용량을 넘으면(429) 1분씩 3번 기다려 보고, 그래도 안 되면 멈춥니다(내일 다시 실행).
 // - 키는 .env 에서만 읽고 로그에 남기지 않습니다.
 import fs from 'node:fs';
+import path from 'node:path';
 import { getConfig } from '../server/config.js';
 import { createIgdbProvider } from '../server/providers/igdbProvider.js';
 import { createGracProvider } from '../server/providers/gracProvider.js';
@@ -52,6 +54,7 @@ const BIG = args.includes('--recheck-unknown') || args.includes('--model');
 const PARALLEL = Math.min(Math.max(opt('parallel', BIG ? 2 : 3), 1), 10);
 const RPM = Math.max(opt('rpm', opt('interval', null) ? Math.round(60000 / opt('interval', 4000)) : BIG ? 5 : 15), 1);
 const DRY = opt('dry', false) === true;
+const EXPORT = opt('export', false) === true; // --grac-players --export: AI에게 묻지 않고 외부 AI용 CSV로 내보내기
 const UNKNOWN = opt('recheck-unknown', false) === true;
 const RECHECK = opt('recheck', false) === true || UNKNOWN;
 const MODEL = typeof opt('model', null) === 'string' ? opt('model', null) : UNKNOWN ? 'gemini-flash-latest' : null;
@@ -65,7 +68,7 @@ const needs = (g) => (PLAYERS_ONLY ? ps.needsPlayers(g) : UNKNOWN ? ps.needsUnkn
 
 console.log(`추천 인원·플레이 시간 미리 정리 · 모델 ${ps.model} · 저장 파일 ${config.gemini.dataFile}`);
 console.log(`이미 정리된 게임 ${ps.size}개`);
-if (!ps.configured && !DRY) {
+if (!ps.configured && !DRY && !EXPORT) {
   console.log('❌ .env 에 GEMINI_API_KEY 가 없습니다. (--dry 로 개수만 볼 수는 있어요)');
   process.exit(1);
 }
@@ -133,6 +136,23 @@ if (PLAYERS_ONLY) {
   }
   todo.splice(GRAC_PLAYERS_N);
   console.log(`화면에 보이는 게임위 게임 ${visible.length}개 중 추천 인원을 물을 게임 ${todo.length}개 (인원만 묻고 서비스 상태·플레이 시간은 그대로)`);
+  if (EXPORT) {
+    // 외부 AI용 CSV (300개씩) + id → 게임 연결 파일. 받은 답은 npm run import:players 로 반영
+    const dir = path.join(path.dirname(config.gemini.dataFile), 'players-review');
+    fs.mkdirSync(dir, { recursive: true });
+    for (const f of fs.readdirSync(dir)) if (/^players(-part\d+)?\.csv$|^players\.map\.json$/.test(f)) fs.rmSync(path.join(dir, f));
+    const cell = (v) => (/[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? ''));
+    const head = 'id,title,publisher,platform,genre,rating_date,app_store_url';
+    const row = (g, i) => [i + 1, g.title, g.publisher, g.platformsRaw, g.genresRaw, g.ratingDate, g.appStoreUrl].map(cell).join(',');
+    const N = Math.max(Number(opt('part', 300)), 50);
+    const map = Object.fromEntries(todo.map((g, i) => [i + 1, cacheKey(g)]));
+    fs.writeFileSync(path.join(dir, 'players.map.json'), JSON.stringify(map));
+    const write = (file, from, to) => fs.writeFileSync(path.join(dir, file), `﻿${[head, ...todo.slice(from, to).map((g, k) => row(g, from + k))].join('\n')}\n`);
+    for (let i = 0; i < todo.length; i += N) write(`players-part${i / N + 1}.csv`, i, i + N);
+    console.log(`📄 ${todo.length}개를 ${dir} 에 내보냈어요: players-part1~${Math.ceil(todo.length / N)}.csv (${N}개씩) + players.map.json`);
+    console.log('   PROMPT-PLAYERS.md 의 질문과 함께 외부 AI(웹 검색 켜기)에 주고, 받은 답은 npm run import:players -- <결과 파일> --dry 로 먼저 확인하세요.');
+    process.exit(0);
+  }
 }
 if (IGDB_N > 0 && !RECHECK) {
   if (!igdb.configured) console.log('IGDB 설정이 없어 IGDB 게임은 건너뜀');
