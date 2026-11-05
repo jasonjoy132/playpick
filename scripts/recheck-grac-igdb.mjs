@@ -65,7 +65,9 @@ const worker = async () => {
     const c = chunks[next++];
     const raw = new Map(c.map((g) => [g.title, g.platformsRaw]));
     try {
-      found += (await cache.check(c.map((g) => g.title), (names) => igdb.findTitleGames(names), { platformsOf: (t) => raw.get(t) })).size;
+      // 기다린 뒤에 더함(`found += await …`는 기다리기 전 값을 읽어 동시 작업끼리 서로 덮어씀)
+      const hit = await cache.check(c.map((g) => g.title), (names) => igdb.findTitleGames(names), { platformsOf: (t) => raw.get(t) });
+      found += hit.size;
     } catch (e) {
       failed++;
       console.log(`\n⚠ IGDB 확인 실패(이 묶음은 다음 실행 때 다시): ${e.message}`);
