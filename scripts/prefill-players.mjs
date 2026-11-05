@@ -211,7 +211,8 @@ if (GRAC_N > 0 && !RECHECK) {
         while (next < chunks.length) {
           const c = chunks[next++];
           try {
-            const found = await check.check(c.map((g) => g.title), (names) => igdb.findTitles(names));
+            const raw = new Map(c.map((g) => [g.title, g.platformsRaw]));
+            const found = await check.check(c.map((g) => g.title), (names) => igdb.findTitleGames(names), { platformsOf: (t) => raw.get(t) });
             found.forEach((t) => inIgdb.add(t));
           } catch (e) {
             console.log(`\n⚠ IGDB 확인 실패(이 묶음은 IGDB에 없는 것으로 보고 진행): ${e.message}`);

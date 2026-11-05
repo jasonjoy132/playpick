@@ -23,7 +23,8 @@
     "import:status": "node scripts/import-status.mjs",
     "import:players": "node scripts/import-players.mjs",
     "prefill:ended": "node scripts/prefill-ended.mjs",
-    "check:game": "node scripts/check-game.mjs"
+    "check:game": "node scripts/check-game.mjs",
+    "recheck:grac-igdb": "node scripts/recheck-grac-igdb.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",

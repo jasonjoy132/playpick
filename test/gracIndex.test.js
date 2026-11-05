@@ -104,3 +104,38 @@ test('예전 색인 파일(recommendedPlayers 키 없음)도 AI 추천 인원 �
   assert.equal('recommendedPlayers' in game, true);
   assert.equal(game.recommendedPlayers, null);
 });
+
+test('IGDB에 있는지: 괄호 안 이름·플랫폼 표기로도 찾고, 꺼낸 이름으로만 맞으면 플랫폼도 맞아야 함', async () => {
+  const { createExistenceCache, samePlatform } = await import('../server/services/catalog.js');
+  assert.equal(samePlatform('모바일 게임', ['mobile', 'pc']), true);
+  assert.equal(samePlatform('아케이드 게임', ['pc']), false);
+  assert.equal(samePlatform('PC/온라인 게임, 비디오 게임', ['console']), true);
+  assert.equal(samePlatform(null, ['pc']), true, '모르면 맞는 것으로');
+
+  // 가짜 IGDB (실제 자료 아님)
+  const IGDB = [
+    { names: ['Portal 2', '포탈 2'], platforms: ['pc', 'console'] },
+    { names: ['KartRider: Drift'], platforms: ['pc', 'console'] },
+    { names: ['Greedy Snake'], platforms: ['mobile'] },
+  ];
+  const asked = [];
+  const find = async (names) => {
+    asked.push(...names);
+    const keys = new Set(names.map((n) => n.toLowerCase().replace(/[\s\p{P}]/gu, '')));
+    return IGDB.filter((g) => g.names.some((n) => keys.has(n.toLowerCase().replace(/[\s\p{P}]/gu, ''))));
+  };
+  const raw = { 'Portal 2(포탈 2)_PC': 'PC/온라인 게임', '카트라이더 드리프트 (Kartrider Drift) [PC]': 'PC/온라인 게임', '그리디 스네이크 (Greedy Snake)': '아케이드 게임', '없는 게임': '모바일 게임' };
+  const cache = createExistenceCache(null);
+  const found = await cache.check(Object.keys(raw), find, { platformsOf: (t) => raw[t] });
+  assert.deepEqual([...found].sort(), ['Portal 2(포탈 2)_PC', '카트라이더 드리프트 (Kartrider Drift) [PC]'].sort());
+  assert.ok(asked.includes('Kartrider Drift') && asked.includes('Portal 2'), '꺼낸 이름으로 물음');
+  assert.equal(cache.known('그리디 스네이크 (Greedy Snake)'), false, '아케이드 게임 ↔ 모바일 게임: 다른 게임으로 봄');
+
+  // 예전 방식(v 없음)으로 '없음'이 된 항목은 다시 확인, '있음'은 그대로
+  const fsm = await import('node:fs');
+  const file = tmp();
+  fsm.writeFileSync(file, JSON.stringify({ 'Portal 2(포탈 2)_PC': { exists: false, at: Date.now() }, 'Tetris': { exists: true, at: Date.now() } }));
+  const old = createExistenceCache(file);
+  assert.equal(old.known('Portal 2(포탈 2)_PC'), undefined, '다시 확인 대상');
+  assert.equal(old.known('Tetris'), true);
+});

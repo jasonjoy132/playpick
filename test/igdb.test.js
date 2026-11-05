@@ -391,14 +391,32 @@ test('전체 검색 실패 → 기존 후보 목록 방식으로 대체 (catalog
 test('IGDB에 같은 이름이 있는지: 이름·별칭·한국어명 정확 일치 조회', async () => {
   const fetchImpl = mockFetch([
     [IGDB_TOKEN_URL, tokenOk],
-    ['/v4/games', () => json([{ name: 'Tetris', alternative_names: [{ name: '테트리스' }], game_localizations: [{ name: '테트리스' }] }])],
+    ['/v4/games', () => json([{ id: 1, name: 'Tetris', alternative_names: [{ name: '테트리스' }], game_localizations: [{ name: '테트리스' }], platforms: [{ name: 'Nintendo Switch' }, { name: 'PC (Microsoft Windows)' }] }])],
   ]);
   const p = createIgdbProvider(cfg, { fetchImpl });
   const names = await p.findTitles(['테트리스', 'Say "hi"']);
-  assert.deepEqual(names, ['Tetris', '테트리스', '테트리스']);
-  const body = fetchImpl.calls.at(-1).init.body;
-  assert.match(body, /name ~ "테트리스" \| alternative_names\.name ~ "테트리스" \| game_localizations\.name ~ "테트리스"/);
-  assert.match(body, /name ~ "Say hi"/, '따옴표 제거');
+  assert.deepEqual(names, ['Tetris', '테트리스', '테트리스'], '이름·slug 두 조회에서 같은 게임이 걸려도 한 번만');
+  const bodies = fetchImpl.calls.filter((c) => String(c.url).includes('/v4/games')).map((c) => c.init.body);
+  const nameQ = bodies.find((b) => b.includes('name ~'));
+  assert.match(nameQ, /name ~ "테트리스" \| alternative_names\.name ~ "테트리스" \| game_localizations\.name ~ "테트리스"/);
+  assert.match(nameQ, /name ~ "Say hi"/, '따옴표 제거');
+  assert.ok(bodies.some((b) => /slug = \("say-hi"/.test(b)), '영문 이름은 slug로도');
+  assert.deepEqual((await p.findTitleGames(['테트리스']))[0].platforms, ['console', 'pc']);
+});
+
+test('게임위 제목 → IGDB 이름 후보·slug (괄호 안 이름, 플랫폼 표기, 전각 기호)', async () => {
+  const { titleVariants, titleSlugs } = await import('../server/providers/igdbProvider.js');
+  assert.deepEqual(titleVariants('Portal 2(포탈 2)_PC'), ['Portal 2', '포탈 2']);
+  assert.deepEqual(titleVariants('Left4Dead(레프트 4 데드-PC)'), ['Left4Dead', '레프트 4 데드']);
+  assert.deepEqual(titleVariants('Baldur＇s Gate 3'), ["Baldur's Gate 3"]);
+  assert.deepEqual(titleVariants('카트라이더 드리프트 (Kartrider Drift) [PC]'), ['카트라이더 드리프트', 'Kartrider Drift']);
+  assert.deepEqual(titleVariants('PC_MONSTER HUNTER RISE (몬스터 헌터 라이즈)'), ['MONSTER HUNTER RISE', '몬스터 헌터 라이즈']);
+  assert.deepEqual(titleVariants('오버워치 (NS) (Overwatch (NS))'), ['오버워치', 'Overwatch']);
+  assert.deepEqual(titleVariants('해리 포터: 퀴디치 챔피언 (Harry Potter Quidditch Champions))(닌텐도 스위치 버전)'), ['해리 포터: 퀴디치 챔피언', 'Harry Potter Quidditch Champions'], "끝의 'ns'를 플랫폼으로 지우지 않음");
+  assert.deepEqual(titleSlugs('Kartrider Drift'), ['kartrider-drift']);
+  assert.deepEqual(titleSlugs("Baldur's Gate 3"), ['baldurs-gate-3']);
+  assert.ok(titleSlugs('Left4Dead').includes('left-4-dead'));
+  assert.deepEqual(titleSlugs('카트라이더'), []);
 });
 
 test('띄어쓰기 없이 검색해도 찾기: lostark → slug lost-ark 도 함께 조회', async () => {

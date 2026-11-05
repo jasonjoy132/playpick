@@ -6,7 +6,7 @@
 //  - 모두 실패: 오류 반환
 import { createDemoProvider } from '../providers/demoProvider.js';
 import { createGracProvider } from '../providers/gracProvider.js';
-import { createIgdbProvider, normTitle, baseTitle, titleKeys } from '../providers/igdbProvider.js';
+import { createIgdbProvider, normTitle, baseTitle, titleKeys, titleVariants } from '../providers/igdbProvider.js';
 import { createKrGameDbProvider } from '../providers/krGameDbProvider.js';
 import { DataSourceError } from '../providers/errors.js';
 import { createGracIndex } from '../providers/gracIndex.js';
@@ -283,7 +283,9 @@ export function createCatalog(config, deps = {}) {
         const wave = list.slice(start, Math.min(start + 36, offset + MAX_SCAN));
         const chunks = [];
         for (let i = 0; i < wave.length; i += 12) chunks.push(wave.slice(i, i + 12));
-        const sets = await Promise.all(chunks.map((c) => igdbCheck.check(c.map((x) => x.game.title), (names) => igdb.findTitles(names))));
+        const rawOf = new Map(wave.map((x) => [x.game.title, x.game.platformsRaw]));
+        const find = (names) => (igdb.findTitleGames ? igdb.findTitleGames(names) : igdb.findTitles(names));
+        const sets = await Promise.all(chunks.map((c) => igdbCheck.check(c.map((x) => x.game.title), find, { platformsOf: (t) => rawOf.get(t) })));
         const exists = new Set(sets.flatMap((x) => [...x]));
         pos = start + wave.length;
         for (let i = 0; i < wave.length; i++) {
@@ -419,6 +421,21 @@ export function createCatalog(config, deps = {}) {
  * 게임위 제목 → IGDB에 있는지 여부 캐시 (파일 저장, 30일)
  * check(titles, find): IGDB에 있는 제목들의 Set
  */
+/**
+ * 게임위 플랫폼(원문)과 IGDB 플랫폼 종류가 겹치는지. 어느 한쪽이라도 모르면 맞는 것으로
+ * 게임위: 'PC/온라인 게임' · '모바일 게임' · '비디오 게임'(콘솔) · '아케이드 게임' (여러 개면 쉼표로)
+ * IGDB: pc · mobile · console · arcade (findTitleGames 가 분류)
+ */
+export function samePlatform(gracRaw, igdbClasses) {
+  if (!gracRaw || !igdbClasses?.length) return true;
+  const g = new Set();
+  if (/pc|온라인/i.test(gracRaw)) g.add('pc');
+  if (/모바일/.test(gracRaw)) g.add('mobile');
+  if (/비디오|콘솔/.test(gracRaw)) g.add('console');
+  if (/아케이드/.test(gracRaw)) g.add('arcade');
+  return !g.size || igdbClasses.some((c) => g.has(c));
+}
+
 export function createExistenceCache(file) {
   const TTL = 30 * 86_400_000;
   let map = new Map();
@@ -428,15 +445,31 @@ export function createExistenceCache(file) {
   } catch {
     /* 없으면 새로 */
   }
-  const fresh = (e) => e && Date.now() - e.at < TTL;
+  // v2: 제목 후보(괄호 안 이름·플랫폼 표기 제거·전각 기호 정리)와 slug로 찾음. 예전 방식으로 '없음'이 된 항목은 다시 확인
+  const VERSION = 2;
+  const fresh = (e) => e && Date.now() - e.at < TTL && (e.exists || e.v === VERSION);
   return {
-    async check(titles, find) {
+    /**
+     * @param {string[]} titles 게임위 제목들
+     * @param {(names: string[]) => Promise<Array<string | { names: string[], platforms?: string[] }>>} find IGDB에서 이름으로 찾기
+     * @param {{ platformsOf?: (title: string) => string|null }} opt 게임위 플랫폼(원문). 괄호 안 이름 등 '꺼낸 이름'으로만 맞을 때는
+     *   플랫폼도 맞아야 같은 게임으로 봄(예: 'Greedy Snake' 같은 흔한 이름이 다른 게임과 연결되지 않게)
+     */
+    async check(titles, find, { platformsOf } = {}) {
       const todo = titles.filter((t) => !fresh(map.get(t)));
       if (todo.length) {
-        const queryNames = [...new Set(todo.flatMap((t) => [t, baseTitle(t)]))];
-        const found = new Set((await find(queryNames)).flatMap((n) => titleKeys(n)));
+        const queryNames = [...new Set(todo.flatMap((t) => [t, baseTitle(t), ...titleVariants(t)]))];
+        const games = (await find(queryNames)).map((x) => (typeof x === 'string' ? { names: [x], platforms: null } : x));
+        const byKey = new Map(); // 정규화 이름 → 그 이름을 가진 IGDB 게임들의 플랫폼
+        for (const g of games) for (const k of new Set(g.names.flatMap((n) => titleKeys(n)))) (byKey.get(k) ?? byKey.set(k, []).get(k)).push(g.platforms);
         for (const t of todo) {
-          map.set(t, { exists: titleKeys(t).some((k) => found.has(k)), at: Date.now() });
+          const direct = titleKeys(t).some((k) => byKey.has(k)); // 예전 방식: 제목·기본 제목이 그대로 같음
+          const derived =
+            !direct &&
+            titleVariants(t)
+              .map(normTitle)
+              .some((k) => (byKey.get(k) ?? []).some((p) => samePlatform(platformsOf?.(t), p)));
+          map.set(t, { exists: direct || derived, at: Date.now(), v: VERSION });
           dirty = true;
         }
       }

@@ -222,6 +222,70 @@ export function baseTitle(t) {
 /** 같은 게임 판단용 키: 정규화한 제목, 정규화한 기본 제목 */
 export const titleKeys = (t) => [...new Set([normTitle(t), normTitle(baseTitle(t))])].filter(Boolean);
 
+// 게임위 제목 앞뒤에 붙는 플랫폼 표기: 'PC_몬스터 헌터', 'Portal 2_PC', '레프트 4 데드-PC', '(PC스팀)', '(닌텐도 스위치 버전)'
+const PLATFORM_HEAD = /^\s*(?:pc|ns|ps[345]|steam)\s*[_:\-–]\s*/i;
+// 끝의 플랫폼 표기는 앞에 구분자(공백·_·-)가 있을 때만 (예: 'Champions' 끝의 'ns'를 지우지 않게)
+const PLATFORM_TAIL = /[\s_\-–,]+(?:pc\s*스팀|pc|ns|steam|ps[345]|xbox(?:\s*(?:one|series\s*[xs|/]*))?|닌텐도\s*스위치(?:\s*버전)?|스위치\s*버전|nintendo\s*switch)\s*$/i;
+// 괄호 안에 혼자 있으면 이름이 아닌 것
+const NOT_A_NAME = /^(?:pc|pc\s*스팀|ns|ps[345]|steam|xbox.*|nintendo.*|닌텐도.*|스위치.*|mobile|모바일|체험판|한글판|정식판|데모|demo|lite|beta|베타|무료|free|dlc|ost|.*버전|.*에디션|.*edition)$/i;
+
+/**
+ * 게임위 제목 → IGDB에서 찾아볼 이름 후보들
+ *  'Portal 2(포탈 2)_PC' → Portal 2, 포탈 2 / 'Baldur＇s Gate 3' → Baldur's Gate 3 (전각 기호 정리)
+ *  '카트라이더 드리프트 (Kartrider Drift) [PC]' → 카트라이더 드리프트, Kartrider Drift
+ */
+export function titleVariants(t) {
+  const clean = (v) => {
+    let x = String(v).replace(/\s+/g, ' ').trim();
+    for (let k = 0; k < 2; k++) x = x.replace(PLATFORM_HEAD, '').replace(PLATFORM_TAIL, '').trim();
+    return x.replace(/[\s_\-–:]+$/, '').trim();
+  };
+  const s = clean(String(t || '').normalize('NFKC').replace(/[™®©]/g, ''));
+  if (!s) return [];
+  // 괄호 안 이름을 안쪽부터 꺼냄: '오버워치 (NS) (Overwatch (NS))' → NS, NS, Overwatch / 괄호 밖: 오버워치
+  const BR = /[([{【]([^()[\]{}【】]*)[)\]}】]/g;
+  const inner = [];
+  let outer = s;
+  for (let k = 0; k < 3 && BR.test(outer); k++) {
+    BR.lastIndex = 0;
+    inner.push(...[...outer.matchAll(BR)].map((m) => m[1]));
+    outer = outer.replace(BR, ' ');
+  }
+  outer = outer.replace(/[()[\]{}【】]/g, ' '); // 짝 안 맞는 괄호 기호
+  const out = new Set();
+  for (const p of [s, outer, ...inner]) {
+    const v = clean(p);
+    if (NOT_A_NAME.test(v)) continue;
+    for (const x of [v, clean(baseTitle(v))]) {
+      if (normTitle(x).length >= 3 && !NOT_A_NAME.test(x) && !/[()[\]{}【】]/.test(x)) out.add(x);
+    }
+  }
+  return [...out];
+}
+
+/** IGDB 플랫폼 이름 → 종류 (게임위 플랫폼 구분과 비교용) */
+export function platformClasses(platforms) {
+  const out = new Set();
+  for (const p of platforms || []) {
+    const n = String(p?.name ?? p);
+    if (/android|ios|mobile|windows phone/i.test(n)) out.add('mobile');
+    else if (/arcade/i.test(n)) out.add('arcade');
+    else if (/pc|windows|mac|linux|dos|web browser/i.test(n)) out.add('pc');
+    else out.add('console');
+  }
+  return [...out];
+}
+
+/** 영문 이름 → IGDB slug 후보 ('Kartrider Drift' → kartrider-drift, 'Left4Dead' → left-4-dead 등 띄어쓰기 경우) */
+export function titleSlugs(name) {
+  const n = String(name || '').normalize('NFKC').toLowerCase();
+  if (!/^[\x20-\x7e]+$/.test(n)) return [];
+  const slug = n.replace(/['’`.]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  if (!slug || slug.length < 3) return [];
+  // 한 단어로 붙여 쓴 짧은 이름만 띄어쓰기 경우를 더 만듦 (너무 많아지지 않게 12자까지)
+  return [...new Set([slug, ...(slug.includes('-') || slug.length > 12 ? [] : spacingSlugs(slug))])];
+}
+
 function shotsOf(g) {
   const pick = (list) => [...new Set((list || []).map((x) => igdbImage(x.url, 't_screenshot_big')).filter(Boolean))].slice(0, 6);
   const shots = pick(g.screenshots);
@@ -537,11 +601,33 @@ export function createIgdbProvider(cfg, { fetchImpl = globalThis.fetch, now = ()
      * (게임위 게임이 IGDB에 이미 있는지 확인용 — 본편·다른 판 구분 없이 IGDB에 있으면 '있음')
      */
     async findTitles(names) {
+      return (await this.findTitleGames(names)).flatMap((g) => g.names);
+    },
+    /**
+     * 이름으로 IGDB 게임 찾기 → [{ names: [이름·별칭·현지화 이름], platforms: ['pc'|'mobile'|'console'|'arcade'] }]
+     * (게임위 게임이 IGDB에 있는지 확인용. 플랫폼은 흔한 이름이 다른 게임과 연결되지 않게 비교하는 데 씀)
+     */
+    async findTitleGames(names) {
       const list = [...new Set(names.map((n) => String(n || '').replace(/["\\]/g, '').trim()).filter(Boolean))];
       if (!list.length) return [];
-      const cond = list.flatMap((n) => [`name ~ ${quote(n)}`, `alternative_names.name ~ ${quote(n)}`, `game_localizations.name ~ ${quote(n)}`]).join(' | ');
-      const rows = await query('games', `fields name,alternative_names.name,game_localizations.name; where ${cond}; limit 500;`, { timeoutMs: 30_000 });
-      return rows.flatMap((r) => [r.name, ...(r.alternative_names || []).map((a) => a.name), ...(r.game_localizations || []).map((l) => l.name)]).filter(Boolean);
+      // 이름(대소문자만 무시하고 정확히 같음) + 영문 이름은 slug로도 (기호·띄어쓰기가 달라도 찾게: 'KartRider: Drift' ↔ 'Kartrider Drift')
+      // 조건이 많으면 IGDB가 시간 초과(504)를 내서 이름은 10개씩, slug는 따로 나눠 물음
+      const fields = 'fields id,name,alternative_names.name,game_localizations.name,platforms.name';
+      const queries = [];
+      for (let i = 0; i < list.length; i += 10) {
+        const cond = list.slice(i, i + 10).flatMap((n) => [`name ~ ${quote(n)}`, `alternative_names.name ~ ${quote(n)}`, `game_localizations.name ~ ${quote(n)}`]).join(' | ');
+        queries.push(`${fields}; where ${cond}; limit 500;`);
+      }
+      const slugs = [...new Set(list.flatMap(titleSlugs))];
+      for (let i = 0; i < slugs.length; i += 200) queries.push(`${fields}; where slug = (${slugs.slice(i, i + 200).map(quote).join(',')}); limit 500;`);
+      const seen = new Set();
+      const rows = (await Promise.all(queries.map((q) => query('games', q, { timeoutMs: 30_000 }))))
+        .flat()
+        .filter((r) => r.id == null || (!seen.has(r.id) && seen.add(r.id))); // 이름·slug 양쪽에서 걸린 같은 게임은 한 번만
+      return rows.map((r) => ({
+        names: [r.name, ...(r.alternative_names || []).map((a) => a.name), ...(r.game_localizations || []).map((l) => l.name)].filter(Boolean),
+        platforms: platformClasses(r.platforms),
+      }));
     },
     /** 이름(별칭·현지화 이름 포함)이 정확히 같은 IGDB 게임들 (게임위 등급을 받은 IGDB 게임 찾기용) */
     async findGamesByTitles(names) {
