@@ -147,8 +147,8 @@ test('데이터/API 오류 상태 + 다시 시도', async () => {
 
 test('전체 일치 0건이면 안내 문구 + 일부 일치 목록 표시(실제 서버 응답)', async () => {
   const page = await browser.newPage();
-  // 아케이드 + 스포츠를 모두 만족하는 데모 게임은 없지만, 하나씩 일치하는 게임은 있음
-  await page.goto(`${base}/results?platforms=arcade&genres=sports`);
+  // 모바일 + 스포츠를 모두 만족하는 데모 게임은 없지만, 하나씩 일치하는 게임은 있음
+  await page.goto(`${base}/results?platforms=mobile&genres=sports`);
   await page.getByTestId('result-count').waitFor();
   assert.equal(await page.getByTestId('section-full').getByTestId('game-card').count(), 0);
   await page.locator('.section-empty').waitFor();
@@ -327,8 +327,9 @@ test('상단 메뉴: 홈·인기 게임·신작·평점 랭킹·장르별 게임
   const grid = page.getByTestId('browse-grid');
   await grid.waitFor();
   const all = await grid.getByTestId('game-card').count();
-  await page.getByRole('group', { name: '플랫폼' }).getByRole('button', { name: '아케이드' }).click();
-  await page.waitForURL(/platform=arcade/);
+  assert.equal(await page.getByRole('group', { name: '플랫폼' }).getByRole('button', { name: '아케이드' }).count(), 0, '아케이드는 고를 수 없음');
+  await page.getByRole('group', { name: '플랫폼' }).getByRole('button', { name: '모바일' }).click();
+  await page.waitForURL(/platform=mobile/);
   await page.waitForFunction((n) => document.querySelectorAll('[data-testid=browse-grid] [data-testid=game-card]').length < n, all);
   assert.equal(await nav.getByRole('link', { name: '인기 게임' }).getAttribute('aria-current'), 'page');
 

@@ -18,7 +18,9 @@ export const PLATFORMS = [
   { value: 'pc', label: 'PC', grac: ['PC/온라인 게임'] },
   { value: 'mobile', label: '모바일', grac: ['모바일 게임'] },
   { value: 'console', label: '콘솔', grac: ['비디오 게임'] },
-  { value: 'arcade', label: '아케이드', grac: ['아케이드 게임'] },
+  // 아케이드(오락실·인형뽑기 기계)는 '친구와 같이 할 게임'과 맞지 않아 고를 수 없고, 아케이드 전용 게임은 목록·검색에서 뺌(isArcadeOnly).
+  // 게임위·IGDB 값 분류에는 계속 씀
+  { value: 'arcade', label: '아케이드', grac: ['아케이드 게임'], hidden: true },
 ];
 
 export const GENRES = [
@@ -56,6 +58,19 @@ export function mapGracValue(raw, list) {
 }
 
 export function getOptions() {
-  const strip = (list) => list.map(({ value, label }) => ({ value, label }));
+  const strip = (list) => list.filter((o) => !o.hidden).map(({ value, label }) => ({ value, label }));
   return { players: PLAYER_OPTIONS, platforms: strip(PLATFORMS), genres: strip(GENRES) };
+}
+
+/** 고를 수 있는 플랫폼 값 (아케이드 제외) */
+export const SELECTABLE_PLATFORMS = new Set(PLATFORMS.filter((o) => !o.hidden).map((o) => o.value));
+
+/**
+ * 아케이드 기계 전용 게임인지 (오락실·인형뽑기 등) → 목록·검색·나만의 게임 찾기에서 뺌
+ * 플랫폼이 아케이드뿐일 때만. PC·모바일 등 다른 플랫폼도 있으면 그대로 보임
+ */
+export function isArcadeOnly(g) {
+  if (g?.platforms?.length) return g.platforms.every((p) => p === 'arcade');
+  const raw = String(g?.platformsRaw ?? '');
+  return /아케이드/.test(raw) && !/pc|온라인|모바일|비디오/i.test(raw);
 }

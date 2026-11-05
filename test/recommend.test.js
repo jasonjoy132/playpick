@@ -61,3 +61,16 @@ test('목록 합치기: 4개마다 1개씩 끼우고 남으면 뒤에', () => {
   assert.deepEqual(interleave([], ['a']), ['a']);
   assert.deepEqual(interleave([1, 2], []), [1, 2]);
 });
+
+test('아케이드: 고를 수 없음(예전 링크의 arcade는 조용히 뺌), 아케이드 전용 게임 판단', async () => {
+  const { parseCriteria } = await import('../server/services/recommend.js');
+  const { getOptions, isArcadeOnly } = await import('../server/services/taxonomy.js');
+  assert.ok(!getOptions().platforms.some((p) => p.value === 'arcade'));
+  assert.deepEqual(parseCriteria({ platforms: 'arcade,pc' }), { criteria: { players: null, platforms: ['pc'], genres: [] }, errors: [] });
+  assert.ok(parseCriteria({ platforms: 'arcade' }).errors.length, '아케이드만 고른 예전 링크는 조건 없음 안내');
+  assert.equal(isArcadeOnly({ platforms: ['arcade'] }), true);
+  assert.equal(isArcadeOnly({ platforms: ['arcade', 'pc'] }), false, '다른 플랫폼도 있으면 보임');
+  assert.equal(isArcadeOnly({ platforms: null, platformsRaw: '아케이드 게임' }), true);
+  assert.equal(isArcadeOnly({ platforms: null, platformsRaw: '아케이드 게임, 모바일 게임' }), false);
+  assert.equal(isArcadeOnly({ platforms: null, platformsRaw: null }), false);
+});

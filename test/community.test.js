@@ -230,7 +230,8 @@ test('마이페이지: 내 리뷰 내역(게임 제목 포함)·삭제, 최근 �
 test('메뉴 목록 API(데모): 인기·장르·플랫폼·페이지, 출시일/글로벌 목록은 안내, 잘못된 값 400', async () => {
   const c = client();
   const pop = (await c.call('GET', '/api/browse/popular')).body;
-  assert.equal(pop.games.length, 16);
+  assert.equal(pop.games.length, 15, '데모 16개 중 아케이드 전용 1개(demo-12)는 목록에서 뺌');
+  assert.ok(!pop.games.some((g) => g.id === 'demo-12'));
   assert.equal(pop.hasMore, false);
   const rpg = (await c.call('GET', '/api/browse/genre?genre=rpg')).body.games;
   assert.ok(rpg.length > 0 && rpg.every((g) => g.genres.includes('rpg')));

@@ -1,6 +1,6 @@
 // 기본 추천(매칭) 로직
 // 각 선택 조건에 대해 게임별로 일치(match) / 불일치(mismatch) / 정보 없음(unknown)을 판정합니다.
-import { PLATFORM_MAP, GENRE_MAP, PLATFORMS, GENRES } from './taxonomy.js';
+import { PLATFORM_MAP, GENRE_MAP, PLATFORMS, GENRES, SELECTABLE_PLATFORMS } from './taxonomy.js';
 
 const PLATFORM_VALUES = new Set(PLATFORMS.map((p) => p.value));
 const GENRE_VALUES = new Set(GENRES.map((g) => g.value));
@@ -20,7 +20,8 @@ export function parseCriteria(query) {
     if (!Number.isInteger(n) || n < 1 || n > 5) errors.push('players 값은 1~5 사이의 정수여야 합니다.');
     else players = n;
   }
-  const platforms = [...new Set(list(query.platforms))];
+  // 고를 수 없게 된 플랫폼(아케이드)은 예전 링크에 있어도 오류 대신 조용히 뺌
+  const platforms = [...new Set(list(query.platforms))].filter((p) => SELECTABLE_PLATFORMS.has(p) || !PLATFORM_VALUES.has(p));
   const genres = [...new Set(list(query.genres))];
   for (const p of platforms) if (!PLATFORM_VALUES.has(p)) errors.push(`알 수 없는 플랫폼: ${p}`);
   for (const g of genres) if (!GENRE_VALUES.has(g)) errors.push(`알 수 없는 장르: ${g}`);

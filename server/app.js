@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createCatalog } from './services/catalog.js';
 import { parseCriteria, recommend, evaluateGame, compareResults, interleave } from './services/recommend.js';
-import { getOptions } from './services/taxonomy.js';
+import { getOptions, isArcadeOnly } from './services/taxonomy.js';
 import { DataSourceError } from './providers/errors.js';
 import { createTranslator, withKoreanSummaries } from './services/translator.js';
 import { openDb } from './db.js';
@@ -150,7 +150,7 @@ const SLIDES = 5;
    */
   const hideUnknown = () => Boolean(config.hideUnknownGrac) && partySize.size > 0;
   const listable = (g) =>
-    !g.aiEnded && !g.userEnded && (g.source !== '게임물관리위원회' || (!g.aiUpcoming && (!hideUnknown() || g.aiAlive === true || Boolean(g.appStoreUrl))));
+    !g.aiEnded && !g.userEnded && !isArcadeOnly(g) && (g.source !== '게임물관리위원회' || (!g.aiUpcoming && (!hideUnknown() || g.aiAlive === true || Boolean(g.appStoreUrl))));
   const listableRaw = (g) => listable(appArt.apply(partySize.applyCached([g])[0]));
 
   /** 목록·상세 게임에 평균 별점·찜 여부 붙이기 */

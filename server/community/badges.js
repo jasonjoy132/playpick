@@ -35,7 +35,7 @@ export const SPECIALS = [
   { id: 'pioneer', name: '개척자', icon: '🚩', desc: '내가 제보한 게임에 다른 회원의 리뷰가 달렸어요', need: 1, stat: 'reviewedGames' },
   { id: 'popular', name: '인기 발굴가', icon: '💖', desc: '내가 제보한 게임들이 다른 회원에게 찜 20개를 받았어요', need: 20, stat: 'wishes' },
   { id: 'thorough', name: '꼼꼼한 기록가', icon: '📝', desc: '표지·구매처·소개·추천 인원을 모두 채운 제보 5개가 승인됐어요', need: 5, stat: 'complete' },
-  { id: 'local', name: '국내 게임 지킴이', icon: '🇰🇷', desc: '모바일·아케이드 게임 제보 5개가 승인됐어요', need: 5, stat: 'local' },
+  { id: 'local', name: '국내 게임 지킴이', icon: '🇰🇷', desc: '모바일 게임 제보 5개가 승인됐어요', need: 5, stat: 'local' },
   { id: 'early', name: '얼리 어답터', icon: '🌱', desc: '2026년 안에 첫 제보가 승인됐어요', need: 1, stat: 'early' },
   { id: 'essay', name: '정성 리뷰어', icon: '📖', desc: `${LONG_REVIEW}자 넘는 리뷰를 10개 남겼어요`, need: 10, stat: 'longReviews', track: 'review' },
   { id: 'cleaner', name: '클린 지킴이', icon: '🧹', desc: '내가 신고한 리뷰 3개가 관리자 확인으로 숨겨졌어요', need: 3, stat: 'upheldReports', track: 'review' },

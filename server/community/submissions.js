@@ -8,7 +8,7 @@ import { storeFromUrl, normTitle } from '../providers/igdbProvider.js';
 import { PLATFORMS, GENRES } from '../services/taxonomy.js';
 
 const fail = (code, message, status = 400) => new DataSourceError(code, message, status);
-const PLATFORM_VALUES = new Set(PLATFORMS.map((p) => p.value));
+const PLATFORM_VALUES = new Set(PLATFORMS.filter((p) => !p.hidden).map((p) => p.value)); // 아케이드는 제보 불가
 const GENRE_VALUES = new Set(GENRES.map((g) => g.value));
 export const MAX_PENDING = 10;
 export const SUBMITTED = '사용자 제보';
