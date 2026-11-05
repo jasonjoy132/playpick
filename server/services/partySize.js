@@ -34,7 +34,11 @@ export const isOnlineGame = (g) => {
   return g.source === 'IGDB' && (m.includes('Massively Multiplayer Online (MMO)') || m.includes('Battle Royale') || (m.includes('Multiplayer') && !m.includes('Single player')));
 };
 /** 서비스가 끝날 수 있는 IGDB 게임(멀티·협동·MMO·배틀로얄 모드가 하나라도 있음) → 서비스 종료 확인 대상 */
-export const mayEnd = (g) => g.source === 'IGDB' && (g.gameModes ?? []).some((m) => ['Multiplayer', 'Co-operative', 'Massively Multiplayer Online (MMO)', 'Battle Royale'].includes(m));
+export const mayEnd = (g) =>
+  g.source === 'IGDB' &&
+  ((g.gameModes ?? []).some((m) => ['Multiplayer', 'Co-operative', 'Massively Multiplayer Online (MMO)', 'Battle Royale'].includes(m)) ||
+    // 게임 모드 정보가 비어 있는 PC·모바일·웹 게임도(예: 넥슨 버블파이터 — 모드가 없어 확인 대상에서 빠졌었음)
+    (!(g.gameModes ?? []).length && /PC|Windows|Android|iOS|Web|Browser/i.test(g.platformsRaw ?? '')));
 const STATUSES = new Set(['released', 'upcoming', 'ended']);
 
 /** 게임 목록 → 프롬프트 (id는 이번 요청 안의 순번 1..n) */
@@ -492,6 +496,18 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
       return Boolean(e && 'status' in e && e.status == null && e.ended !== true && e.statusModel !== model && !(e.statusModels ?? []).includes(model));
     },
     /** IGDB 서비스 종료 확인 대상: 이 모델로 아직 엄격 기준으로 안 물어본 게임 (force: 서비스 종료 가능성과 상관없이) */
+    /**
+     * 외부 AI(웹 검색) 재확인 대상: Gemini가 '서비스 중'이라 했거나 아직 안 물어본 게임 중, 외부 AI로는 아직 확인 안 한 것
+     * (Gemini는 최근 종료 소식을 몰라 '서비스 중'으로 답하는 일이 많음 — 예: 2026년 종료한 크레이지 아케이드)
+     */
+    needsExternalEndedCheck: (g) => {
+      // 서버가 있어야 하는 게임만(MMO·배틀로얄·멀티 전용, 모드 정보 없는 PC·모바일·웹 게임). 싱글도 되는 패키지 게임은 '종료'가 없어 뺌
+      // 플랫폼 정보도 없으면(예: IGDB 버블파이터) 판단할 수 없으니 확인 대상에 넣음
+      const noModes = !(g.gameModes ?? []).length && (!g.platformsRaw || /PC|Windows|Android|iOS|Web|Browser/i.test(g.platformsRaw));
+      if (g.source !== 'IGDB' || g.hidden || !(isOnlineGame(g) || noModes)) return false;
+      const e = cache.get(cacheKey(g));
+      return !(e?.endedModels ?? []).includes('external') && e?.ended !== true;
+    },
     needsEndedCheck: (g, { force = false } = {}) => {
       if (g.source !== 'IGDB' || g.hidden || (!force && !mayEnd(g))) return false;
       const e = cache.get(cacheKey(g));

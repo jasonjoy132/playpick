@@ -662,8 +662,20 @@ export function createIgdbProvider(cfg, { fetchImpl = globalThis.fetch, now = ()
     async findGamesByTitles(names) {
       const list = [...new Set(names.map((n) => String(n || '').replace(/["\\]/g, '').trim()).filter(Boolean))];
       if (!list.length) return [];
-      const cond = list.flatMap((n) => [`name ~ ${quote(n)}`, `alternative_names.name ~ ${quote(n)}`, `game_localizations.name ~ ${quote(n)}`]).join(' | ');
-      const rows = await query('games', `fields ${GAME_FIELDS}; where (${cond}) & ${MAIN_ONLY.join(' & ')}; limit 500;`, { timeoutMs: 30_000 });
+      // 조건이 많으면 IGDB가 시간 초과(504)를 내서 10개씩 나눠 물음, 같은 게임은 한 번만
+      const chunks = [];
+      for (let i = 0; i < list.length; i += 10) chunks.push(list.slice(i, i + 10));
+      const seen = new Set();
+      const rows = (
+        await Promise.all(
+          chunks.map((c) => {
+            const cond = c.flatMap((n) => [`name ~ ${quote(n)}`, `alternative_names.name ~ ${quote(n)}`, `game_localizations.name ~ ${quote(n)}`]).join(' | ');
+            return query('games', `fields ${GAME_FIELDS}; where (${cond}) & ${MAIN_ONLY.join(' & ')}; limit 500;`, { timeoutMs: 30_000 });
+          }),
+        )
+      )
+        .flat()
+        .filter((r) => !seen.has(r.id) && seen.add(r.id));
       return rows.filter(isMainGame).map((r) => mark(igdbToGame(r)));
     },
     /**

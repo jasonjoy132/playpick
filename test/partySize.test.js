@@ -417,3 +417,29 @@ test('게임위 게임 추천 인원만 묻기: 상태·플레이 시간은 그�
   assert.equal(b.recommendedPlayers, null);
   assert.equal(ps.needsPlayers(guess), false, '모름도 다시 묻지 않음');
 });
+
+test('서비스 종료 확인 대상: 모드 정보 없는 PC·모바일 IGDB 게임 포함, Gemini가 서비스 중이라 한 게임도 외부 재확인 대상', async () => {
+  const fsm = await import('node:fs');
+  const os = await import('node:os');
+  const pathm = await import('node:path');
+  const { mayEnd } = await import('../server/services/partySize.js');
+  const ig = (id, extra) => ({ id: `igdb-${id}`, title: `G${id}`, source: 'IGDB', recommendedPlayers: { min: 1, max: 4, source: 'igdb' }, ...extra });
+  assert.equal(mayEnd(ig(1, { gameModes: [], platformsRaw: 'PC (Microsoft Windows)' })), true, '모드 정보 없는 PC 게임');
+  assert.equal(mayEnd(ig(2, { gameModes: [], platformsRaw: 'Nintendo Switch' })), false, '모드 없는 콘솔 게임은 아님');
+  assert.equal(mayEnd(ig(3, { gameModes: ['Single player'], platformsRaw: 'PC (Microsoft Windows)' })), false);
+
+  const dir = fsm.mkdtempSync(pathm.join(os.tmpdir(), 'pp-party-'));
+  const dataFile = pathm.join(dir, 'party-size.json');
+  const online = (id) => ig(id, { gameModes: ['Multiplayer'], platformsRaw: 'PC (Microsoft Windows)' });
+  fsm.writeFileSync(dataFile, JSON.stringify({
+    10: { ended: false, endedV: 2, endedModels: ['gemini-3.1-flash-lite'] }, // Gemini: 서비스 중
+    11: { ended: true, endedV: 2, endedModels: ['gemini-3.1-flash-lite'] }, // 이미 종료
+    12: { ended: false, endedV: 2, endedModels: ['external'] }, // 외부 AI가 이미 확인
+  }));
+  const ps = createPartySize({ dataFile });
+  assert.equal(ps.needsExternalEndedCheck(online(10)), true, 'Gemini가 서비스 중이라 한 게임 → 외부 재확인');
+  assert.equal(ps.needsEndedCheck(online(10)), false, 'Gemini로는 다시 묻지 않음(같은 답)');
+  assert.equal(ps.needsExternalEndedCheck(online(11)), false, '이미 종료로 숨김');
+  assert.equal(ps.needsExternalEndedCheck(online(12)), false, '외부 AI가 이미 확인');
+  assert.equal(ps.needsExternalEndedCheck(online(13)), true, '아직 안 물어본 게임');
+});

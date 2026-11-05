@@ -38,6 +38,7 @@
 | `npm run prefill:players -- [--igdb N] [--grac N] [--recheck] [--recheck-unknown] [--model M]` | AI 추천 인원·플레이 시간·게관위 서비스 상태 미리 저장 |
 | `npm run prefill:players -- --grac-players [N]` | 화면에 보이는 게관위 게임에 **추천 인원만** 물어 채움(상태·플레이 시간 그대로). AI가 그 게임을 안다고(`known: true`) 할 때만 저장, 아니면 '모름' |
 | `npm run prefill:ended -- [--igdb N] [--online N] [--only grac\|popular\|online] [--export] [--rescan]` | IGDB 게임 서비스 종료 여부 AI 확인(후보는 `.cache/ended-candidates.json`에 24시간 저장) |
+| `npm run prefill:ended -- --export --recheck-alive [--limit N]` | **서버가 필요한 온라인 게임**(MMO·배틀로얄·멀티 전용, 모드·플랫폼 정보 없는 PC·모바일) 중 외부 AI로 아직 확인 안 한 게임을 다시 내보냄(Gemini가 '서비스 중'이라 한 것 포함 — 최근 종료는 Gemini가 모름). 웹 검색 AI → `import:status` |
 | `npm run prefill:images` | 게관위 모바일 게임 App Store 아이콘·스크린샷 저장 |
 | `npm run prefill:playtime -- [--limit N] [--pages N] [--dry] [--retry]` | RAWG 평균 플레이 시간 저장(인기·랭킹·신작·장르별 IGDB 게임, 기본 500개). RAWG 월 2만 건·게임당 최대 2건 |
 | `npm run recheck:grac-igdb -- [--limit N] [--dry]` | **화면에 보이는** 게관위 게임(종료·모름 제외, 약 9천 개, 동시 6묶음)이 IGDB에 있는지 새 방식(괄호 안 이름·플랫폼 표기 제거·전각 정리·slug, 꺼낸 이름은 플랫폼도 일치)으로 다시 확인 → `.cache/grac-igdb-check.json`(v2). 이어서 실행 가능 |

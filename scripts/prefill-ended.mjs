@@ -12,6 +12,8 @@
 //   npm run prefill:ended -- --export              AI에게 묻지 않고 대상 목록을 CSV로 내보내기(외부 AI용)
 //      → server/data/status-review/ended-games-partN.csv (200개씩) + PROMPT-ENDED.md 참고
 //      → 받은 답은 npm run import:status -- <결과 파일> 로 반영
+//   npm run prefill:ended -- --export --recheck-alive   Gemini가 '서비스 중'이라 한 게임도 다시 내보내기(최근 종료를 웹 검색으로 확인)
+//      (--limit N 으로 앞에서부터 N개만 — 게임위 등급 게임 → 인기순)
 //   npm run prefill:ended -- --model gemini-flash-latest   더 큰 모델로(느리지만 더 많이 앎)
 //   npm run prefill:ended -- --only grac           ①만 (grac | popular | online)
 //
@@ -20,7 +22,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getConfig } from '../server/config.js';
-import { createIgdbProvider } from '../server/providers/igdbProvider.js';
+import { createIgdbProvider, titleVariants } from '../server/providers/igdbProvider.js';
 import { createPartySize, mayEnd } from '../server/services/partySize.js';
 
 const args = process.argv.slice(2);
@@ -32,6 +34,9 @@ const opt = (name, d) => {
 };
 const DRY = opt('dry', false) === true;
 const EXPORT = opt('export', false) === true;
+// --recheck-alive: Gemini가 '서비스 중'이라 한 게임도 외부 AI(웹 검색)용으로 다시 내보냄(--export 와 함께만)
+const RECHECK_ALIVE = opt('recheck-alive', false) === true;
+const LIMIT = Number(opt('limit', Infinity));
 const ONLY = typeof opt('only', null) === 'string' ? opt('only', null) : null;
 const MODEL = typeof opt('model', null) === 'string' ? opt('model', null) : null;
 const BIG = Boolean(MODEL) && !/lite/i.test(MODEL);
@@ -69,7 +74,8 @@ const slim = (g) => ({ id: g.id, title: g.title, originalTitle: g.originalTitle 
 const todo = new Map(); // igdb id → game (아직 안 물어본 것만)
 const add = (g, force) => {
   if (!cands.has(g.id)) cands.set(g.id, { g: slim(g), force });
-  if (!todo.has(g.id) && ps.needsEndedCheck(g, { force })) todo.set(g.id, g);
+  const needs = RECHECK_ALIVE ? ps.needsExternalEndedCheck(g) : ps.needsEndedCheck(g, { force });
+  if (!todo.has(g.id) && needs) todo.set(g.id, g);
 };
 let fromCache = false;
 if (!RESCAN) {
@@ -95,16 +101,26 @@ if (!fromCache && want('grac')) {
   }
   const titles = Object.entries(exists).filter(([, v]) => v?.exists).map(([t]) => t);
   let done = 0;
-  let before = todo.size;
-  for (let i = 0; i < titles.length; i += 10) {
-    try {
-      for (const g of await igdb.findGamesByTitles(titles.slice(i, i + 10))) add(g, true);
-    } catch (e) {
-      console.log(`\n⚠ IGDB 조회 실패(이 묶음 건너뜀): ${e.message}`);
+  const before = todo.size;
+  // 여러 묶음을 동시에(4개) — 하나씩 기다리면 IGDB 초당 4회 한도를 다 못 써서 30분 넘게 걸렸음(한도는 igdbProvider 의 slot() 이 지킴)
+  const chunks = [];
+  for (let i = 0; i < titles.length; i += 10) chunks.push(titles.slice(i, i + 10));
+  let next = 0;
+  const worker = async () => {
+    while (next < chunks.length) {
+      const c = chunks[next++];
+      try {
+        // 게임위 제목 그대로와 이름 후보(괄호 안 이름 등)로 찾음: 'Bubble Fighter(버블 파이터)' → Bubble Fighter
+        const names = [...new Set(c.flatMap((t) => [t, ...titleVariants(t)]))];
+        for (const g of await igdb.findGamesByTitles(names)) add(g, true);
+      } catch (e) {
+        console.log(`\n⚠ IGDB 조회 실패(이 묶음 건너뜀): ${e.message}`);
+      }
+      done += c.length;
+      if (done % 200 < 10 || done === titles.length) process.stdout.write(`\r① 게임위 등급 IGDB 게임 찾는 중 ${done}/${titles.length} · 확인 대상 ${todo.size - before}개   `);
     }
-    done = Math.min(i + 10, titles.length);
-    if (done % 200 === 0 || done === titles.length) process.stdout.write(`\r① 게임위 등급 IGDB 게임 찾는 중 ${done}/${titles.length} · 확인 대상 ${todo.size - before}개   `);
-  }
+  };
+  await Promise.all(Array.from({ length: 4 }, worker));
   console.log(`\n① 게임위 등급을 받은 IGDB 게임 중 확인 대상 ${todo.size - before}개`);
 }
 
@@ -146,7 +162,11 @@ if (!fromCache && cands.size) {
     console.log(`(후보 저장 실패: ${e.message})`);
   }
 }
-const list = [...todo.values()];
+if (RECHECK_ALIVE && !EXPORT) {
+  console.log('❌ --recheck-alive 는 --export 와 함께만 써요(외부 AI에게 웹 검색으로 다시 확인받는 용도).');
+  process.exit(1);
+}
+const list = [...todo.values()].slice(0, LIMIT);
 const calls = Math.ceil(list.length / BATCH);
 console.log(`\n물어볼 게임 ${list.length}개 → ${BATCH}개씩 ${calls}번 호출, 동시 ${PARALLEL}개 · 분당 최대 ${RPM}번 → 예상 약 ${Math.ceil(calls / RPM)}분 이상`);
 if (EXPORT) {
