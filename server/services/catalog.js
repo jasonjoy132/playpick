@@ -39,6 +39,9 @@ export function searchScore(game, query) {
       else if (t.includes(n)) best = Math.min(best, 2);
     }
   }
+  // IGDB 별칭·현지화 이름(matchNames, 이미 정규화됨)이 검색어와 똑같으면 이름이 같은 것과 같게
+  // 예: 'lol'·'롤' → League of Legends(별칭 LoL·롤), 'overwatch 2'·'옵치' → Overwatch(별칭 Overwatch 2·옵치)
+  if (best > 0 && game.matchNames?.includes(n)) return 0;
   return best;
 }
 
@@ -413,7 +416,11 @@ export function createCatalog(config, deps = {}) {
       const relevant = igdbRaw.some((x) => queries.some((qq) => isRelevant(x, qq)));
       // IGDB에 이름이 맞는 게임이 있어도, 이름에 검색어가 들어간 게임위 게임은 함께 보여 줌
       const gracShown = relevant ? gracOnly.filter((x) => score(x) < 3) : gracOnly;
-      return { games: rankSearch([...gracShown, ...igdbGames], queries), warnings, translatedQuery: alt };
+      // 정렬할 때만 IGDB 별칭(matchNames)을 다시 붙여 씀(mergeGames 가 떼어 냄) → 'lol'·'롤'로 리그 오브 레전드
+      const namesById = new Map(igdbRaw.map((x) => [x.id, x.matchNames]));
+      const withNames = (x) => (namesById.get(x.id) ? { ...x, matchNames: namesById.get(x.id) } : x);
+      const ranked = rankSearch([...gracShown, ...igdbGames].map(withNames), queries).map(stripInternal);
+      return { games: ranked, warnings, translatedQuery: alt };
     },
 
     /** IGDB 이용자 기록 플레이 시간 (IGDB 게임만, 실패하면 null) */

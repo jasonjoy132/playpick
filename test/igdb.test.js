@@ -544,3 +544,24 @@ test('IGDB 이름 검색: 이름에 검색어가 들어간 평가 많은 게임�
   const body = fetchImpl.calls.map((c) => c.init.body).find((b) => String(b).includes('*"battleground"*'));
   assert.match(body, /sort total_rating_count desc/);
 });
+
+test('검색 정렬: IGDB 별칭이 검색어와 똑같으면 이름이 같은 것처럼 (lol·롤 → 리그 오브 레전드)', async () => {
+  const { rankSearch, searchScore } = await import('../server/services/catalog.js');
+  const lol = { id: 'igdb-115', title: '리그 오브 레전드', originalTitle: 'League of Legends', matchNames: ['leagueoflegends', '리그오브레전드', 'lol', '롤'], globalRating: { avg: 4, count: 1028 } };
+  const tiny = { id: 'igdb-9', title: 'LOL', globalRating: { avg: 3, count: 4 } };
+  assert.equal(searchScore(lol, 'lol'), 0);
+  assert.equal(searchScore({ ...lol, matchNames: undefined }, 'lol'), 3, '별칭이 없으면 관련 없음');
+  assert.deepEqual(rankSearch([tiny, lol], '롤').map((g) => g.id), ['igdb-115', 'igdb-9']);
+});
+
+test('IGDB 이름 검색: 짧은 검색어(롤)는 이름·별칭·한국어명이 똑같은 인기 게임만', async () => {
+  const fetchImpl = mockFetch([
+    [IGDB_TOKEN_URL, tokenOk],
+    ['/v4/games', () => json([])],
+  ]);
+  const p = createIgdbProvider(cfg, { fetchImpl });
+  await p.searchByTitle('롤', 30);
+  const body = fetchImpl.calls.map((c) => String(c.init.body)).find((b) => b.includes('total_rating_count >= 20'));
+  assert.match(body, /alternative_names\.name ~ "롤"/);
+  assert.doesNotMatch(body, /\*"롤"\*/, '한두 글자는 "들어간" 검색 안 함(너무 많이 걸림)');
+});
