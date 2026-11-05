@@ -677,14 +677,21 @@ export function createIgdbProvider(cfg, { fetchImpl = globalThis.fetch, now = ()
       // IGDB 검색은 띄어쓰기를 구분해서 'lostark' 로는 'Lost Ark' 가 안 나옴 →
       // 띄어 쓴 경우들을 slug(예: lost-ark)로 만들어 정확히 같은 게임을 함께 찾음
       const slugs = spacingSlugs(title);
-      const [found, exact] = await Promise.all([
+      // IGDB 검색은 인기를 보지 않아서, 이름이 딱 같은 무명 게임이 많으면 유명한 게임이 빠짐
+      // (예: 'battleground' → 'Battleground'라는 게임만 30개, 'PUBG: BATTLEGROUNDS'는 없음)
+      // → 이름에 검색어가 들어간 '평가 많은' 게임을 인기순으로 따로 찾아 함께 보여 줌
+      const popularQ = String(title).trim().length >= 3;
+      const [found, exact, popular] = await Promise.all([
         query('games', `search ${quote(title)}; fields ${GAME_FIELDS}; where ${MAIN_ONLY.join(' & ')}; limit ${limit};`),
         slugs.length
           ? query('games', `fields ${GAME_FIELDS}; where slug = (${slugs.map(quote).join(',')}) & ${MAIN_ONLY.join(' & ')}; sort total_rating_count desc; limit 10;`)
           : Promise.resolve([]),
+        popularQ
+          ? query('games', `fields ${GAME_FIELDS}; where (name ~ *${quote(title)}* | alternative_names.name ~ *${quote(title)}*) & ${MAIN_ONLY.join(' & ')} & total_rating_count >= 20; sort total_rating_count desc; limit 10;`).catch(() => [])
+          : Promise.resolve([]),
       ]);
       const seen = new Set();
-      return [...exact, ...found]
+      return [...exact, ...popular, ...found]
         .filter((r) => !seen.has(r.id) && seen.add(r.id))
         .filter(isMainGame)
         .map((r) => mark(igdbToGame(r)));

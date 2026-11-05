@@ -46,11 +46,17 @@ export function searchScore(game, query) {
  * 검색 결과 정렬: 이름이 더 잘 맞는 게임 먼저. 검색어로 시작하는 게임끼리는 이름이 짧은 것(본편) 먼저
  * 예: '메이플' → 메이플스토리 → 메이플스토리2 → 메이플스토리 M … 같은 점수 안에서는 원래 순서(IGDB 인기·관련도) 유지
  */
+// 평가가 이만큼 이상인 유명한 게임은 이름에 검색어만 들어 있어도 맨 앞으로 (예: 'battleground' → PUBG: BATTLEGROUNDS)
+const FAMOUS_RATINGS = 100;
 export function rankSearch(games, query) {
   const qs = Array.isArray(query) ? query : [query];
   const len = (g) => Math.min(...[g.title, g.originalTitle].filter(Boolean).map((t) => normTitle(baseTitle(t)).length));
+  const score = (g) => {
+    const s = Math.min(...qs.map((q) => searchScore(g, q)));
+    return s <= 2 && (g.globalRating?.count ?? 0) >= FAMOUS_RATINGS ? -1 : s;
+  };
   return games
-    .map((g, i) => ({ g, i, s: Math.min(...qs.map((q) => searchScore(g, q))) }))
+    .map((g, i) => ({ g, i, s: score(g) }))
     .sort((a, b) => a.s - b.s || (a.s <= 1 ? len(a.g) - len(b.g) : 0) || a.i - b.i)
     .map((x) => x.g);
 }

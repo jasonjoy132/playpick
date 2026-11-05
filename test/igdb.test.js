@@ -524,3 +524,23 @@ test('IGDB 플레이 시간(Time To Beat): 초 → 시간, 없으면 null, 결�
   assert.equal(await p.timeToBeat('grac-1'), null);
   assert.deepEqual(await p.timeToBeat('igdb-74'), { hastily: 1, normally: 2, completely: null, count: 9 }, '1000시간 넘는 값은 버림');
 });
+
+test('검색 정렬: 평가 많은 유명 게임은 이름에 검색어만 들어 있어도 맨 앞 (battleground → PUBG)', async () => {
+  const { rankSearch } = await import('../server/services/catalog.js');
+  const g = (id, title, count) => ({ id, title, globalRating: count ? { avg: 4, count } : null });
+  const list = [g('a', 'Battleground', 0), g('b', 'Battle Ground', 3), g('c', 'PUBG: BATTLEGROUNDS', 9000), g('d', '전혀 다른 게임', 9000)];
+  assert.deepEqual(rankSearch(list, 'battleground').map((x) => x.id), ['c', 'a', 'b', 'd'], '관련 없는 유명 게임은 앞으로 안 옴');
+});
+
+test('IGDB 이름 검색: 이름에 검색어가 들어간 평가 많은 게임도 인기순으로 함께 조회', async () => {
+  const pubg = { ...IGDB_GAME, id: 27789, name: 'PUBG: BATTLEGROUNDS', game_localizations: [], total_rating_count: 9000 };
+  const fetchImpl = mockFetch([
+    [IGDB_TOKEN_URL, tokenOk],
+    ['/v4/games', (url, init) => json(String(init.body).includes('name ~ *"battleground"*') ? [pubg] : [])],
+  ]);
+  const p = createIgdbProvider(cfg, { fetchImpl });
+  const r = await p.searchByTitle('battleground', 30);
+  assert.deepEqual(r.map((x) => x.title), ['PUBG: BATTLEGROUNDS']);
+  const body = fetchImpl.calls.map((c) => c.init.body).find((b) => String(b).includes('*"battleground"*'));
+  assert.match(body, /sort total_rating_count desc/);
+});
