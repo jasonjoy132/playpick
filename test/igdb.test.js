@@ -566,3 +566,20 @@ test('IGDB 이름 검색: 짧은 검색어(롤)는 이름·별칭·한국어명�
   assert.match(body, /alternative_names\.name ~ "롤"/);
   assert.doesNotMatch(body, /\*"롤"\*/, '한두 글자는 "들어간" 검색 안 함(너무 많이 걸림)');
 });
+
+test('오락실판이 본편인 고전 게임: 가정용판(이식판·확장판·리마스터) 플랫폼을 붙여 집에서 할 수 있는 게임으로', async () => {
+  const { isArcadeOnly } = await import('../server/services/taxonomy.js');
+  const arcade = { ...IGDB_GAME, id: 9001, name: 'Old Fighter', platforms: [{ name: 'Arcade' }] };
+  const noHome = igdbToGame(arcade);
+  assert.deepEqual(noHome.platforms, ['arcade']);
+  assert.equal(isArcadeOnly(noHome), true, '가정용판이 없으면 그대로 아케이드 전용(숨김)');
+  const withHome = igdbToGame({ ...arcade, ports: [{ platforms: [{ name: 'PlayStation 4' }, { name: 'Arcade' }] }], expanded_games: [{ platforms: [{ name: 'PlayStation' }] }] });
+  assert.deepEqual(withHome.homePlatforms, ['PlayStation 4', 'PlayStation']);
+  assert.deepEqual(withHome.platforms, ['console', 'arcade']);
+  assert.equal(withHome.platformsRaw, 'Arcade, PlayStation 4, PlayStation');
+  assert.equal(isArcadeOnly(withHome), false, '가정용판이 있으면 보임');
+  // 옛 기기(PlayStation 1)만 있어도 집에서 할 수 있는 판이 있으면 아케이드 전용 아님
+  assert.equal(isArcadeOnly(igdbToGame({ ...arcade, expanded_games: [{ platforms: [{ name: 'PlayStation' }] }] })), false);
+  // 원래 가정용 플랫폼이 있는 게임은 이식판 플랫폼을 덧붙이지 않음
+  assert.equal(igdbToGame({ ...IGDB_GAME, ports: [{ platforms: [{ name: 'Wii' }] }] }).homePlatforms, undefined);
+});

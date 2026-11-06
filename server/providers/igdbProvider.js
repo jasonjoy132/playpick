@@ -60,6 +60,8 @@ const STORE_HOSTS = [
 const GAME_FIELDS = [
   'name', 'summary', 'first_release_date', 'url', 'hypes',
   'genres.name', 'platforms.name', 'game_modes.name',
+  // 오락실판이 본편인 고전 게임(철권 3·팩맨 등)의 가정용판 플랫폼 (이식판·확장판·리마스터)
+  'ports.platforms.name', 'expanded_games.platforms.name', 'remasters.platforms.name',
   'multiplayer_modes.onlinemax', 'multiplayer_modes.offlinemax',
   'multiplayer_modes.onlinecoopmax', 'multiplayer_modes.offlinecoopmax',
   'cover.url', 'artworks.url', 'screenshots.url', 'websites.url', 'websites.trusted',
@@ -318,6 +320,13 @@ export function igdbToGame(g, maps) {
     const s = storeFromUrl(w.url);
     if (s && !stores.some((x) => x.url === s.url)) stores.push(s);
   }
+  // 본편이 오락실판뿐이면 가정용판(이식판·확장판·리마스터) 플랫폼을 함께 보여 줌 → 집에서 할 수 있는 게임으로
+  const own = g.platforms || [];
+  const arcadeOnly = own.length > 0 && own.every((p) => p.name === 'Arcade');
+  const homePlatforms = arcadeOnly
+    ? [...new Set([...(g.ports || []), ...(g.expanded_games || []), ...(g.remasters || [])].flatMap((x) => (x.platforms || []).map((p) => p.name)).filter((n) => n && n !== 'Arcade'))]
+    : [];
+  const allPlatforms = [...own, ...homePlatforms.map((name) => ({ name }))];
   const publisher = (g.involved_companies || []).find((c) => c.publisher)?.company?.name
     ?? g.involved_companies?.[0]?.company?.name ?? null;
   return {
@@ -328,8 +337,9 @@ export function igdbToGame(g, maps) {
     source: 'IGDB',
     publisher,
     summary: g.summary || null, // IGDB 소개는 대부분 영어 원문
-    platforms: toValues(g.platforms, maps?.platforms ?? IGDB_PLATFORM_NAMES),
-    platformsRaw: g.platforms?.length ? g.platforms.map((p) => p.name).join(', ') : null,
+    platforms: toValues(allPlatforms, maps?.platforms ?? IGDB_PLATFORM_NAMES),
+    platformsRaw: allPlatforms.length ? allPlatforms.map((p) => p.name).join(', ') : null,
+    ...(homePlatforms.length ? { homePlatforms } : {}), // 가정용판 플랫폼(오락실판이 본편인 게임만)
     genres: toValues(g.genres, maps?.genres ?? IGDB_GENRE_NAMES),
     genresRaw: g.genres?.length ? g.genres.map((x) => x.name).join(', ') : null,
     players: derivePlayers(g),

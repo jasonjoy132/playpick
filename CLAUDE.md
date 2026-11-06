@@ -63,7 +63,7 @@
 ### 목록에서 숨기는 규칙 (`server/app.js`의 `listable`)
 - AI가 서비스 종료로 판단(`aiEnded`) 또는 회원 서비스 종료 제보 승인(`userEnded`) → 숨김
 - 게관위 게임: '출시 예정'은 출시 예정 목록에만. 기본으로 **AI가 '서비스 중'이라 했거나 App Store에 있을 때만** 보임(`HIDE_UNKNOWN_GRAC=off`면 '모름'도 보임). AI 데이터 파일이 없으면 숨기지 않음
-- **아케이드 전용 게임(오락실·인형뽑기 기계) 숨김** — 사이트 목적(친구와 같이 할 게임)과 안 맞음. 플랫폼이 아케이드뿐일 때만(`taxonomy.isArcadeOnly`). 아케이드는 플랫폼 선택지·제보에서도 뺌(`hidden: true`), 예전 링크의 `platforms=arcade`는 조용히 무시
+- **아케이드 전용 게임(오락실·인형뽑기 기계) 숨김** — 사이트 목적(친구와 같이 할 게임)과 안 맞음. 플랫폼이 아케이드뿐일 때만(`taxonomy.isArcadeOnly`). 단 IGDB 본편이 오락실판인 고전 게임(철권 3·팩맨 등)은 가정용판(이식판·확장판·리마스터) 플랫폼을 `homePlatforms`로 붙여 보여 줌(`igdbToGame`, 평가 있는 아케이드 전용 181개 중 110개). 아케이드는 플랫폼 선택지·제보에서도 뺌(`hidden: true`), 예전 링크의 `platforms=arcade`는 조용히 무시
 - **교육용 앱(게관위 장르 '교육용')·체험판(제목에 체험판·(Demo) 등)도 숨김** — `taxonomy.isOffTopic`(아케이드 전용 포함)으로 한 번에 판단
 - IGDB 자체 상태(Offline 등)도 숨김
 - **완전히 안 보이는 게임**(`app.js`의 `blockedReason`): 서비스 종료(AI·외부 AI 판단·회원 제보 승인·IGDB Offline) `ENDED` · 판매 중단(IGDB Delisted) `DELISTED` · 개발 취소(IGDB Cancelled) `CANCELLED` · 아케이드 기계 전용 `ARCADE` → 상세는 410 + 이유별 안내(**관리자만** 열림), 찜·최근 본 게임·내 리뷰·회원 평점 랭킹에서도 뺌(`withoutEnded`, 찜은 저장된 플랫폼으로 아케이드도). 교육용·체험판·'모름' 게관위 게임은 목록에서만 빠지고 상세는 열림

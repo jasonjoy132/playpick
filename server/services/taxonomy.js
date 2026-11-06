@@ -70,6 +70,7 @@ export const SELECTABLE_PLATFORMS = new Set(PLATFORMS.filter((o) => !o.hidden).m
  * 플랫폼이 아케이드뿐일 때만. PC·모바일 등 다른 플랫폼도 있으면 그대로 보임
  */
 export function isArcadeOnly(g) {
+  if (g?.homePlatforms?.length) return false; // 오락실판이 본편이어도 가정용판이 있으면 집에서 할 수 있음(IGDB 이식판·확장판·리마스터)
   if (g?.platforms?.length) return g.platforms.every((p) => p === 'arcade');
   const raw = String(g?.platformsRaw ?? '');
   return /아케이드/.test(raw) && !/pc|온라인|모바일|비디오/i.test(raw);
