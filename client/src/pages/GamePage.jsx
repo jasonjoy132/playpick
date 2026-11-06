@@ -42,10 +42,10 @@ export function GamePage({ id, options }) {
       </nav>
       {status === 'loading' && <Loading message="게임 정보를 불러오는 중이에요…" />}
       {status === 'error' &&
-        (error.code === 'ENDED' ? (
-          <div className="state" data-testid="game-ended">
-            <h1>서비스가 종료된 게임이에요</h1>
-            <p className="muted">더 이상 플레이할 수 없는 게임이라 보여 드리지 않아요.</p>
+        (['ENDED', 'DELISTED', 'CANCELLED', 'ARCADE'].includes(error.code) ? (
+          <div className="state" data-testid="game-ended" data-reason={error.code}>
+            <h1>{error.message.replace(/\.$/, '')}</h1>
+            <p className="muted">{error.code === 'ARCADE' ? '친구들과 집에서 같이 할 수 있는 게임이 아니라 보여 드리지 않아요.' : '지금은 할 수 없는 게임이라 보여 드리지 않아요.'}</p>
             <Link to="/" className="btn btn-primary">
               홈으로
             </Link>

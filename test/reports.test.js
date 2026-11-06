@@ -151,3 +151,21 @@ test('리뷰 신고 → 관리자 숨김 → 다른 사람에게 안 보이고 �
   await admin('POST', `/api/admin/review-reports/${rid}/restore`, {});
   assert.equal((await reviewer('GET', '/api/games/igdb-72/reviews')).body.reviews.length, 1, '다시 보이기');
 });
+
+test('상세까지 막는 게임: IGDB 판매 중단·개발 취소는 이유별 안내(관리자는 열림)', async () => {
+  const { createApp: make } = await import('../server/app.js');
+  const G = {
+    'igdb-91': { id: 'igdb-91', title: '판매 중단 게임', source: 'IGDB', gameStatus: 'Delisted', hidden: true, platforms: ['pc'], genres: ['action'], players: null, stores: [], imageUrl: null, altNames: [] },
+    'igdb-92': { id: 'igdb-92', title: '취소된 게임', source: 'IGDB', gameStatus: 'Cancelled', hidden: true, platforms: ['pc'], genres: ['action'], players: null, stores: [], imageUrl: null, altNames: [] },
+  };
+  const s = make({ ...getConfig(), dataSource: 'demo', dbFile: ':memory:', rawg: {}, appStore: {}, adminEmails: ['boss2@example.com'] }, { catalog: { ...catalog, getGame: async (id) => G[id] ?? null }, partySize, mailer: { configured: false, devLog: false, send: async () => {} } });
+  await new Promise((r) => s.listen(0, r));
+  const url = `http://127.0.0.1:${s.address().port}`;
+  try {
+    const d = await (await fetch(`${url}/api/games/igdb-91`)).json();
+    assert.deepEqual(d.error, { code: 'DELISTED', message: '판매가 중단된 게임이에요.' });
+    assert.equal((await (await fetch(`${url}/api/games/igdb-92`)).json()).error.code, 'CANCELLED');
+  } finally {
+    s.close();
+  }
+});

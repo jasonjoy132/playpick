@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createCatalog } from './services/catalog.js';
 import { parseCriteria, recommend, evaluateGame, compareResults, interleave } from './services/recommend.js';
-import { getOptions, isOffTopic } from './services/taxonomy.js';
+import { getOptions, isOffTopic, isArcadeOnly } from './services/taxonomy.js';
 import { DataSourceError } from './providers/errors.js';
 import { createTranslator, withKoreanSummaries } from './services/translator.js';
 import { openDb } from './db.js';
@@ -160,12 +160,26 @@ const SLIDES = 5;
   const hideUnknown = () => Boolean(config.hideUnknownGrac) && partySize.size > 0;
   /** 서비스가 끝난 게임: AI·외부 AI 판단, 회원 제보 승인, IGDB 상태(Offline 등) → 목록뿐 아니라 상세·찜·최근 본 게임에서도 안 보임 */
   const isEnded = (g) => Boolean(g?.aiEnded || g?.userEnded || g?.hidden);
+  /**
+   * 상세까지 막는 게임과 그 이유 (목록뿐 아니라 상세·찜·최근 본 게임에서도 안 보임, 관리자만 열림)
+   *  - 서비스 종료(AI·외부 AI 판단·회원 제보·IGDB Offline) · 판매 중단(Delisted) · 개발 취소(Cancelled) · 아케이드 기계 전용
+   * @returns {{ code: string, message: string } | null}
+   */
+  function blockedReason(g) {
+    const st = String(g?.gameStatus ?? '').toLowerCase();
+    if (g?.aiEnded || g?.userEnded || (g?.hidden && (st === 'offline' || !st))) return { code: 'ENDED', message: '서비스가 종료된 게임이에요.' };
+    if (g?.hidden && st === 'delisted') return { code: 'DELISTED', message: '판매가 중단된 게임이에요.' };
+    if (g?.hidden && st === 'cancelled') return { code: 'CANCELLED', message: '개발이 취소된 게임이에요.' };
+    if (g?.hidden) return { code: 'ENDED', message: '지금은 할 수 없는 게임이에요.' };
+    if (g && isArcadeOnly(g)) return { code: 'ARCADE', message: '오락실·인형뽑기 같은 아케이드 기계 게임이에요.' };
+    return null;
+  }
   /** 저장된 목록(찜·최근 본·내 리뷰)에서 서비스 종료 게임 빼기 — 저장된 id·제목으로 AI 판단·회원 제보를 확인 */
   const withoutEnded = (items) => {
     if (!items.length) return items;
     const probe = items.map((x) => ({ id: x.gameId, title: x.title ?? '', source: String(x.gameId).startsWith('igdb-') ? 'IGDB' : String(x.gameId).startsWith('grac-') ? '게임물관리위원회' : '기타', recommendedPlayers: null }));
     const ended = new Set(reports.applyAll(partySize.applyCached(probe)).filter(isEnded).map((g) => g.id));
-    return items.filter((x) => !ended.has(x.gameId));
+    return items.filter((x) => !ended.has(x.gameId) && !(x.platforms?.length && isArcadeOnly({ platforms: x.platforms })));
   };
   const listable = (g) =>
     !g.aiEnded && !g.userEnded && !isOffTopic(g) && (g.source !== '게임물관리위원회' || (!g.aiUpcoming && (!hideUnknown() || g.aiAlive === true || Boolean(g.appStoreUrl))));
@@ -576,7 +590,7 @@ const SLIDES = 5;
       const extra = new Map((await catalog.getMany(top.map((g) => g.id))).map((g) => [g.id, g]));
       const games = top.map((g) => ({ ...(extra.get(g.id) ?? {}), ...g, imageUrl: extra.get(g.id)?.imageUrl ?? g.imageUrl, title: extra.get(g.id)?.title ?? g.title }));
       const ranked = decorate(games, user).map((g, i) => ({ ...g, userRating: top[i].userRating }));
-      return sendJson(res, 200, { meta: meta(), games: ranked.filter((g) => !isEnded(g)), warnings: [] });
+      return sendJson(res, 200, { meta: meta(), games: ranked.filter((g) => !blockedReason(g)), warnings: [] });
     }
 
     if (p === '/api/search') {
@@ -604,7 +618,8 @@ const SLIDES = 5;
       if (!found) return sendJson(res, 404, { error: { code: 'NOT_FOUND', message: '게임 정보를 찾을 수 없습니다.' } });
       const [withParty] = (await partySize.fill([found])).games;
       const [decorated] = decorate(await withKoreanSummaries(translator, [withParty]), user);
-      if (isEnded(decorated) && !user?.isAdmin) return sendJson(res, 410, { error: { code: 'ENDED', message: '서비스가 종료된 게임이에요.' } });
+      const blocked = blockedReason(decorated);
+      if (blocked && !user?.isAdmin) return sendJson(res, 410, { error: blocked });
       if (found.source === '사용자 제보') decorated.submitterBadge = badges.displayFor(found.submittedById); // 제보자 닉네임 옆 뱃지
       if (decorated.imageSource === '사용자 제보' && decorated.imageBy) decorated.imageByBadge = badges.displayFor(imageSubs.submitterOf(decorated.id));
       const playtime = playtimeOf(decorated, await ttbP);

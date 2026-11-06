@@ -66,7 +66,7 @@
 - **아케이드 전용 게임(오락실·인형뽑기 기계) 숨김** — 사이트 목적(친구와 같이 할 게임)과 안 맞음. 플랫폼이 아케이드뿐일 때만(`taxonomy.isArcadeOnly`). 아케이드는 플랫폼 선택지·제보에서도 뺌(`hidden: true`), 예전 링크의 `platforms=arcade`는 조용히 무시
 - **교육용 앱(게관위 장르 '교육용')·체험판(제목에 체험판·(Demo) 등)도 숨김** — `taxonomy.isOffTopic`(아케이드 전용 포함)으로 한 번에 판단
 - IGDB 자체 상태(Offline 등)도 숨김
-- **서비스 종료 게임은 완전히 안 보임**(`app.js`의 `isEnded`: AI·외부 AI 종료 판단·회원 제보 승인·IGDB 숨김 상태): 상세는 410 `ENDED`('서비스가 종료된 게임이에요', **관리자만** 안내와 함께 열림), 찜·최근 본 게임·내 리뷰·회원 평점 랭킹에서도 뺌(`withoutEnded`). 아케이드·교육용·'모름' 등 다른 숨김 게임은 목록에서만 빠지고 상세는 열림
+- **완전히 안 보이는 게임**(`app.js`의 `blockedReason`): 서비스 종료(AI·외부 AI 판단·회원 제보 승인·IGDB Offline) `ENDED` · 판매 중단(IGDB Delisted) `DELISTED` · 개발 취소(IGDB Cancelled) `CANCELLED` · 아케이드 기계 전용 `ARCADE` → 상세는 410 + 이유별 안내(**관리자만** 열림), 찜·최근 본 게임·내 리뷰·회원 평점 랭킹에서도 뺌(`withoutEnded`, 찜은 저장된 플랫폼으로 아케이드도). 교육용·체험판·'모름' 게관위 게임은 목록에서만 빠지고 상세는 열림
 
 ### 게임 정보에 덧붙이는 순서 (`decorate`)
 `partySize.applyCached` → `appArt.applyAll`(App Store) → `imageSubs.applyAll`(승인된 표지 사진) → `reports.applyAll`(승인된 종료·정보 수정 제보) → 별점·찜

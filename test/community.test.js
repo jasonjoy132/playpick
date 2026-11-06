@@ -262,3 +262,11 @@ test('회원 평점 랭킹: 평균 높은 순, 같으면 평가 많은 순', asy
   assert.equal(g8.title, '주사위 왕 파티');
   assert.ok(Array.isArray(g8.platforms), '데모 게임 정보로 보강');
 });
+
+test('상세까지 막는 게임: 아케이드 기계 전용(데모 demo-12)은 410 ARCADE', async () => {
+  const c = client();
+  const r = await c.call('GET', '/api/games/demo-12');
+  assert.equal(r.status, 410);
+  assert.equal(r.body.error.code, 'ARCADE');
+  assert.equal((await c.call('GET', '/api/games/demo-01')).status, 200, '다른 게임은 그대로');
+});
