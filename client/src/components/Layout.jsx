@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth.jsx';
 import { Logo } from './Logo.jsx';
 import { Avatar } from './Avatar.jsx';
 import { NameBadge } from './Badge.jsx';
+import { ThemeToggle } from './ThemeToggle.jsx';
 
 const NAV = [
   ['/', '홈'],
@@ -61,6 +62,7 @@ export function Layout({ meta, children }) {
           <button type="button" className="btn btn-gold header-cta" onClick={() => openFinder()} data-testid="open-finder">
             나만의 게임 찾기
           </button>
+          <ThemeToggle />
           <UserMenu />
         </div>
       </header>

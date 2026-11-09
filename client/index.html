@@ -6,6 +6,16 @@
     <meta name="description" content="함께할 인원·플랫폼·장르로 나에게 맞는 게임을 찾는 플레이픽" />
     <title>플레이픽 PlayPick · 맞춤형 게임 큐레이션</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      // 다크 모드: 그리기 전에 정해서 깜빡임 방지 (저장한 값 → 없으면 기기 설정)
+      (function () {
+        var t = null;
+        try { t = localStorage.getItem('theme'); } catch (e) {}
+        if (t !== 'dark' && t !== 'light') t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.dataset.theme = t;
+      })();
+    </script>
     <link rel="stylesheet" href="/app.css" />
   </head>
   <body>
