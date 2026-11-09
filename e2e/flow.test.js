@@ -59,8 +59,10 @@ for (const vp of [
     await page.getByTestId('result-count').waitFor();
     const full = page.getByTestId('section-full').getByTestId('game-card');
     assert.ok((await full.count()) >= 1, '전체 일치 게임 존재');
-    // 모든 조건 일치가 있으면 '일부 조건 일치'는 보여 주지 않음
-    assert.equal(await page.getByTestId('section-partial').count(), 0, '일부 일치 칸 없음');
+    // 모든 조건 일치가 한 화면에 다 들어오면 바로 아래에 '비슷한 게임'(일부 일치)이 이어짐
+    const similar = page.getByTestId('section-partial');
+    assert.match(await similar.innerText(), /비슷한 게임[\s\S]*모든 조건 일치 게임을 다 봤어요/);
+    assert.ok((await similar.getByTestId('game-card').count()) >= 1);
     await shot(page, `${vp.name}-2-results`);
 
     // 4. 상세 페이지

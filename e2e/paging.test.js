@@ -79,15 +79,26 @@ test('전체 검색: 개수 표시, 더 보기로 다음 페이지 요청', asyn
   await full.waitFor();
   assert.match(await page.getByTestId('result-count').innerText(), /IGDB와 게임물관리위원회 전체에서 찾았어요.*약 60개/);
   assert.equal(await full.getByTestId('game-card').count(), 24);
+  assert.equal(await page.getByTestId('section-partial').count(), 0, '모든 조건 일치를 다 보기 전에는 비슷한 게임 없음');
   await page.getByTestId('more-full').dispatchEvent('click'); // 받아 둔 48개 중 나머지
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="section-full"] [data-testid="game-card"]').length === 48);
   await page.getByTestId('more-full').dispatchEvent('click'); // 서버에서 다음 페이지
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="section-full"] [data-testid="game-card"]').length === 60);
   assert.equal(await page.getByTestId('more-full').count(), 0, '마지막 페이지면 버튼 없음');
   assert.deepEqual(calls, [0, 48]);
-  // 모든 조건 일치가 있으면 '일부 조건 일치'(인원 모르는 게임위 게임 포함)는 보여 주지 않음
-  assert.equal(await page.getByTestId('section-partial').count(), 0, '일부 일치 칸 없음');
+  // 모든 조건 일치를 끝까지 다 보면 아래에 '비슷한 게임'(일부 일치 — 인원 모르는 게임위 게임 포함)이 이어짐
+  const partial = page.getByTestId('section-partial');
+  await partial.waitFor();
+  assert.match(await partial.innerText(), /비슷한 게임/);
   assert.equal(await page.getByTestId('section-grac').count(), 0, '따로 된 칸 없음');
+  assert.equal(await partial.getByTestId('game-card').count(), 24);
+  // 스크롤을 끝까지 내리면 '더 보기'가 저절로: 받아 둔 25개 중 나머지 → 서버에서 게임위 다음 페이지
+  await page.waitForFunction(() => {
+    window.scrollTo(0, document.body.scrollHeight);
+    return document.querySelectorAll('[data-testid="section-partial"] [data-testid="game-card"]').length === 31;
+  }, null, { polling: 200 });
+  assert.equal(await partial.getByTestId('more-partial').count(), 0);
+  assert.match(await partial.innerText(), /국내 테스트 게임/);
   assert.deepEqual(errors, []);
 });
 

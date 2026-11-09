@@ -55,12 +55,14 @@ function Results({ data, options, qs, criteria }) {
   const [more, setMore] = useState({ full: !!data.hasMoreFull, partial: !!data.hasMorePartial });
   const [loading, setLoading] = useState(null);
   const [moreError, setMoreError] = useState(null);
+  const [fullShown, setFullShown] = useState(PAGE); // 모든 조건 일치 중 화면에 펼친 개수
   useEffect(() => {
     setFull(data.fullMatches);
     setPartial(data.partialMatches);
     setCursor({ ...(data.next ?? {}), igdbDone: !!data.igdbDone });
     setMore({ full: !!data.hasMoreFull, partial: !!data.hasMorePartial });
     setMoreError(null);
+    setFullShown(PAGE);
   }, [data]);
 
   const append = (cur, add) => {
@@ -101,15 +103,17 @@ function Results({ data, options, qs, criteria }) {
   const remote = (section) =>
     data.paged ? { hasMore: more[section], loading: loading === section, error: loading ? null : moreError, onMore: () => loadMore(section) } : null;
   const n = data.totalFull;
-  // '일부 조건 일치'는 보여 주지 않음(모든 조건 일치 목록이 끝없이 이어져 어차피 묻힘).
-  // 모든 조건에 맞는 게임이 하나도 없을 때만 '비슷한 게임'으로 보여 줘 빈 화면을 막음
-  const showSimilar = full.length === 0 && !more.full;
+  // '일부 조건 일치'는 모든 조건 일치를 끝까지 다 본 뒤에만 '비슷한 게임'으로 이어서 보여 줌
+  // (결과가 많으면 끝에 닿지 않아 묻히지 않고, 적으면 다 본 뒤 자연스럽게 더 볼 수 있음). 0개면 바로 보여 줌
+  const noFull = full.length === 0 && !more.full;
+  const fullDone = !more.full && full.length <= fullShown;
+  const showSimilar = fullDone && (partial.length > 0 || more.partial);
   const similarCount = `${partial.length}${more.partial ? '+' : ''}`;
   return (
     <div className="results">
       <Warnings warnings={warnings} />
       <p className="result-count" data-testid="result-count">
-        {showSimilar ? (
+        {noFull ? (
           <>
             모든 조건에 맞는 게임은 없어요. 일부 조건에 맞는 <b>비슷한 게임 {similarCount}개</b>를 보여 드려요.
           </>
@@ -123,16 +127,19 @@ function Results({ data, options, qs, criteria }) {
           </>
         )}
       </p>
-      {showSimilar ? (
-        <ResultSection
-          id="partial" title="비슷한 게임" desc="일부 조건만 맞는 게임이에요 · ✓ 일치 · ✕ 불일치 · ? 정보 없음" items={partial}
-          options={options} qs={qs} remote={remote('partial')}
-        />
-      ) : (
+      {!noFull && (
         <ResultSection
           id="full" title="모든 조건 일치" desc="선택한 조건을 모두 만족하는 게임" items={full}
           total={data.paged && n != null ? n : null} totalPlus
           options={options} qs={qs} remote={remote('full')}
+          shown={fullShown} setShown={setFullShown}
+        />
+      )}
+      {showSimilar && (
+        <ResultSection
+          id="partial" title="비슷한 게임"
+          desc={`${noFull ? '' : '모든 조건 일치 게임을 다 봤어요. '}일부 조건만 맞는 게임이에요 · ✓ 일치 · ✕ 불일치 · ? 정보 없음`}
+          items={partial} options={options} qs={qs} remote={remote('partial')}
         />
       )}
     </div>
@@ -141,8 +148,11 @@ function Results({ data, options, qs, criteria }) {
 
 const PAGE = 24;
 
-function ResultSection({ id, title, desc, items, total, totalPlus, options, qs, emptyText, remote, maxAuto = Infinity }) {
-  const [shown, setShown] = useState(PAGE);
+function ResultSection({ id, title, desc, items, total, totalPlus, options, qs, emptyText, remote, maxAuto = Infinity, shown: shownProp, setShown: setShownProp }) {
+  const [ownShown, setOwnShown] = useState(PAGE);
+  // 펼친 개수를 부모가 알아야 하면(모든 조건 일치를 다 봤는지) 부모 상태를 씀
+  const shown = shownProp ?? ownShown;
+  const setShown = setShownProp ?? setOwnShown;
   return (
     <section className="result-section" aria-labelledby={`sec-${id}`} data-testid={`section-${id}`}>
       <header className="section-head">
