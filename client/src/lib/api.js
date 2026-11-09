@@ -80,6 +80,11 @@ export const api = {
   selectBadge: (id) => request('PUT', '/api/me/badges/selected', { id }),
   markBadgesSeen: (ids) => request('POST', '/api/me/badges/seen', { ids }),
 
+  // 알림
+  notifications: () => get('/api/me/notifications'),
+  notificationCount: () => get('/api/me/notifications/count'),
+  readNotifications: (b) => request('POST', '/api/me/notifications/read', b),
+
   // 게임 제보
   submitGame: (b) => request('POST', '/api/submissions', b),
   mySubmissions: () => get('/api/me/submissions'),

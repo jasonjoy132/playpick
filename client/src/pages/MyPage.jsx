@@ -376,180 +376,213 @@ const STATUS = {
   rejected: ['거절됨', 'pill-no'],
 };
 
-function SubmissionsSection() {
-  const { status, data, error, retry } = useAsync(() => api.mySubmissions(), []);
-  const [err, setErr] = useState(null);
-  if (status === 'loading') return <Loading message="제보 내역을 불러오는 중이에요…" />;
-  if (status === 'error') return <ErrorState error={error} onRetry={retry} />;
-  const cancel = async (s) => {
-    if (!window.confirm(`‘${s.title}’ 제보를 취소할까요?`)) return;
-    try {
-      await api.cancelSubmission(s.id);
-      retry();
-    } catch (e) {
-      setErr(e.message);
-    }
-  };
-  const head = (
-    <p className="muted">
-      플레이픽에 없는 게임을 알려 주세요. 관리자가 확인한 뒤 승인하면 추가돼요.{' '}
+/** 내 제보: 게임·표지 사진·서비스 종료·정보 수정 제보를 한 목록으로 (요약 → 거르기 → 카드) */
+const SUB_TYPES = [
+  ['game', '게임'],
+  ['image', '표지 사진'],
+  ['ended', '서비스 종료'],
+  ['fix', '정보 수정'],
+];
+const TYPE_NAME = Object.fromEntries(SUB_TYPES);
+const TYPE_ICON = { game: '🎮', image: '🖼', ended: '⛔', fix: '✏️' };
+const fmtShort = (iso) => new Date(iso).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+const fixText = (f = {}) =>
+  [f.players && `추천 인원 ${f.players.min}~${f.players.max}명`, f.hours && `플레이 시간 ${f.hours}시간`, f.storeUrl && '구매처'].filter(Boolean).join(' · ');
+
+/** 세 API 결과 → 같은 모양의 항목 (최신순) */
+function toSubItems([games, images, reportsList]) {
+  const base = (s) => ({ id: s.id, status: s.status, createdAt: s.createdAt, reviewedAt: s.reviewedAt, rejectReason: s.rejectReason });
+  return [
+    ...games.items.map((s) => ({
+      ...base(s),
+      key: `g${s.id}`,
+      type: 'game',
+      title: s.title,
+      link: s.gameId ? `/games/${s.gameId}` : null,
+      imageUrl: s.imageUrl,
+      what: [s.releaseYear && `${s.releaseYear}년`, s.publisher].filter(Boolean).join(' · ') || '새 게임 추가',
+      done: '플레이픽에 게임이 추가됐어요. 고마워요!',
+      testid: 'submission-row',
+      cancel: () => api.cancelSubmission(s.id),
+    })),
+    ...images.items.map((s) => ({
+      ...base(s),
+      key: `p${s.id}`,
+      type: 'image',
+      title: s.gameTitle,
+      link: `/games/${s.gameId}`,
+      imageUrl: s.imageUrl,
+      what: '게임 표지 사진',
+      done: '게임 카드와 상세 화면에 표지로 나와요. 고마워요!',
+      testid: 'image-submission-row',
+      cancel: () => api.cancelImageSubmission(s.id),
+    })),
+    ...reportsList.items.map((s) => ({
+      ...base(s),
+      key: `r${s.id}`,
+      type: s.kind === 'ended' ? 'ended' : 'fix',
+      title: s.gameTitle,
+      link: `/games/${s.gameId}`,
+      imageUrl: null,
+      what: s.kind === 'ended' ? '서비스가 종료된 게임이에요' : fixText(s.fix) || '게임 정보 수정',
+      done: s.kind === 'ended' ? '목록에서 내려졌어요. 고마워요!' : '게임 정보에 반영됐어요. 고마워요!',
+      testid: 'report-row',
+      cancel: () => api.cancelReport(s.id),
+    })),
+  ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+}
+
+const SUB_STATES = [
+  ['pending', '검토 중', 'wait'],
+  ['approved', '승인', 'ok'],
+  ['rejected', '거절', 'no'],
+];
+
+function SubGuide() {
+  return (
+    <aside className="sub-guide" aria-label="제보하는 방법">
+      <div>
+        <b>플레이픽을 같이 채워 주세요</b>
+        <ul>
+          <li>
+            <span>게임</span> 플레이픽에 없는 게임 → ‘게임 제보하기’
+          </li>
+          <li>
+            <span>표지 사진</span> 사진 없는 게임의 상세 화면 → ‘표지 사진 제보’
+          </li>
+          <li>
+            <span>종료·정보 수정</span> 게임 상세 오른쪽 → ‘정보가 틀렸나요?’
+          </li>
+        </ul>
+      </div>
       <Link to="/submit" className="btn btn-gold btn-sm">
         게임 제보하기
       </Link>
-    </p>
+    </aside>
   );
-  if (!data.items.length)
+}
+
+function SubmissionsSection() {
+  const { status, data, error, retry } = useAsync(() => Promise.all([api.mySubmissions(), api.myImageSubmissions(), api.myReports()]), []);
+  const [type, setType] = useState('');
+  const [state, setState] = useState('');
+  const [err, setErr] = useState(null);
+  if (status === 'loading') return <Loading message="제보 내역을 불러오는 중이에요…" />;
+  if (status === 'error') return <ErrorState error={error} onRetry={retry} />;
+  const all = toSubItems(data);
+  const cancel = async (s) => {
+    if (!window.confirm(`‘${s.title}’ ${TYPE_NAME[s.type]} 제보를 취소할까요?`)) return;
+    try {
+      setErr(null);
+      await s.cancel();
+      retry();
+    } catch (e) {
+      setErr(e.message);
+    }
+  };
+  if (!all.length)
     return (
       <>
-        {head}
         <div className="state" data-testid="submissions-empty">
-          <h2>아직 제보한 게임이 없어요</h2>
+          <h2>아직 제보한 내역이 없어요</h2>
+          <p className="muted">관리자가 확인해 승인하면 플레이픽에 반영돼요. 승인·거절되면 알림으로 알려 드려요.</p>
         </div>
-        <ImageSubmissionsList />
-        <GameReportsList />
+        <SubGuide />
       </>
     );
-  return (
-    <>
-      {head}
-      {err && <p className="form-error">{err}</p>}
-      <ul className="game-rows" data-testid="my-submissions">
-        {data.items.map((s) => {
-          const [name, cls] = STATUS[s.status];
-          return (
-            <li key={s.id} className="game-row" data-testid="submission-row">
-              <div className="game-row-cover">
-                <Cover game={{ id: `s${s.id}`, title: s.title, imageUrl: s.imageUrl }} />
-              </div>
-              <div className="game-row-body">
-                {s.gameId ? (
-                  <Link to={`/games/${s.gameId}`} className="game-row-title">
-                    {s.title}
-                  </Link>
-                ) : (
-                  <span className="game-row-title">{s.title}</span>
-                )}{' '}
-                <span className={`pill ${cls}`}>{name}</span>
-                <p className="muted small">{fmtDate(s.createdAt)} 제보{s.reviewedAt ? ` · ${fmtDate(s.reviewedAt)} 처리` : ''}</p>
-                {s.status === 'rejected' && s.rejectReason && <p className="small">사유: {s.rejectReason}</p>}
-                {s.status === 'approved' && <p className="small">플레이픽에 추가됐어요. 고마워요!</p>}
-              </div>
-              <div className="game-row-actions">
-                {s.status === 'pending' && (
-                  <button type="button" className="btn btn-ghost btn-sm danger" onClick={() => cancel(s)}>
-                    제보 취소
-                  </button>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-      <ImageSubmissionsList />
-        <GameReportsList />
-    </>
-  );
-}
-
-/** 내 표지 사진 제보 */
-function ImageSubmissionsList() {
-  const { status, data, retry } = useAsync(() => api.myImageSubmissions(), []);
-  const [err, setErr] = useState(null);
-  if (status !== 'success' || !data.items.length) return null;
-  const cancel = async (s) => {
-    if (!window.confirm(`‘${s.gameTitle}’ 사진 제보를 취소할까요?`)) return;
-    try {
-      await api.cancelImageSubmission(s.id);
-      retry();
-    } catch (e) {
-      setErr(e.message);
-    }
+  const ofType = all.filter((s) => !type || s.type === type);
+  const items = ofType.filter((s) => !state || s.status === state);
+  const reset = () => {
+    setType('');
+    setState('');
   };
   return (
     <>
-      <h2 className="badge-group">표지 사진 제보</h2>
-      {err && <p className="form-error">{err}</p>}
-      <ul className="game-rows" data-testid="my-image-submissions">
-        {data.items.map((s) => {
-          const [name, cls] = STATUS[s.status];
+      <div className="sub-summary" role="group" aria-label="처리 상태로 거르기">
+        {SUB_STATES.map(([st, label, tone]) => (
+          <button
+            key={st}
+            type="button"
+            className={`sub-stat tone-${tone}${state === st ? ' is-on' : ''}`}
+            aria-pressed={state === st}
+            onClick={() => setState((v) => (v === st ? '' : st))}
+            data-testid={`sub-stat-${st}`}
+          >
+            <b>{ofType.filter((s) => s.status === st).length}</b>
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="chipbar sub-filter" role="group" aria-label="제보 종류로 거르기">
+        {[['', '전체'], ...SUB_TYPES].map(([v, label]) => {
+          const n = v ? all.filter((s) => s.type === v).length : all.length;
           return (
-            <li key={s.id} className="game-row" data-testid="image-submission-row">
-              <div className="game-row-cover">
-                <Cover game={{ id: `p${s.id}`, title: s.gameTitle, imageUrl: s.imageUrl }} />
-              </div>
-              <div className="game-row-body">
-                <Link to={`/games/${s.gameId}`} className="game-row-title">
-                  {s.gameTitle}
-                </Link>{' '}
-                <span className={`pill ${cls}`}>{name}</span>
-                <p className="muted small">{fmtDate(s.createdAt)} 제보{s.reviewedAt ? ` · ${fmtDate(s.reviewedAt)} 처리` : ''}</p>
-                {s.status === 'rejected' && s.rejectReason && <p className="small">사유: {s.rejectReason}</p>}
-                {s.status === 'approved' && <p className="small">게임 카드와 상세 화면에 표지로 나와요. 고마워요!</p>}
-              </div>
-              <div className="game-row-actions">
+            <button
+              key={v || 'all'}
+              type="button"
+              className={`chipbar-item${type === v ? ' is-on' : ''}`}
+              aria-pressed={type === v}
+              onClick={() => setType(v)}
+              disabled={Boolean(v) && !n}
+              data-testid={`sub-type-${v || 'all'}`}
+            >
+              {label} <span className="sub-filter-n">{n}</span>
+            </button>
+          );
+        })}
+      </div>
+      {err && <p className="form-error">{err}</p>}
+      {items.length === 0 ? (
+        <div className="state" data-testid="submissions-filter-empty">
+          <h2>조건에 맞는 제보가 없어요</h2>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={reset}>
+            전체 보기
+          </button>
+        </div>
+      ) : (
+        <ul className="sub-list" data-testid="my-submissions">
+          {items.map((s) => {
+            const [name, cls] = STATUS[s.status];
+            return (
+              <li key={s.key} className={`sub-card is-${s.status}`} data-testid={s.testid}>
+                <div className="sub-cover">
+                  {s.imageUrl ? (
+                    <Cover game={{ id: s.key, title: s.title, imageUrl: s.imageUrl }} />
+                  ) : (
+                    <span className="sub-cover-icon" aria-hidden="true">
+                      {TYPE_ICON[s.type]}
+                    </span>
+                  )}
+                </div>
+                <div className="sub-main">
+                  <p className="sub-top">
+                    <span className="sub-type">{TYPE_NAME[s.type]}</span>
+                    <span className={`pill ${cls}`}>{name}</span>
+                  </p>
+                  <h3 className="sub-title">{s.link ? <Link to={s.link}>{s.title}</Link> : s.title}</h3>
+                  <p className="sub-what">{s.what}</p>
+                  <p className="sub-time">
+                    {fmtShort(s.createdAt)} 제보
+                    {s.reviewedAt ? ` → ${fmtShort(s.reviewedAt)} ${s.status === 'approved' ? '승인' : '처리'}` : ' · 관리자 확인 중'}
+                  </p>
+                  {s.status === 'rejected' && s.rejectReason && (
+                    <p className="sub-reason">
+                      <b>거절 사유</b> {s.rejectReason}
+                    </p>
+                  )}
+                  {s.status === 'approved' && <p className="sub-done">{s.done}</p>}
+                </div>
                 {s.status === 'pending' && (
-                  <button type="button" className="btn btn-ghost btn-sm danger" onClick={() => cancel(s)}>
+                  <button type="button" className="btn btn-ghost btn-sm danger sub-cancel" onClick={() => cancel(s)}>
                     제보 취소
                   </button>
                 )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </>
-  );
-}
-
-/** 내 서비스 종료·정보 수정 제보 */
-function GameReportsList() {
-  const { status, data, retry } = useAsync(() => api.myReports(), []);
-  const [err, setErr] = useState(null);
-  if (status !== 'success' || !data.items.length) return null;
-  const cancel = async (s) => {
-    if (!window.confirm(`‘${s.gameTitle}’ 제보를 취소할까요?`)) return;
-    try {
-      await api.cancelReport(s.id);
-      retry();
-    } catch (e) {
-      setErr(e.message);
-    }
-  };
-  const what = (s) => {
-    if (s.kind === 'ended') return '서비스 종료';
-    const f = s.fix || {};
-    const parts = [f.players && `추천 인원 ${f.players.min}~${f.players.max}명`, f.hours && `플레이 시간 ${f.hours}시간`, f.storeUrl && '구매처'].filter(Boolean);
-    return `정보 수정${parts.length ? ` (${parts.join(', ')})` : ''}`;
-  };
-  return (
-    <>
-      <h2 className="badge-group">서비스 종료 · 정보 수정 제보</h2>
-      {err && <p className="form-error">{err}</p>}
-      <ul className="game-rows" data-testid="my-reports">
-        {data.items.map((s) => {
-          const [name, cls] = STATUS[s.status];
-          return (
-            <li key={s.id} className="game-row" data-testid="report-row">
-              <div className="game-row-body">
-                <Link to={`/games/${s.gameId}`} className="game-row-title">
-                  {s.gameTitle}
-                </Link>{' '}
-                <span className={`pill ${cls}`}>{name}</span>
-                <p className="small">{what(s)}</p>
-                <p className="muted small">{fmtDate(s.createdAt)} 제보{s.reviewedAt ? ` · ${fmtDate(s.reviewedAt)} 처리` : ''}</p>
-                {s.status === 'rejected' && s.rejectReason && <p className="small">사유: {s.rejectReason}</p>}
-              </div>
-              <div className="game-row-actions">
-                {s.status === 'pending' && (
-                  <button type="button" className="btn btn-ghost btn-sm danger" onClick={() => cancel(s)}>
-                    제보 취소
-                  </button>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <SubGuide />
     </>
   );
 }

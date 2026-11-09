@@ -66,7 +66,7 @@ test('게임 제보 → 관리자 승인 → 검색·상세, 내 제보 상태',
 
   await user.goto(`${base}/mypage/submissions`);
   await user.getByTestId('submission-row').first().waitFor();
-  assert.match(await user.getByTestId('my-submissions').innerText(), /이투이 테스트 협동 게임[\s\S]*검토 중/);
+  assert.match(await user.getByTestId('my-submissions').innerText(), /검토 중[\s\S]*이투이 테스트 협동 게임/);
 
   // 관리자 승인
   const admin = await signedIn({ loginId: 'e2e_admin', password: 'secret123', nickname: '운영자', email: 'admin@example.com' });

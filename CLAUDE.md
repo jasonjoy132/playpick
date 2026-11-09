@@ -87,6 +87,8 @@
   - 단계: 제보(finder~curator), 리뷰(rv1~rv5), 사진(ph1~ph3), 정보(if1~if3) + 특별 뱃지(pioneer, popular, thorough, local, early, essay, cleaner, firstword)
   - 그림 `client/public/badge-<id>.webp`(128px, 배경 투명). 그림이 없으면 `noImage: true`로 이모지 표시
   - 새 칭호 알림(토스트), 대표 칭호 고르기(`BadgePicker.jsx`: 마이페이지·홈 프로필 패널)
+- **알림** `notifications.js`(DB `notifications`, 회원당 최근 100개): 제보 승인·거절(사유)·승인 취소, 새 칭호, 리뷰 숨김·다시 보임, 찜한 게임 서비스 종료 승인, 가입 환영. 관리자 처리 라우트(`app.js`)에서 `beforeReview`→처리→`afterReview`로 넣음(본인 제보는 알림 없음). 화면 헤더 종 `NotificationBell.jsx`(화면 이동·60초마다 숫자만 받음), 관리자는 '검토 대기 N건' 줄
+- **내 제보**(`MyPage.jsx` `SubmissionsSection`): 게임·표지 사진·종료·정보 수정 제보를 한 목록으로(상태 요약 카드·종류 칩으로 거르기)
 
 ## 남은 일 (우선순위)
 
@@ -99,4 +101,4 @@
    - 전환하면 개인정보처리방침(`client/src/pages/InfoPages.jsx`) '처리 위탁'에 Vercel(호스팅)·Supabase(DB·사진 저장) 추가
 2. 문의 연락처: `InfoPages.jsx`의 `CONTACT_EMAIL`이 비어 있음('연락처 준비 중'으로 표시) — 사용자에게 받아 넣기. 회원 탈퇴 기능은 아직 없음(지금은 문의로 삭제)
 3. GitHub: 공개 저장소 `jasonjoy132/playpick`(main). push 전 `git status`로 `.env`·`.data/`·`.cache/` 안 올라가는지 확인
-4. (선택) 제보 승인·거절 알림, 관리자 메뉴에 대기 건수, 모바일 화면 점검, 게임 상세 페이지 제목·미리보기, 친구와 같이 고르는 '파티 투표'
+4. (선택) 모바일 화면 점검, 게임 상세 페이지 제목·미리보기, 친구와 같이 고르는 '파티 투표'

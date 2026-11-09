@@ -58,7 +58,7 @@ test('표지 사진 제보 → 관리자 승인 → 상세 표지, 사진 칭호
 
   await user.goto(`${base}/mypage/submissions`);
   await user.getByTestId('image-submission-row').waitFor();
-  assert.match(await user.getByTestId('my-image-submissions').innerText(), /사진 없는 국내 게임[\s\S]*검토 중/);
+  assert.match(await user.getByTestId('my-submissions').innerText(), /검토 중[\s\S]*사진 없는 국내 게임/);
 
   const admin = await signedIn({ loginId: 'e2e_admin2', password: 'secret123', nickname: '운영자', email: 'admin@example.com' });
   admin.on('pageerror', (e) => errors.push(e.message));

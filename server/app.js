@@ -18,6 +18,7 @@ import { createSubmissions } from './community/submissions.js';
 import { createBadges } from './community/badges.js';
 import { createImageSubmissions } from './community/imageSubmissions.js';
 import { createReports } from './community/reports.js';
+import { createNotifications } from './community/notifications.js';
 import { createRawgPlaytime } from './services/rawgPlaytime.js';
 import { createAiPlaytime, canAskPlaytime } from './services/aiPlaytime.js';
 import { createPartySize } from './services/partySize.js';
@@ -97,6 +98,7 @@ export function createApp(config, deps = {}) {
   const photoImages = createAvatarStore(path.join(avatarsDir, '..', 'submission-images'), { prefix: 'p', maxBytes: 1536 * 1024 });
   const imageSubs = createImageSubmissions(db, { images: photoImages });
   const reports = createReports(db);
+  const notes = createNotifications(db, { earnedOf: (id) => badges.list(id).badges.filter((b) => b.earned) });
   /** 리뷰 목록 + 내가 신고한 리뷰 표시 */
   const reviewsOut = (gameId, viewerId, opt) => {
     const out = community.reviews(gameId, viewerId, opt);
@@ -281,6 +283,7 @@ const SLIDES = 5;
     if (p === '/api/auth/signup' && method === 'POST') {
       if (!limits.signup.hit(ip)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
       const { user: u, session } = accounts.signup(await readJson(req));
+      notes.welcome(u.id, u.nickname);
       return sendJson(res, 201, { user: meOut(u) }, { 'Set-Cookie': sessionCookie(session.token, session.maxAgeSec) });
     }
     if (p === '/api/auth/login' && method === 'POST') {
@@ -307,6 +310,17 @@ const SLIDES = 5;
       if (!limits.mail.hit(`reset|${ip}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
       return sendJson(res, 200, accounts.resetPassword(await readJson(req)));
     }
+
+    // ── 알림 ──
+    if (p === '/api/me/notifications' && method === 'GET') {
+      const u = requireUser();
+      return sendJson(res, 200, { ...notes.list(u.id), pending: u.isAdmin ? notes.pendingCount() : null });
+    }
+    if (p === '/api/me/notifications/count' && method === 'GET') {
+      const u = requireUser();
+      return sendJson(res, 200, { unread: notes.unread(u.id), pending: u.isAdmin ? notes.pendingCount() : null });
+    }
+    if (p === '/api/me/notifications/read' && method === 'POST') return sendJson(res, 200, notes.markRead(requireUser().id, await readJson(req)));
 
     // ── 마이페이지: 내 정보 ──
     if (p === '/api/me/profile' && method === 'PATCH') {
@@ -368,7 +382,9 @@ const SLIDES = 5;
         if (!limits.write.hit(`r|${u.id}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
         if (method === 'PUT') {
           const body = await readJson(req);
+          const done = notes.watchBadges(u.id);
           community.saveReview(u.id, await findGame(id), body); // 존재하는 게임에만, 제목·이미지는 서버 조회값
+          done(); // 리뷰로 새 칭호를 받았으면 알림
         } else {
           community.deleteReview(u.id, id);
           badges.newBadges(u.id); // 잃은 칭호를 기록에서 지워, 다시 얻으면 다시 알리게
@@ -442,22 +458,33 @@ const SLIDES = 5;
       if (p === '/api/admin/submissions' && method === 'GET') return sendJson(res, 200, submissions.list(url.searchParams.get('status') || 'pending'));
       const am = p.match(/^\/api\/admin\/submissions\/(\d{1,9})\/(approve|reject)$/);
       if (am && method === 'POST') {
+        const ctx = notes.beforeReview('submission', am[1]);
         const item = am[2] === 'approve' ? submissions.approve(am[1], u.id) : submissions.reject(am[1], u.id, (await readJson(req)).reason);
+        notes.afterReview(ctx, { status: item.status, reason: item.rejectReason, adminId: u.id, gameId: item.gameId ? `/games/${item.gameId}` : null });
         return sendJson(res, 200, { item });
       }
       if (p === '/api/admin/reports' && method === 'GET') return sendJson(res, 200, reports.listGameReports(url.searchParams.get('kind') || 'ended', url.searchParams.get('status') || 'pending'));
       const arm = p.match(/^\/api\/admin\/reports\/(\d{1,9})\/(approve|reject)$/);
       if (arm && method === 'POST') {
+        const ctx = notes.beforeReview('report', arm[1]);
         const item = arm[2] === 'approve' ? reports.approveGameReport(arm[1], u.id) : reports.rejectGameReport(arm[1], u.id, (await readJson(req)).reason);
+        notes.afterReview(ctx, { status: item.status, reason: item.rejectReason, adminId: u.id });
         return sendJson(res, 200, { item });
       }
       if (p === '/api/admin/review-reports' && method === 'GET') return sendJson(res, 200, reports.listReviewReports(url.searchParams.get('status') || 'pending'));
       const avm = p.match(/^\/api\/admin\/review-reports\/(\d{1,12})\/(hide|dismiss|restore)$/);
-      if (avm && method === 'POST') return sendJson(res, 200, reports.resolveReview(avm[1], u.id, avm[2]));
+      if (avm && method === 'POST') {
+        const ctx = notes.beforeReviewAction(avm[1]);
+        const out = reports.resolveReview(avm[1], u.id, avm[2]);
+        notes.afterReviewAction(ctx, avm[2]);
+        return sendJson(res, 200, out);
+      }
       if (p === '/api/admin/image-submissions' && method === 'GET') return sendJson(res, 200, imageSubs.list(url.searchParams.get('status') || 'pending'));
       const aim = p.match(/^\/api\/admin\/image-submissions\/(\d{1,9})\/(approve|reject)$/);
       if (aim && method === 'POST') {
+        const ctx = notes.beforeReview('image', aim[1]);
         const item = aim[2] === 'approve' ? imageSubs.approve(aim[1], u.id) : imageSubs.reject(aim[1], u.id, (await readJson(req)).reason);
+        notes.afterReview(ctx, { status: item.status, reason: item.rejectReason, adminId: u.id });
         return sendJson(res, 200, { item });
       }
       return sendJson(res, 404, { error: { code: 'NOT_FOUND', message: '요청한 API를 찾을 수 없습니다.' } });

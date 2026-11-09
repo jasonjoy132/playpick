@@ -135,6 +135,19 @@ CREATE TABLE IF NOT EXISTS ai_playtime (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ai_playtime_created ON ai_playtime(created_at);
+-- 알림 (제보 승인·거절, 리뷰 숨김, 새 칭호 등). tone: ok | no | badge | wish | warn | info
+CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  tone TEXT NOT NULL DEFAULT 'info',
+  title TEXT NOT NULL,
+  body TEXT,
+  link TEXT,
+  created_at TEXT NOT NULL,
+  read_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, id);
 `;
 
 // 기존 DB 파일에 나중에 추가된 열 보충

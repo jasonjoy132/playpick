@@ -67,7 +67,12 @@ test('서비스 종료·정보 수정 제보, 리뷰 신고 → 관리자 처리
   await user.getByTestId('report-done').waitFor();
   await user.goto(`${base}/mypage/submissions`);
   await user.getByTestId('report-row').first().waitFor();
-  assert.match(await user.getByTestId('my-reports').innerText(), /정보 수정 \(추천 인원 2~4명, 플레이 시간 30시간\)[\s\S]*서비스 종료/);
+  assert.match(await user.getByTestId('my-submissions').innerText(), /정보 수정[\s\S]*추천 인원 2~4명 · 플레이 시간 30시간[\s\S]*서비스 종료/);
+  // 종류로 거르기: 서비스 종료만
+  await user.getByTestId('sub-type-ended').click();
+  assert.equal(await user.getByTestId('report-row').count(), 1);
+  assert.doesNotMatch(await user.getByTestId('my-submissions').innerText(), /정보 수정/);
+  await user.getByTestId('sub-type-all').click();
 
   // 리뷰 신고
   await writer.goto(`${base}/games/igdb-82`);
