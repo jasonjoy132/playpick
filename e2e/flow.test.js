@@ -59,12 +59,8 @@ for (const vp of [
     await page.getByTestId('result-count').waitFor();
     const full = page.getByTestId('section-full').getByTestId('game-card');
     assert.ok((await full.count()) >= 1, '전체 일치 게임 존재');
-    const partial = page.getByTestId('section-partial').getByTestId('game-card');
-    assert.ok((await partial.count()) >= 1, '일부 일치 게임 존재');
-    // 일부 일치 카드에는 불일치/정보 없음 배지가 있어야 함
-    const firstPartialBadges = await partial.first().locator('.match-badge').evaluateAll((els) => els.map((e) => e.dataset.status));
-    assert.ok(firstPartialBadges.includes('match'));
-    assert.ok(firstPartialBadges.some((s) => s !== 'match'));
+    // 모든 조건 일치가 있으면 '일부 조건 일치'는 보여 주지 않음
+    assert.equal(await page.getByTestId('section-partial').count(), 0, '일부 일치 칸 없음');
     await shot(page, `${vp.name}-2-results`);
 
     // 4. 상세 페이지
@@ -145,14 +141,19 @@ test('데이터/API 오류 상태 + 다시 시도', async () => {
   await page.close();
 });
 
-test('전체 일치 0건이면 안내 문구 + 일부 일치 목록 표시(실제 서버 응답)', async () => {
+test('전체 일치 0건이면 안내 문구 + 비슷한 게임(일부 일치) 표시(실제 서버 응답)', async () => {
   const page = await browser.newPage();
   // 모바일 + 스포츠를 모두 만족하는 데모 게임은 없지만, 하나씩 일치하는 게임은 있음
   await page.goto(`${base}/results?platforms=mobile&genres=sports`);
   await page.getByTestId('result-count').waitFor();
-  assert.equal(await page.getByTestId('section-full').getByTestId('game-card').count(), 0);
-  await page.locator('.section-empty').waitFor();
-  assert.ok((await page.getByTestId('section-partial').getByTestId('game-card').count()) >= 2);
+  assert.equal(await page.getByTestId('section-full').count(), 0);
+  assert.match(await page.getByTestId('result-count').innerText(), /모든 조건에 맞는 게임은 없어요/);
+  const similar = page.getByTestId('section-partial').getByTestId('game-card');
+  assert.ok((await similar.count()) >= 2);
+  // 비슷한 게임 카드에는 일치·불일치 배지가 함께 있어야 함
+  const badges = await similar.first().locator('.match-badge').evaluateAll((els) => els.map((e) => e.dataset.status));
+  assert.ok(badges.includes('match'));
+  assert.ok(badges.some((s) => s !== 'match'));
   await page.close();
 });
 

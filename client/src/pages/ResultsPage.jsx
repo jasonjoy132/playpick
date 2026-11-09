@@ -101,33 +101,38 @@ function Results({ data, options, qs, criteria }) {
   const remote = (section) =>
     data.paged ? { hasMore: more[section], loading: loading === section, error: loading ? null : moreError, onMore: () => loadMore(section) } : null;
   const n = data.totalFull;
+  // '일부 조건 일치'는 보여 주지 않음(모든 조건 일치 목록이 끝없이 이어져 어차피 묻힘).
+  // 모든 조건에 맞는 게임이 하나도 없을 때만 '비슷한 게임'으로 보여 줘 빈 화면을 막음
+  const showSimilar = full.length === 0 && !more.full;
+  const similarCount = `${partial.length}${more.partial ? '+' : ''}`;
   return (
     <div className="results">
       <Warnings warnings={warnings} />
       <p className="result-count" data-testid="result-count">
-        {data.paged ? (
+        {showSimilar ? (
           <>
-            IGDB와 게임물관리위원회 전체에서 찾았어요. 모든 조건에 맞는 게임 <b>{n != null ? `약 ${n.toLocaleString('ko-KR')}개 이상` : '여러 개'}</b>(인기순)
-            {partial.length > 0 && <>, 일부 조건에 맞는 게임 <b>{partial.length}{more.partial ? '+' : ''}개</b></>}.
+            모든 조건에 맞는 게임은 없어요. 일부 조건에 맞는 <b>비슷한 게임 {similarCount}개</b>를 보여 드려요.
+          </>
+        ) : data.paged ? (
+          <>
+            IGDB와 게임물관리위원회 전체에서 찾았어요. 모든 조건에 맞는 게임 <b>{n != null ? `약 ${n.toLocaleString('ko-KR')}개 이상` : '여러 개'}</b>(인기순).
           </>
         ) : (
           <>
-            전체 {totalGames}개 게임 중 <b>{full.length}개</b>가 모든 조건에 일치하고, <b>{partial.length}개</b>가 일부 조건에 일치해요.
+            전체 {totalGames}개 게임 중 <b>{full.length}개</b>가 모든 조건에 일치해요.
           </>
         )}
       </p>
-      <ResultSection
-        id="full" title="모든 조건 일치" desc="선택한 조건을 모두 만족하는 게임" items={full}
-        total={data.paged && n != null ? n : null} totalPlus
-        options={options} qs={qs} emptyText="모든 조건을 만족하는 게임은 없어요. 아래 일부 일치 게임을 확인해 보세요."
-        remote={remote('full')}
-        // 아래에 '일부 조건 일치'가 있으면 스크롤 자동 불러오기는 3번까지(그다음은 버튼) — 끝없이 늘어나 아래 섹션에 못 가는 것 방지
-        maxAuto={partial.length > 0 || more.partial ? 3 : Infinity}
-      />
-      {(partial.length > 0 || more.partial) && (
+      {showSimilar ? (
         <ResultSection
-          id="partial" title="일부 조건 일치" desc="✓ 일치 · ✕ 불일치 · ? 데이터에 정보 없음" items={partial}
+          id="partial" title="비슷한 게임" desc="일부 조건만 맞는 게임이에요 · ✓ 일치 · ✕ 불일치 · ? 정보 없음" items={partial}
           options={options} qs={qs} remote={remote('partial')}
+        />
+      ) : (
+        <ResultSection
+          id="full" title="모든 조건 일치" desc="선택한 조건을 모두 만족하는 게임" items={full}
+          total={data.paged && n != null ? n : null} totalPlus
+          options={options} qs={qs} remote={remote('full')}
         />
       )}
     </div>

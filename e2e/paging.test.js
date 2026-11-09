@@ -85,17 +85,9 @@ test('전체 검색: 개수 표시, 더 보기로 다음 페이지 요청', asyn
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="section-full"] [data-testid="game-card"]').length === 60);
   assert.equal(await page.getByTestId('more-full').count(), 0, '마지막 페이지면 버튼 없음');
   assert.deepEqual(calls, [0, 48]);
-  // 인원을 골랐으므로 IGDB에 없는 게임위 게임(인원 정보 없음)은 '일부 조건 일치'에 합쳐짐
-  const partial = page.getByTestId('section-partial');
+  // 모든 조건 일치가 있으면 '일부 조건 일치'(인원 모르는 게임위 게임 포함)는 보여 주지 않음
+  assert.equal(await page.getByTestId('section-partial').count(), 0, '일부 일치 칸 없음');
   assert.equal(await page.getByTestId('section-grac').count(), 0, '따로 된 칸 없음');
-  assert.equal(await partial.getByTestId('game-card').count(), 24);
-  // 스크롤을 끝까지 내리면 '더 보기'가 저절로: 받아 둔 25개 중 나머지 → 서버에서 게임위 다음 페이지
-  await page.waitForFunction(() => {
-    window.scrollTo(0, document.body.scrollHeight);
-    return document.querySelectorAll('[data-testid="section-partial"] [data-testid="game-card"]').length === 31;
-  }, null, { polling: 200 });
-  assert.equal(await partial.getByTestId('more-partial').count(), 0);
-  assert.match(await partial.innerText(), /국내 테스트 게임/);
   assert.deepEqual(errors, []);
 });
 
