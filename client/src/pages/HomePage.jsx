@@ -65,7 +65,7 @@ function HeroFinder({ options, side }) {
 }
 
 export function HomePage({ options }) {
-  const { status, data, error, retry } = useAsync(() => api.featured(), []);
+  const { status, data, error, retry } = useAsync(() => api.featured(), [], 'featured');
   const { user, ready } = useAuth();
 
   if (status === 'loading') return <Loading message="추천 게임을 불러오는 중이에요…" />;

@@ -1,5 +1,6 @@
 // 상단 메뉴: 인기 게임 · 신작·출시 예정 · 평점 랭킹 · 장르별 게임
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { usePageState } from '../lib/pageMemory.js';
 import { api } from '../lib/api.js';
 import { Link, navigate, useLocation } from '../lib/router.jsx';
 import { GameTile } from '../components/GameTile.jsx';
@@ -51,9 +52,16 @@ function Tabs({ name, items, value }) {
 /** 목록 불러오기 + 더 보기 */
 function useBrowse(kind, params) {
   const key = JSON.stringify([kind, params]);
-  const [state, setState] = useState({ status: 'loading', games: [], hasMore: false, warnings: [], error: null, more: false });
+  // 불러온 목록을 기록 항목에 저장 → 상세를 보고 뒤로 오면 다시 받지 않고 떠나기 전 그대로
+  const [state, setState] = usePageState(`browse:${key}`, { status: 'loading', games: [], hasMore: false, warnings: [], error: null, more: false });
+  const restored = useRef(state.status === 'success');
   const [nonce, setNonce] = useState(0);
   useEffect(() => {
+    if (restored.current) {
+      restored.current = false;
+      if (state.more) setState((s) => ({ ...s, more: false })); // 더 불러오던 중에 떠났으면 다시 누를 수 있게
+      return undefined;
+    }
     let alive = true;
     setState({ status: 'loading', games: [], hasMore: false, warnings: [], error: null, more: false });
     api.browse(kind, params).then(

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
-import { Link, useLocation } from '../lib/router.jsx';
+import { Link, goBackTo, useLocation } from '../lib/router.jsx';
 import { criteriaFromSearch, criteriaToSearch, hasAnyCriteria } from '../lib/criteria.js';
 import { formatList, formatPlayers, orNoInfo, statusKo, NO_INFO, PARTY_SOURCE } from '../lib/format.js';
 import { Cover } from '../components/Cover.jsx';
@@ -25,7 +25,16 @@ export function GamePage({ id, options }) {
     <>
       <nav className="breadcrumb">
         {back ? (
-          <Link to={back}>← 추천 목록으로</Link>
+          <a
+            href={back}
+            onClick={(e) => {
+              if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              e.preventDefault();
+              goBackTo(back);
+            }}
+          >
+            ← 추천 목록으로
+          </a>
         ) : (
           <a
             href="/"

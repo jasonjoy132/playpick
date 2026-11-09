@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
+import { usePageState } from '../lib/pageMemory.js';
 import { Link, useLocation } from '../lib/router.jsx';
 import { GameTile } from '../components/GameTile.jsx';
 import { AutoMore } from '../components/AutoMore.jsx';
@@ -11,8 +11,8 @@ const PAGE = 24;
 export function SearchPage({ options }) {
   const { search } = useLocation();
   const q = (new URLSearchParams(search).get('q') || '').trim();
-  const { status, data, error, retry } = useAsync(() => (q ? api.search(q) : Promise.resolve(null)), [q]);
-  const [shown, setShown] = useState(PAGE);
+  const { status, data, error, retry } = useAsync(() => (q ? api.search(q) : Promise.resolve(null)), [q], 'search');
+  const [shown, setShown] = usePageState(`search:${q}:shown`, PAGE); // 뒤로 가기로 돌아오면 펼친 만큼 그대로
 
   if (!q) return <EmptyState title="검색어를 입력해 주세요"><p>상단 검색창에 게임 이름을 입력하면 찾아 드려요.</p></EmptyState>;
   return (

@@ -22,6 +22,7 @@
 - 서버: `node:http`(프레임워크 없음) — `server/index.js` → `server/app.js`(모든 API 라우트)
 - DB: `node:sqlite`(SQLite, 동기 API) — `.data/playpick.db`, 스키마·열 추가는 `server/db.js`(시작할 때 자동 생성·보충)
 - 화면: React 19 + esbuild(`scripts/build.mjs`, `client/public` 파일은 `client/dist`로 평평하게 복사), 자체 라우터 `client/src/lib/router.jsx`
+  - 뒤로 가기 복원: 기록 항목마다 키(`history.state.ppKey`)를 붙여 불러온 목록·'더 보기' 상태·스크롤 위치를 메모리에 저장(`lib/pageMemory.js`의 `usePageState`, `useAsync(fn, deps, memo)`). 상세의 '추천 목록으로'는 바로 앞이 그 목록이면 뒤로 가기(`goBackTo`). 새 목록 화면을 만들면 이 둘을 쓰기
   - 디자인: MiniMax Colorful Cards 바탕 + 다크 모드 — **`DESIGN.md`**. 색은 `styles.css`의 토큰(`--bg`, `--surface-2`, `--field` 등)만 쓰기(직접 hex 쓰면 다크 모드에서 깨짐). 헤더 `ThemeToggle.jsx`, 첫 테마는 `client/index.html` 스크립트
 - 테스트: `node:test` 단위(`test/`), Playwright E2E(`e2e/`, 가짜 카탈로그 주입 방식)
   - 테스트 중에는 `.env`를 읽지 않음(`NODE_TEST_CONTEXT`, `server/config.js`). 테스트 서버는 항상 `dbFile: ':memory:'`

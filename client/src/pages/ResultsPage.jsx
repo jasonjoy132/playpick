@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
+import { recall, remember, usePageState } from '../lib/pageMemory.js';
 import { useLocation } from '../lib/router.jsx';
 import { useFinder } from '../lib/finder.jsx';
 import { criteriaFromSearch, criteriaToSearch, hasAnyCriteria } from '../lib/criteria.js';
@@ -17,6 +18,7 @@ export function ResultsPage({ options }) {
   const { status, data, error, retry } = useAsync(
     () => (hasAnyCriteria(criteria) ? api.recommendations(qs) : Promise.resolve(null)),
     [qs],
+    'results', // 뒤로 가기로 돌아오면 다시 받지 않음
   );
 
   if (!hasAnyCriteria(criteria)) {
@@ -49,14 +51,18 @@ export function ResultsPage({ options }) {
 function Results({ data, options, qs, criteria }) {
   const { totalGames, warnings = [] } = data;
   // IGDB 전체 검색 + IGDB에 없는 게임위 게임을 한 목록으로. '더 보기'는 섹션별로 서버에서 이어 받음
-  const [full, setFull] = useState(data.fullMatches);
-  const [partial, setPartial] = useState(data.partialMatches);
-  const [cursor, setCursor] = useState({ ...(data.next ?? {}), igdbDone: !!data.igdbDone });
-  const [more, setMore] = useState({ full: !!data.hasMoreFull, partial: !!data.hasMorePartial });
+  // 더 불러온 목록·위치는 기록 항목에 저장 → 상세를 보고 뒤로 오면 떠나기 전 그대로
+  const m = `results:${qs}`;
+  const [full, setFull] = usePageState(`${m}:full`, data.fullMatches);
+  const [partial, setPartial] = usePageState(`${m}:partial`, data.partialMatches);
+  const [cursor, setCursor] = usePageState(`${m}:cursor`, () => ({ ...(data.next ?? {}), igdbDone: !!data.igdbDone }));
+  const [more, setMore] = usePageState(`${m}:more`, () => ({ full: !!data.hasMoreFull, partial: !!data.hasMorePartial }));
   const [loading, setLoading] = useState(null);
   const [moreError, setMoreError] = useState(null);
-  const [fullShown, setFullShown] = useState(PAGE); // 모든 조건 일치 중 화면에 펼친 개수
+  const [fullShown, setFullShown] = usePageState(`${m}:shown-full`, PAGE); // 모든 조건 일치 중 화면에 펼친 개수
   useEffect(() => {
+    if (recall(`${m}:data`) === data) return; // 뒤로 가기로 돌아온 같은 데이터면 저장해 둔 상태 그대로
+    remember(`${m}:data`, data);
     setFull(data.fullMatches);
     setPartial(data.partialMatches);
     setCursor({ ...(data.next ?? {}), igdbDone: !!data.igdbDone });
@@ -139,7 +145,7 @@ function Results({ data, options, qs, criteria }) {
         <ResultSection
           id="partial" title="비슷한 게임"
           desc={`${noFull ? '' : '모든 조건 일치 게임을 다 봤어요. '}일부 조건만 맞는 게임이에요 · ✓ 일치 · ✕ 불일치 · ? 정보 없음`}
-          items={partial} options={options} qs={qs} remote={remote('partial')}
+          items={partial} options={options} qs={qs} remote={remote('partial')} memo={`${m}:shown-partial`}
         />
       )}
     </div>
@@ -148,8 +154,8 @@ function Results({ data, options, qs, criteria }) {
 
 const PAGE = 24;
 
-function ResultSection({ id, title, desc, items, total, totalPlus, options, qs, emptyText, remote, maxAuto = Infinity, shown: shownProp, setShown: setShownProp }) {
-  const [ownShown, setOwnShown] = useState(PAGE);
+function ResultSection({ id, title, desc, items, total, totalPlus, options, qs, emptyText, remote, maxAuto = Infinity, shown: shownProp, setShown: setShownProp, memo }) {
+  const [ownShown, setOwnShown] = usePageState(memo ?? 'results:shown', PAGE);
   // 펼친 개수를 부모가 알아야 하면(모든 조건 일치를 다 봤는지) 부모 상태를 씀
   const shown = shownProp ?? ownShown;
   const setShown = setShownProp ?? setOwnShown;
