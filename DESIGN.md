@@ -1,7 +1,7 @@
 # PlayPick 디자인 가이드
 
-바탕: **Flip7 Card Game** DESIGN.md (designmd.ai/yiujc/flip7-card-game, MIT 라이선스).
-원본은 밝은 색만 정의되어 있어 **다크 모드 색은 PlayPick에서 따로 정함**. 원본의 rpx 값은 px로 절반 환산.
+바탕: designmd.app 라이브러리의 **MiniMax Colorful Cards** 디자인(색·글꼴·모양을 참고해 PlayPick에 맞게 다시 만듦).
+원본은 밝은 색만 있어 **다크 모드 색은 PlayPick에서 따로 정함**.
 
 실제 값은 `client/src/styles.css` 맨 위 `:root`(라이트)·`:root[data-theme="dark"]`(다크) 토큰이 기준.
 새 화면을 만들 때 색을 직접 쓰지 말고 아래 토큰을 쓸 것(어두운 사진·히어로 위의 흰 글자처럼 두 모드에서 같은 경우만 예외).
@@ -10,36 +10,35 @@
 
 | 역할 | 토큰 | 라이트 | 다크 |
 |---|---|---|---|
-| 배경 | `--bg` | #EFF8F7 (Surface Base) | #0E1A1B |
-| 카드 | `--surface-2` | #FFFFFF | #182C2E |
-| 옅은 면(바닥글 등) | `--surface` | #F6FBFA | #132324 |
-| 입력칸·칩 | `--field` | #FFFFFF | #11201F |
-| 글자 / 보조 글자 | `--text` / `--muted` | #1B2B2E / #557173 | #E3F1EF / #9BB6B3 |
-| 선 | `--line` / `--line-strong` | #D3E8E5 / #9FD3CF | #26413F / #3C6662 |
-| 주색(청록) | `--primary` | #1E8C86 (Primary Dark — 흰 글자 대비) | #3CC4BD (Primary Light, 글자는 어둡게 `--primary-ink`) |
-| 주색 밝은 강조 | `--primary-bright` | #2BA8A2 (Primary) | #3CC4BD |
-| 금색 CTA | `--gold`, `--gold-cta` | #FFD23F, 그라데이션 #FFE47A→#FFD23F→#F2C200 | 같음 |
-| 산호(보조 강조) | `--coral` | #EF6C4A | #FF8A6A |
-| 크림(금색 옅은 면) | `--gold-soft` | #FFF8E7 (Cream) | #2C2610 |
+| 배경 | `--bg` | #FAFBFD | #0D0F14 |
+| 카드·패널 | `--surface-2` | #FFFFFF | #1A1E29 |
+| 옅은 면 / 메뉴·검색칸 | `--surface` / `--nav-bg` | #F3F4F6 | #141821 / #1C202B |
+| 입력칸·칩 | `--field` | #FFFFFF | #12151D |
+| 글자 / 보조 글자 | `--text` / `--muted` | #222222 / #45515E | #ECEEF3 / #A3ABB8 |
+| 선 | `--line` | #E5E7EB | #2A2F3C |
+| 주색(파랑) | `--primary` | #1456F0 | #4677FF |
+| 분홍 강조 | `--pink` | #EA5EC1 | #F07CCF |
+| 로고 'Pick'·대표 그라데이션 | `--brand-grad` | 파랑 → 분홍 | 밝은 파랑 → 분홍 |
+| 헤더 CTA(나만의 게임 찾기) | `--cta-bg` / `--cta-ink` | 검정 / 흰 글자 | 밝은 회색 / 검정 글자 |
+| 첫 화면 큰 안내 | `--hero-bg` | #EEF3FF → #FDEEF8 | 짙은 남색 → 짙은 자주 |
+| 카드 파스텔(4개씩 반복) | `--card-1`~`--card-4` | 파랑·초록·크림·분홍 | 같은 색의 짙은 버전 |
+| 로그인 창 | `--panel-bg` | 파랑 → 보라 → 분홍 | 짙게 |
 | 맞음 / 안 맞음 / 정보 없음 | `--ok` / `--bad` / `--unk` (+ `-soft`, `-line`) | 초록 / 빨강 / 노랑 | 밝게 조정 |
-| AI 추정 | `--ai-soft` / `--ai-ink` | 보라 | 밝은 보라 |
-| 별점 | `--star` / `--star-empty` | #F2B705 / #D6E2E1 | #FFD23F / #36504E |
-
-헤더·로그인 창은 청록 그라데이션(`--header-bg`, `--panel-bg`), 다크에서는 짙은 청록.
+| AI 추정 | `--ai-soft` / `--ai-ink` | 분홍 | 밝은 분홍 |
 
 ## 모양
 
-- 둥글기: `--radius-sm` 12px · `--radius` 16px · `--radius-lg` 24px(캐러셀·상세 히어로·창) · 버튼·칩·배지는 알약형(999px)
-- 그림자: 회색 대신 **청록빛 그림자**(`--shadow-card`, `--shadow`), 강조 버튼은 색 빛남(`--glow-teal`, `--glow-gold`)
-- 금색 CTA(`.btn-gold`): 위가 밝은 그라데이션 + 안쪽 윗선 광택
-- 카드 강조: 왼쪽 6px 색 막대(게임 찾기 안내), 섹션 제목 앞 청록 막대
-- 구분선: 표·평점 요약은 점선
-- 제목은 굵게(800), 애니메이션 0.5초 이하, `prefers-reduced-motion`이면 끔
-- 글꼴: Pretendard(없으면 시스템 한글 글꼴)
+- 헤더: 흰 바탕 + 아래 얇은 선. 메뉴는 회색 알약 안에 들어가고, 지금 페이지는 흰 알약
+- 로고: 'Play'는 글자색, 'Pick'은 파랑→분홍 그라데이션
+- 버튼·칩·배지: 알약형(999px). 주 버튼은 파랑 + 파란 빛 그림자, 헤더 CTA는 검정
+- 첫 화면: 큰 안내 상자(「친구들과 같이 할 게임, 몇 명이서 하나요?」)에서 인원·플랫폼을 바로 고름(`HomePage.jsx`의 `HeroFinder`). 장르는 '장르까지 고르기'로 조건 창
+- 게임 카드: 테두리 없이 파스텔 배경(4색 반복), 표지는 안쪽으로 10px 들어가 둥글게, 추천 인원은 흰 알약
+- 둥글기: 12 / 18 / 22(카드) / 24px(큰 상자). 그림자는 보라빛(`--shadow`, `--shadow-card`)
+- 글꼴: Pretendard(없으면 시스템 한글 글꼴), 제목은 굵게(800)
 
 ## 다크 모드
 
 - `<html data-theme="light|dark">`. `client/index.html`의 짧은 스크립트가 **그리기 전에** 정함(깜빡임 방지):
   저장한 값(`localStorage.theme`) → 없으면 기기 설정(`prefers-color-scheme`)
 - 헤더 해·달 버튼(`ThemeToggle.jsx`)으로 바꾸면 저장. 직접 고르기 전에는 기기 설정이 바뀌면 따라감
-- 테스트: `e2e/theme.test.js`
+- 테스트: `e2e/theme.test.js`(다크 모드), `e2e/hero.test.js`(첫 화면 큰 안내)

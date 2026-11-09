@@ -1,5 +1,7 @@
-import { useRef } from 'react';
-import { Link } from '../lib/router.jsx';
+import { useRef, useState } from 'react';
+import { Link, navigate } from '../lib/router.jsx';
+import { criteriaToSearch, hasAnyCriteria } from '../lib/criteria.js';
+import { ChipGroup } from '../components/FinderModal.jsx';
 import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
 import { useFinder } from '../lib/finder.jsx';
@@ -37,9 +39,52 @@ function Row({ title, games, options }) {
   );
 }
 
+/** 첫 화면 큰 안내: 인원·플랫폼을 바로 고르고 추천 목록으로 (장르까지는 '나만의 게임 찾기' 창) */
+function HeroFinder({ options }) {
+  const { openFinder } = useFinder();
+  const [players, setPlayers] = useState(null);
+  const [platforms, setPlatforms] = useState([]);
+  const criteria = { players, platforms, genres: [] };
+  const go = () => (hasAnyCriteria(criteria) ? navigate(`/results?${criteriaToSearch(criteria)}`) : openFinder());
+  const short = (o) => ({ ...o, label: o.value === 1 ? '혼자' : o.label });
+  return (
+    <section className="hero-finder" data-testid="hero-finder" aria-labelledby="hero-title">
+      <h1 id="hero-title">
+        친구들과 같이 할 게임,
+        <br />
+        몇 명이서 하나요?
+      </h1>
+      <p>인원·플랫폼만 고르면 같이 하기 좋은 게임을 찾아 드려요.</p>
+      <ChipGroup
+        legend={<span className="sr-only">함께할 인원</span>}
+        name="hero-players"
+        type="radio"
+        options={(options?.players ?? []).map(short)}
+        isChecked={(v) => players === v}
+        onToggle={(v) => setPlayers((p) => (p === v ? null : v))}
+      />
+      <ChipGroup
+        legend={<span className="sr-only">플랫폼</span>}
+        name="hero-platforms"
+        type="checkbox"
+        options={options?.platforms ?? []}
+        isChecked={(v) => platforms.includes(v)}
+        onToggle={(v) => setPlatforms((l) => (l.includes(v) ? l.filter((x) => x !== v) : [...l, v]))}
+      />
+      <div className="hero-actions">
+        <button type="button" className="btn btn-primary btn-lg" onClick={go} data-testid="hero-go">
+          추천 게임 찾기 →
+        </button>
+        <button type="button" className="link-btn" onClick={() => openFinder(criteria)}>
+          장르까지 고르기
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function HomePage({ options }) {
   const { status, data, error, retry } = useAsync(() => api.featured(), []);
-  const { openFinder } = useFinder();
   const { user, ready } = useAuth();
 
   if (status === 'loading') return <Loading message="추천 게임을 불러오는 중이에요…" />;
@@ -52,18 +97,10 @@ export function HomePage({ options }) {
   return (
     <div className="home">
       <Warnings warnings={warnings} />
+      <HeroFinder options={options} />
       <div className="home-grid">
         <div className="home-main">
           <Carousel games={slides} options={options} />
-          <section className="finder-cta">
-            <div>
-              <h2>누구와, 어디서, 어떤 게임을 할까요?</h2>
-              <p className="muted">함께할 인원·플랫폼·장르를 고르면 딱 맞는 게임을 찾아 드려요.</p>
-            </div>
-            <button type="button" className="btn btn-primary btn-lg" onClick={() => openFinder()}>
-              나만의 게임 찾기
-            </button>
-          </section>
         </div>
         <aside className="home-side" aria-label="계정">
           {ready && (user ? <ProfilePanel /> : <LoginPanel />)}

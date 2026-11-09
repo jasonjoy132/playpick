@@ -18,7 +18,9 @@ export function Logo({ size = 30 }) {
   return (
     <span className="logo">
       <LogoMark size={size} />
-      <span className="logo-text">PlayPick</span>
+      <span className="logo-text">
+        Play<span className="logo-pick">Pick</span>
+      </span>
     </span>
   );
 }

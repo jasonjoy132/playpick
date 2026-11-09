@@ -21,7 +21,7 @@
 - 서버: `node:http`(프레임워크 없음) — `server/index.js` → `server/app.js`(모든 API 라우트)
 - DB: `node:sqlite`(SQLite, 동기 API) — `.data/playpick.db`, 스키마·열 추가는 `server/db.js`(시작할 때 자동 생성·보충)
 - 화면: React 19 + esbuild(`scripts/build.mjs`, `client/public` 파일은 `client/dist`로 평평하게 복사), 자체 라우터 `client/src/lib/router.jsx`
-  - 디자인: Flip7(MIT) 바탕 + 다크 모드 — **`DESIGN.md`**. 색은 `styles.css`의 토큰(`--bg`, `--surface-2`, `--field` 등)만 쓰기(직접 hex 쓰면 다크 모드에서 깨짐). 헤더 `ThemeToggle.jsx`, 첫 테마는 `client/index.html` 스크립트
+  - 디자인: MiniMax Colorful Cards 바탕 + 다크 모드 — **`DESIGN.md`**. 색은 `styles.css`의 토큰(`--bg`, `--surface-2`, `--field` 등)만 쓰기(직접 hex 쓰면 다크 모드에서 깨짐). 헤더 `ThemeToggle.jsx`, 첫 테마는 `client/index.html` 스크립트
 - 테스트: `node:test` 단위(`test/`), Playwright E2E(`e2e/`, 가짜 카탈로그 주입 방식)
   - 테스트 중에는 `.env`를 읽지 않음(`NODE_TEST_CONTEXT`, `server/config.js`). 테스트 서버는 항상 `dbFile: ':memory:'`
   - E2E의 '더 보기'는 `dispatchEvent('click')`으로 누르기(`click()`은 스크롤해서 자동 불러오기와 겹침)

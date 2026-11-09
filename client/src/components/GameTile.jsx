@@ -15,7 +15,8 @@ export function GameTile({ game, options, search, evaluation, size = 'md', rank,
   const href = `/games/${encodeURIComponent(game.id)}${search ? `?${search}` : ''}`;
   const platforms = labelOf(game.platforms, options?.platforms);
   const genres = labelOf(game.genres, options?.genres);
-  const meta = [shortPlayers(game), genres?.slice(0, 2).join('·')].filter(Boolean).join(' · ');
+  const players = shortPlayers(game)?.replace(/\s*\(싱글 플레이\)/, ''); // 카드 알약은 짧게 ('(AI)' 표시는 남김)
+  const meta = genres?.slice(0, 2).join('·');
   return (
     <article className={`tile tile-${size}`} data-testid="game-card" data-game-id={game.id}>
       <div className="tile-cover">
@@ -50,7 +51,8 @@ export function GameTile({ game, options, search, evaluation, size = 'md', rank,
           <p className="tile-sub">{[game.originalTitle, game.releaseDate?.slice(0, 4)].filter(Boolean).join(' · ')}</p>
         )}
         {note && <p className="tile-note">{note}</p>}
-        <p className="tile-meta">{meta || '인원·장르 정보 없음'}</p>
+        <span className="tile-players">{players ? `추천 ${players}` : '인원 정보 없음'}</span>
+        {meta && <p className="tile-meta">{meta}</p>}
         <RatingPair global={game.globalRating} member={game.userRating} />
         {evaluation && <MatchBadges evaluation={evaluation} compact />}
       </div>
