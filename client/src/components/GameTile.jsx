@@ -10,17 +10,21 @@ function labelOf(values, options) {
   return values.map((v) => options.find((o) => o.value === v)?.label || v);
 }
 
-/** 표지 중심 게임 카드 (첫 화면·검색·추천 목록 공통) */
-export function GameTile({ game, options, search, evaluation, size = 'md', rank, note }) {
+/** 표지 중심 게임 카드 (첫 화면·검색·추천 목록 공통). wide: 가로 그림(IGDB 아트워크·스크린샷)이 있으면 가로 카드 */
+export function GameTile({ game, options, search, evaluation, size = 'md', rank, note, wide = false }) {
   const href = `/games/${encodeURIComponent(game.id)}${search ? `?${search}` : ''}`;
   const platforms = labelOf(game.platforms, options?.platforms);
   const genres = labelOf(game.genres, options?.genres);
   const players = shortPlayers(game)?.replace(/\s*\(싱글 플레이\)/, ''); // 카드 알약은 짧게 ('(AI)' 표시는 남김)
   const meta = genres?.slice(0, 2).join('·');
   return (
-    <article className={`tile tile-${size}`} data-testid="game-card" data-game-id={game.id}>
+    <article className={`tile tile-${size}${wide ? ' tile-wide' : ''}`} data-testid="game-card" data-game-id={game.id}>
       <div className="tile-cover">
-        <Cover game={game} />
+        {wide && game.bannerUrl ? (
+          <img className="cover" src={game.bannerUrl} alt={`${game.title} 게임 화면`} loading="lazy" referrerPolicy="no-referrer" />
+        ) : (
+          <Cover game={game} />
+        )}
         {rank != null && (
           <span className={`rank${rank <= 3 ? ' is-top' : ''}`} aria-label={`${rank}위`}>
             {rank}
@@ -51,9 +55,11 @@ export function GameTile({ game, options, search, evaluation, size = 'md', rank,
           <p className="tile-sub">{[game.originalTitle, game.releaseDate?.slice(0, 4)].filter(Boolean).join(' · ')}</p>
         )}
         {note && <p className="tile-note">{note}</p>}
-        <span className="tile-players">{players ? `추천 ${players}` : '인원 정보 없음'}</span>
         {meta && <p className="tile-meta">{meta}</p>}
-        <RatingPair global={game.globalRating} member={game.userRating} />
+        <div className="tile-row">
+          <span className="tile-players">{players ? `추천 ${players}` : '인원 정보 없음'}</span>
+          <RatingPair global={game.globalRating} member={game.userRating} />
+        </div>
         {evaluation && <MatchBadges evaluation={evaluation} compact />}
       </div>
     </article>
