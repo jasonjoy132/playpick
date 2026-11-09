@@ -8,6 +8,7 @@ import { Avatar } from '../components/Avatar.jsx';
 import { BadgeIcon, NameBadge, UserBadge } from '../components/Badge.jsx';
 import { BadgePicker } from '../components/BadgePicker.jsx';
 import { Cover } from '../components/Cover.jsx';
+import { EditedList } from '../components/AdminEdit.jsx';
 import { RatingBadge, StarsDisplay } from '../components/Stars.jsx';
 import { ErrorState, Loading } from '../components/Status.jsx';
 
@@ -391,7 +392,7 @@ const fixText = (f = {}) =>
 
 /** 세 API 결과 → 같은 모양의 항목 (최신순) */
 function toSubItems([games, images, reportsList]) {
-  const base = (s) => ({ id: s.id, status: s.status, createdAt: s.createdAt, reviewedAt: s.reviewedAt, rejectReason: s.rejectReason });
+  const base = (s) => ({ id: s.id, status: s.status, createdAt: s.createdAt, reviewedAt: s.reviewedAt, rejectReason: s.rejectReason, edited: s.edited ?? [] });
   return [
     ...games.items.map((s) => ({
       ...base(s),
@@ -558,6 +559,7 @@ function SubmissionsSection() {
                   <p className="sub-top">
                     <span className="sub-type">{TYPE_NAME[s.type]}</span>
                     <span className={`pill ${cls}`}>{name}</span>
+                    {s.status === 'approved' && s.edited.length > 0 && <span className="pill pill-user">관리자가 일부 수정</span>}
                   </p>
                   <h3 className="sub-title">{s.link ? <Link to={s.link}>{s.title}</Link> : s.title}</h3>
                   <p className="sub-what">{s.what}</p>
@@ -571,6 +573,7 @@ function SubmissionsSection() {
                     </p>
                   )}
                   {s.status === 'approved' && <p className="sub-done">{s.done}</p>}
+                  {s.status === 'approved' && <EditedList edited={s.edited} title="관리자가 이렇게 고쳐서 반영했어요" />}
                 </div>
                 {s.status === 'pending' && (
                   <button type="button" className="btn btn-ghost btn-sm danger sub-cancel" onClick={() => cancel(s)}>

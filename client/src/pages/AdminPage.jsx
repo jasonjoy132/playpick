@@ -5,6 +5,7 @@ import { useAsync } from '../lib/useAsync.js';
 import { useAuth } from '../lib/auth.jsx';
 import { Link } from '../lib/router.jsx';
 import { ErrorState, Loading } from '../components/Status.jsx';
+import { EditedList, FixEditForm, SubmissionEditForm } from '../components/AdminEdit.jsx';
 
 const TABS = [
   ['pending', '검토 중'],
@@ -168,6 +169,23 @@ function Decide({ item, onApprove, onReject, approveLabel, onChanged, testid = '
 /** 서비스 종료·정보 수정 제보 */
 function ReportCard({ item, onChanged }) {
   const fix = item.fix || {};
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const canEdit = item.kind === 'fix' && item.status !== 'rejected';
+  const save = async (edits) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await (item.status === 'approved' ? api.editReport(item.id, edits) : api.approveReport(item.id, edits));
+      setEditing(false);
+      setBusy(false);
+      onChanged();
+    } catch (e) {
+      setError(e.message);
+      setBusy(false);
+    }
+  };
   return (
     <article className="admin-card panel admin-card-wide" data-testid="admin-report-card">
       <div className="admin-card-body">
@@ -205,11 +223,31 @@ function ReportCard({ item, onChanged }) {
         )}
         {item.note && <p className="admin-summary">{item.note}</p>}
         {item.rejectReason && <p className="form-error">거절 사유: {item.rejectReason}</p>}
-        <Decide
-          item={item} onChanged={onChanged} testid="approve-report"
-          approveLabel={item.kind === 'ended' ? '승인 (목록에서 숨김)' : '승인 (정보 반영)'}
-          onApprove={() => api.approveReport(item.id)} onReject={(reason) => api.rejectReport(item.id, reason)}
-        />
+        <EditedList edited={item.edited} />
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        {editing ? (
+          <FixEditForm
+            item={item} busy={busy} onCancel={() => setEditing(false)} onSubmit={save}
+            submitLabel={item.status === 'approved' ? '고친 내용 저장' : '고친 값으로 승인'}
+          />
+        ) : (
+          <>
+            <Decide
+              item={item} onChanged={onChanged} testid="approve-report"
+              approveLabel={item.kind === 'ended' ? '승인 (목록에서 숨김)' : '승인 (정보 반영)'}
+              onApprove={() => api.approveReport(item.id)} onReject={(reason) => api.rejectReport(item.id, reason)}
+            />
+            {canEdit && (
+              <button type="button" className="link-btn admin-edit-open" onClick={() => setEditing(true)} data-testid="open-edit">
+                {item.status === 'approved' ? '반영된 값 고치기' : '일부만 틀렸나요? 고쳐서 승인'}
+              </button>
+            )}
+          </>
+        )}
       </div>
     </article>
   );
@@ -281,6 +319,7 @@ function ReviewReportCard({ item, onChanged }) {
 
 function SubmissionCard({ item, options, onChanged }) {
   const [rejecting, setRejecting] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -350,7 +389,20 @@ function SubmissionCard({ item, options, onChanged }) {
             {error}
           </p>
         )}
-        {rejecting ? (
+        <EditedList edited={item.edited} />
+        {editing ? (
+          <SubmissionEditForm
+            item={item} options={options} busy={busy} onCancel={() => setEditing(false)}
+            submitLabel={item.status === 'approved' ? '고친 내용 저장' : '고친 값으로 승인'}
+            onSubmit={(edits) =>
+              act(async () => {
+                await (item.status === 'approved' ? api.editSubmission(item.id, edits) : api.approveSubmission(item.id, edits));
+                setEditing(false); // 승인된 목록에 그대로 남는 경우(고치기) 닫기
+                setBusy(false);
+              })
+            }
+          />
+        ) : rejecting ? (
           <div className="reject-box">
             <label htmlFor={`reason-${item.id}`} className="small">
               {item.status === 'approved' ? '내리는 이유' : '거절 사유'} (제보한 회원에게 보여요)
@@ -375,6 +427,11 @@ function SubmissionCard({ item, options, onChanged }) {
             {item.status !== 'rejected' && (
               <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setRejecting(true)} data-testid="reject">
                 {item.status === 'approved' ? '내리기' : '거절'}
+              </button>
+            )}
+            {item.status !== 'rejected' && (
+              <button type="button" className="link-btn admin-edit-open" onClick={() => setEditing(true)} data-testid="open-edit">
+                {item.status === 'approved' ? '게임 정보 고치기' : '일부만 틀렸나요? 고쳐서 승인'}
               </button>
             )}
           </div>

@@ -78,6 +78,7 @@
 
 - 계정·세션·비밀번호 재설정(메일: Brevo), 찜, 별점·리뷰(1인 1리뷰, 수정 불가·삭제 후 재작성), 최근 본 게임
 - **제보**(모두 로그인 필요, 관리자 승인 후 반영, 관리자가 직접 올리면 바로 승인)
+  - **고쳐서 승인**: 게임 제보·정보 수정 제보는 관리자가 틀린 칸만 고쳐 승인(이미 승인된 것도 '고치기'). 회원이 낸 원래 값은 `original_json`·`original_payload`에, 바뀐 칸은 응답 `edited`(원래 → 반영)로 관리자 카드·회원 '내 제보'·알림에 보임. 표지 사진·서비스 종료 제보는 승인·거절만
   - 게임 제보 `submissions.js` → 승인 시 `user-<번호>` 게임
   - 표지 사진 제보 `imageSubmissions.js`(출처 주소 필수)
   - 서비스 종료 제보·정보 수정 제보(추천 인원·플레이 시간·구매처) `reports.js`
@@ -92,7 +93,8 @@
 
 ## 남은 일 (우선순위)
 
-1. **Vercel + Supabase 배포 전환** (학교 과제, Vercel Hobby 요금제)
+1. **배포** — 계획은 `docs/deploy-plan.md`(Vercel Hobby + Turso 무료, 사진도 DB에). 아래는 예전 메모
+   **Vercel + Supabase 배포 전환** (학교 과제, Vercel Hobby 요금제)
    - DB를 Supabase(PostgreSQL)로: 지금 `node:sqlite` 동기 호출을 전부 `await`로, SQL 문법(`?`→`$1`, `INSERT OR IGNORE`→`ON CONFLICT`, 자동 증가 등) 변환. Vercel에서는 Supabase **연결 풀러 주소(6543)** 사용. 로컬도 Supabase로 통일할지 사용자와 결정
    - 업로드 이미지(`.data/` 아래 프로필·제보 사진) → Supabase Storage
    - 게관위 색인 `.cache/grac-index.json`(git 제외 중)을 배포에 포함하는 방법 정하기(서버 시작마다 3만 건 다시 받으면 너무 느림)

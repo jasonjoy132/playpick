@@ -1198,3 +1198,19 @@ h1, h2 { font-weight: 800; letter-spacing: -0.02em; }
   .cta-long { display: none; }
   .site-header .header-inner { column-gap: 6px; }
 }
+/* ── 관리자 고쳐서 승인 · 고친 내용 ── */
+.admin-edit { display: grid; gap: 12px; margin-top: 8px; padding: 16px; border-radius: 14px; border: 1.5px dashed var(--line-strong); background: var(--surface); }
+.admin-edit-head { margin: 0; font-size: 0.86rem; color: var(--muted); }
+.admin-edit textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; background: var(--field); color: var(--text); resize: vertical; }
+.admin-edit .is-changed input, .admin-edit .is-changed textarea, .admin-edit .is-changed .chips { border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus-ring); border-radius: 10px; }
+.admin-edit .is-changed .chips { padding: 6px; }
+.changed-tag { margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--primary-soft); color: var(--primary); font-size: 0.72rem; font-weight: 800; vertical-align: middle; }
+.admin-edit-count { margin: 0; font-size: 0.84rem; font-weight: 700; color: var(--primary); }
+.admin-edit-open { margin-top: 6px; font-size: 0.86rem; font-weight: 700; text-decoration: none; }
+.admin-edit-open:hover { text-decoration: underline; }
+.edited { margin: 6px 0 0; padding: 8px 12px; border-radius: 10px; background: var(--ai-soft); border: 1px solid var(--ai-line); font-size: 0.86rem; }
+.edited-title { margin: 0 0 4px; font-weight: 700; color: var(--ai-ink); }
+.edited ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.edited-label { font-weight: 700; margin-right: 4px; }
+.edited del { color: var(--muted); }
+.edited ins { text-decoration: none; font-weight: 700; color: var(--text); }

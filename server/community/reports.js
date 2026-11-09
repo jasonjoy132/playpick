@@ -49,6 +49,20 @@ export function validateFix(input) {
   return out;
 }
 
+/** 정보 수정 값 → 화면 문구, 바뀐 칸 */
+const FIX_FIELDS = [
+  ['players', '추천 인원', (f) => (f.players ? `${f.players.min}~${f.players.max}명` : null)],
+  ['hours', '플레이 시간', (f) => (f.hours ? `${f.hours}시간` : null)],
+  ['storeUrl', '구매처', (f) => f.storeUrl ?? null],
+];
+export function diffFix(a, b) {
+  return FIX_FIELDS.flatMap(([field, label, show]) => {
+    const from = show(a) ?? '(없음)';
+    const to = show(b) ?? '(반영 안 함)';
+    return show(a) === show(b) ? [] : [{ field, label, from, to }];
+  });
+}
+
 export function createReports(db, { now = () => Date.now() } = {}) {
   const q = {
     insert: db.prepare(`INSERT INTO game_reports (user_id, kind, game_id, game_title, payload, source_url, note, status, created_at, reviewed_at, reviewed_by)
@@ -61,6 +75,8 @@ export function createReports(db, { now = () => Date.now() } = {}) {
     counts: db.prepare('SELECT status, COUNT(*) AS n FROM game_reports WHERE kind = ? GROUP BY status'),
     approved: db.prepare(`SELECT g.*, u.nickname FROM game_reports g LEFT JOIN users u ON u.id = g.user_id WHERE g.status = 'approved' ORDER BY g.reviewed_at, g.id`),
     setStatus: db.prepare('UPDATE game_reports SET status = ?, reject_reason = ?, reviewed_at = ?, reviewed_by = ? WHERE id = ?'),
+    setPayload: db.prepare('UPDATE game_reports SET payload = ? WHERE id = ?'),
+    setOriginal: db.prepare('UPDATE game_reports SET original_payload = ? WHERE id = ? AND original_payload IS NULL'),
     del: db.prepare('DELETE FROM game_reports WHERE id = ?'),
 
     review: db.prepare('SELECT id, user_id, hidden_at FROM reviews WHERE id = ?'),
@@ -96,7 +112,26 @@ export function createReports(db, { now = () => Date.now() } = {}) {
     createdAt: r.created_at,
     reviewedAt: r.reviewed_at,
     submitter: r.nickname ?? null,
+    // 관리자가 고친 칸 (회원이 낸 값 → 반영된 값)
+    edited: r.original_payload ? diffFix(JSON.parse(r.original_payload), JSON.parse(r.payload || '{}')) : [],
   });
+
+  /**
+   * 정보 수정 제보를 관리자가 고친 값으로 (비운 칸은 반영하지 않음). 바뀐 칸 목록을 돌려줌
+   * edits: { playersMin, playersMax, hours, storeUrl } — 화면은 남길 칸을 모두 보냄
+   */
+  function applyEdits(r, edits) {
+    if (!edits || typeof edits !== 'object') return [];
+    if (r.kind !== 'fix') throw fail('BAD_REQUEST', '서비스 종료 제보는 고칠 내용이 없어요. 승인 또는 거절만 할 수 있어요.');
+    const cur = JSON.parse(r.payload || '{}');
+    const next = validateFix(edits);
+    if (!Object.keys(next).length) throw fail('INVALID_REPORT', '반영할 내용이 하나도 없어요. 거절해 주세요.');
+    const diff = diffFix(cur, next);
+    if (!diff.length) return [];
+    q.setOriginal.run(r.payload || '{}', r.id);
+    q.setPayload.run(JSON.stringify(next), r.id);
+    return diff;
+  }
 
   /** 승인된 제보 → 게임별 반영 값 (같은 항목은 나중에 승인된 것이 우선) */
   function overrides() {
@@ -182,12 +217,24 @@ export function createReports(db, { now = () => Date.now() } = {}) {
       for (const c of q.counts.all(kind)) counts[c.status] = c.n;
       return { items: q.byStatus.all(kind, status).map(toItem), counts };
     },
-    approveGameReport(id, adminId) {
+    /** 승인 (edits: 관리자가 고친 정보 수정 값). changes: 이번에 고친 칸 */
+    approveGameReport(id, adminId, edits) {
       const r = q.byId.get(Number(id));
       if (!r) throw fail('NOT_FOUND', '제보를 찾을 수 없어요.', 404);
+      const changes = applyEdits(r, edits);
       q.setStatus.run('approved', null, iso(), adminId, r.id);
       changed();
-      return toItem(q.byId.get(r.id));
+      return { ...toItem(q.byId.get(r.id)), changes };
+    },
+    /** 이미 승인된 정보 수정 제보 고치기 (알림 없음) */
+    editGameReport(id, edits) {
+      const r = q.byId.get(Number(id));
+      if (!r) throw fail('NOT_FOUND', '제보를 찾을 수 없어요.', 404);
+      if (r.status !== 'approved') throw fail('NOT_APPROVED', '승인된 제보만 고칠 수 있어요. 검토 중이면 ‘고쳐서 승인’을 써 주세요.', 409);
+      const changes = applyEdits(r, edits);
+      if (!changes.length) throw fail('NO_CHANGE', '바뀐 내용이 없어요.');
+      changed();
+      return { ...toItem(q.byId.get(r.id)), changes };
     },
     /** 거절 또는 승인 취소(반영 되돌리기) */
     rejectGameReport(id, adminId, reason) {

@@ -158,6 +158,8 @@ const COLUMNS = [
   ['reviews', 'game_title', 'TEXT'],
   ['reviews', 'game_image', 'TEXT'],
   ['reviews', 'hidden_at', 'TEXT'], // 신고로 숨긴 리뷰
+  ['game_submissions', 'original_json', 'TEXT'], // 관리자가 고쳐서 승인했을 때 회원이 낸 원래 값
+  ['game_reports', 'original_payload', 'TEXT'], // 관리자가 고쳐서 승인한 정보 수정 제보의 원래 값
 ];
 
 export function openDb(file) {

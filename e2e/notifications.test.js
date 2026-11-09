@@ -94,3 +94,32 @@ test('모바일 폭: 알림 패널이 화면 안에 들어옴', async () => {
   assert.ok(box.x >= 0 && box.x + box.width <= 375, `패널이 화면 안 (${box.x}, ${box.width})`);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, '가로 스크롤 없음');
 });
+
+test("관리자 '고쳐서 승인' → 상세에 고친 값, 회원 '내 제보'에 고친 내용", async () => {
+  const user = await signedIn({ loginId: 'e2e_fixme', password: 'secret123', nickname: '고침받는이', email: 'fixme@example.com' });
+  const admin = await signedIn({ loginId: 'e2e_admin2', password: 'secret123', nickname: '관리자2', email: 'admin@example.com' }).catch(() => null);
+  // 같은 관리자 이메일로 이미 가입돼 있으면 로그인
+  const adminPage = admin ?? (await (await browser.newContext({ locale: 'ko-KR', viewport: { width: 1200, height: 900 } })).newPage());
+  if (!admin) await adminPage.request.post(`${base}/api/auth/login`, { data: { loginId: 'e2e_admin', password: 'secret123' }, headers: H });
+
+  const s = await user.request.post(`${base}/api/submissions`, { data: { title: '고쳐질 협동 게임', platforms: ['pc'], genres: ['puzzle'], playersMin: 2, playersMax: 8 }, headers: H });
+  const { item } = await s.json();
+
+  await adminPage.goto(`${base}/admin`);
+  const card = adminPage.getByTestId('admin-card').filter({ hasText: '고쳐질 협동 게임' });
+  await card.getByTestId('open-edit').click();
+  const form = card.getByTestId('edit-form');
+  assert.equal(await form.getByTestId('confirm-edit').isDisabled(), true, '바뀐 게 없으면 막힘');
+  await form.getByLabel('고칠 최대 인원').fill('4');
+  assert.match(await form.innerText(), /바뀐 칸 1개/);
+  await form.getByTestId('confirm-edit').click();
+  await card.waitFor({ state: 'detached' });
+
+  await user.goto(`${base}/games/user-${item.id}`);
+  assert.match(await user.getByTestId('game-detail').innerText(), /추천 인원\s*2~4명/);
+  await user.goto(`${base}/mypage/submissions`);
+  const row = user.getByTestId('submission-row').filter({ hasText: '고쳐질 협동 게임' });
+  assert.match(await row.innerText(), /관리자가 일부 수정[\s\S]*추천 인원\s*2~8명\s*→\s*2~4명/);
+  await user.getByTestId('notif-bell').click();
+  await user.getByTestId('notif-item').filter({ hasText: '일부 수정되어 승인됐어요' }).waitFor(); // 새 칭호 알림이 그 위에 올 수 있음
+});

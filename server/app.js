@@ -59,6 +59,9 @@ function readCookies(req) {
   return out;
 }
 
+/** 본문이 없어도 되는 요청 (승인 등): JSON이 아니면 빈 객체 */
+const optionalJson = (req) => (String(req.headers['content-type'] || '').includes('application/json') ? readJson(req) : Promise.resolve({}));
+
 async function readJson(req, limit = 16 * 1024) {
   if (!String(req.headers['content-type'] || '').includes('application/json')) throw apiError('BAD_REQUEST', 'JSON 형식으로 보내 주세요.', 415);
   let size = 0;
@@ -456,19 +459,23 @@ const SLIDES = 5;
       const u = requireUser();
       if (!u.isAdmin) throw apiError('FORBIDDEN', '관리자만 볼 수 있어요.', 403);
       if (p === '/api/admin/submissions' && method === 'GET') return sendJson(res, 200, submissions.list(url.searchParams.get('status') || 'pending'));
-      const am = p.match(/^\/api\/admin\/submissions\/(\d{1,9})\/(approve|reject)$/);
+      const am = p.match(/^\/api\/admin\/submissions\/(\d{1,9})\/(approve|reject|edit)$/);
       if (am && method === 'POST') {
+        const body = await optionalJson(req);
+        if (am[2] === 'edit') return sendJson(res, 200, { item: submissions.edit(am[1], body.edits) }); // 이미 승인된 것 고치기(알림 없음)
         const ctx = notes.beforeReview('submission', am[1]);
-        const item = am[2] === 'approve' ? submissions.approve(am[1], u.id) : submissions.reject(am[1], u.id, (await readJson(req)).reason);
-        notes.afterReview(ctx, { status: item.status, reason: item.rejectReason, adminId: u.id, gameId: item.gameId ? `/games/${item.gameId}` : null });
+        const item = am[2] === 'approve' ? submissions.approve(am[1], u.id, body.edits) : submissions.reject(am[1], u.id, body.reason);
+        notes.afterReview(ctx, { status: item.status, reason: item.rejectReason, adminId: u.id, gameId: item.gameId ? `/games/${item.gameId}` : null, changes: item.changes });
         return sendJson(res, 200, { item });
       }
       if (p === '/api/admin/reports' && method === 'GET') return sendJson(res, 200, reports.listGameReports(url.searchParams.get('kind') || 'ended', url.searchParams.get('status') || 'pending'));
-      const arm = p.match(/^\/api\/admin\/reports\/(\d{1,9})\/(approve|reject)$/);
+      const arm = p.match(/^\/api\/admin\/reports\/(\d{1,9})\/(approve|reject|edit)$/);
       if (arm && method === 'POST') {
+        const body = await optionalJson(req);
+        if (arm[2] === 'edit') return sendJson(res, 200, { item: reports.editGameReport(arm[1], body.edits) });
         const ctx = notes.beforeReview('report', arm[1]);
-        const item = arm[2] === 'approve' ? reports.approveGameReport(arm[1], u.id) : reports.rejectGameReport(arm[1], u.id, (await readJson(req)).reason);
-        notes.afterReview(ctx, { status: item.status, reason: item.rejectReason, adminId: u.id });
+        const item = arm[2] === 'approve' ? reports.approveGameReport(arm[1], u.id, body.edits) : reports.rejectGameReport(arm[1], u.id, body.reason);
+        notes.afterReview(ctx, { status: item.status, reason: item.rejectReason, adminId: u.id, changes: item.changes });
         return sendJson(res, 200, { item });
       }
       if (p === '/api/admin/review-reports' && method === 'GET') return sendJson(res, 200, reports.listReviewReports(url.searchParams.get('status') || 'pending'));

@@ -101,14 +101,18 @@ export function createNotifications(db, { now = () => Date.now(), earnedOf = () 
       return { type, id: Number(id), userId: r.user_id, prev: r.status, title: r.title, gameId: r.game_id, kind: r.kind, before: earnedIds(r.user_id) };
     },
     /** 제보 처리 뒤에 부름: 제보한 사람(본인 처리 제외)과 필요하면 찜한 사람에게 알림 */
-    afterReview(ctx, { status, reason, adminId, gameId }) {
+    afterReview(ctx, { status, reason, adminId, gameId, changes = [] }) {
       if (!ctx || ctx.prev === status) return;
       const label = ctx.type === 'report' ? REPORT_LABEL[ctx.kind] ?? '제보' : TYPES[ctx.type].label;
       const link = gameId ?? (ctx.gameId ? `/games/${ctx.gameId}` : '/mypage/submissions');
       if (ctx.userId != null && ctx.userId !== adminId) {
         if (status === 'approved') {
           const body = { submission: '플레이픽에 게임이 추가됐어요. 고마워요!', image: '게임 카드와 상세 화면에 표지로 나와요. 고마워요!', report: '게임 정보에 반영됐어요. 고마워요!' }[ctx.type];
-          add(ctx.userId, { kind: ctx.type, tone: 'ok', title: `${quote(ctx.title)} ${label}가 승인됐어요`, body, link });
+          if (changes.length) {
+            // 관리자가 일부 고쳐서 승인: 무엇이 바뀌었는지 함께
+            const what = changes.map((c) => `${c.label} ${c.from} → ${c.to}`).join(', ');
+            add(ctx.userId, { kind: ctx.type, tone: 'ok', title: `${quote(ctx.title)} ${label}가 일부 수정되어 승인됐어요`, body: `관리자가 고친 내용: ${what}`, link });
+          } else add(ctx.userId, { kind: ctx.type, tone: 'ok', title: `${quote(ctx.title)} ${label}가 승인됐어요`, body, link });
         } else if (status === 'rejected') {
           const was = ctx.prev === 'approved' ? '승인이 취소됐어요' : '거절됐어요';
           add(ctx.userId, { kind: ctx.type, tone: 'no', title: `${quote(ctx.title)} ${label}가 ${was}`, body: reason ? `사유: ${reason}` : null, link: '/mypage/submissions' });

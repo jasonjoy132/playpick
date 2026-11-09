@@ -173,3 +173,4 @@ test('사용자마다 최근 100개만 남김', () => {
   assert.equal(list.items[0].title, '알림 119');
   assert.equal(list.unread, 100);
 });
+

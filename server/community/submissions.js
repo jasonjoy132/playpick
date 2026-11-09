@@ -29,6 +29,43 @@ const longText = (v, max, label) => {
   return s || null;
 };
 
+const LABEL_OF = new Map([...PLATFORMS, ...GENRES].map((x) => [x.value, x.label]));
+/** 관리자가 고칠 수 있는 칸: [키, 이름, 화면에 보일 값] */
+const EDIT_FIELDS = [
+  ['title', '게임 이름', (v) => v.title],
+  ['originalTitle', '영문(원제) 이름', (v) => v.originalTitle],
+  ['publisher', '개발·유통사', (v) => v.publisher],
+  ['releaseYear', '출시 연도', (v) => (v.releaseYear ? `${v.releaseYear}년` : null)],
+  ['platforms', '플랫폼', (v) => v.platforms.map((x) => LABEL_OF.get(x) ?? x).join('·')],
+  ['genres', '장르', (v) => v.genres.map((x) => LABEL_OF.get(x) ?? x).join('·')],
+  ['players', '추천 인원', (v) => (v.playersMin != null ? `${v.playersMin}~${v.playersMax}명` : null)],
+  ['storeUrl', '구매처', (v) => v.storeUrl],
+  ['summary', '소개', (v) => (v.summary ? (v.summary.length > 40 ? `${v.summary.slice(0, 40)}…` : v.summary) : null)],
+];
+const NONE = '(없음)';
+/** 두 값(validateSubmission 모양)에서 바뀐 칸 → [{ field, label, from, to }] */
+export function diffSubmission(a, b) {
+  return EDIT_FIELDS.flatMap(([field, label, show]) => {
+    const from = show(a) ?? NONE;
+    const to = show(b) ?? NONE;
+    const same = field === 'summary' ? (a.summary ?? null) === (b.summary ?? null) : from === to;
+    return same ? [] : [{ field, label, from, to }];
+  });
+}
+/** DB 행 → validateSubmission 모양 */
+const valuesOf = (r) => ({
+  title: r.title,
+  originalTitle: r.original_title,
+  publisher: r.publisher,
+  releaseYear: r.release_year,
+  platforms: JSON.parse(r.platforms),
+  genres: JSON.parse(r.genres),
+  playersMin: r.players_min,
+  playersMax: r.players_max,
+  storeUrl: r.store_url,
+  summary: r.summary,
+});
+
 /** 제보 입력 검증 → 저장할 값 */
 export function validateSubmission(input, { now = () => Date.now() } = {}) {
   const b = input && typeof input === 'object' ? input : {};
@@ -86,6 +123,9 @@ export function createSubmissions(db, { images, now = () => Date.now() }) {
     counts: db.prepare('SELECT status, COUNT(*) AS n FROM game_submissions GROUP BY status'),
     approved: db.prepare(`SELECT s.*, u.nickname FROM game_submissions s LEFT JOIN users u ON u.id = s.user_id WHERE s.status = 'approved'`),
     setStatus: db.prepare('UPDATE game_submissions SET status = ?, reject_reason = ?, reviewed_at = ?, reviewed_by = ? WHERE id = ?'),
+    update: db.prepare(`UPDATE game_submissions SET title = ?, original_title = ?, publisher = ?, release_year = ?, platforms = ?, genres = ?,
+      players_min = ?, players_max = ?, store_url = ?, summary = ? WHERE id = ?`),
+    setOriginal: db.prepare('UPDATE game_submissions SET original_json = ? WHERE id = ? AND original_json IS NULL'),
     del: db.prepare('DELETE FROM game_submissions WHERE id = ?'),
   };
   let approvedCache = null;
@@ -111,7 +151,21 @@ export function createSubmissions(db, { images, now = () => Date.now() }) {
     reviewedAt: r.reviewed_at,
     submitter: r.nickname ?? null,
     gameId: r.status === 'approved' ? `user-${r.id}` : null,
+    // 관리자가 고친 칸 (회원이 낸 값 → 반영된 값)
+    edited: r.original_json ? diffSubmission(JSON.parse(r.original_json), valuesOf(r)) : [],
   });
+
+  /** 관리자가 고친 값 반영 (회원이 낸 원래 값은 처음 한 번만 기록). 바뀐 칸 목록을 돌려줌 */
+  function applyEdits(r, edits) {
+    if (!edits || typeof edits !== 'object') return [];
+    const cur = valuesOf(r);
+    const v = validateSubmission({ ...cur, ...edits }, { now });
+    const diff = diffSubmission(cur, v);
+    if (!diff.length) return [];
+    q.setOriginal.run(JSON.stringify(cur), r.id);
+    q.update.run(v.title, v.originalTitle, v.publisher, v.releaseYear, JSON.stringify(v.platforms), JSON.stringify(v.genres), v.playersMin, v.playersMax, v.storeUrl, v.summary, r.id);
+    return diff;
+  }
 
   /** 승인된 제보 → 플레이픽 게임 모델 */
   const toGame = (r) => {
@@ -187,12 +241,24 @@ export function createSubmissions(db, { images, now = () => Date.now() }) {
       for (const c of q.counts.all()) counts[c.status] = c.n;
       return { items: q.byStatus.all(status).map(toItem), counts };
     },
-    approve(id, adminId) {
+    /** 승인 (edits: 관리자가 고친 값, 없으면 회원이 낸 그대로). changes: 이번에 고친 칸 */
+    approve(id, adminId, edits) {
       const r = q.byId.get(Number(id));
       if (!r) throw fail('NOT_FOUND', '제보를 찾을 수 없어요.', 404);
+      const changes = applyEdits(r, edits); // 잘못된 값이면 여기서 오류 → 상태 그대로
       q.setStatus.run('approved', null, iso(), adminId, r.id);
       changed();
-      return toItem(q.byId.get(r.id));
+      return { ...toItem(q.byId.get(r.id)), changes };
+    },
+    /** 이미 승인된 제보 고치기 (알림 없음) */
+    edit(id, edits) {
+      const r = q.byId.get(Number(id));
+      if (!r) throw fail('NOT_FOUND', '제보를 찾을 수 없어요.', 404);
+      if (r.status !== 'approved') throw fail('NOT_APPROVED', '승인된 제보만 고칠 수 있어요. 검토 중이면 ‘고쳐서 승인’을 써 주세요.', 409);
+      const changes = applyEdits(r, edits);
+      if (!changes.length) throw fail('NO_CHANGE', '바뀐 내용이 없어요.');
+      changed();
+      return { ...toItem(q.byId.get(r.id)), changes };
     },
     /** 거절(검토 중) 또는 승인 취소(이미 추가된 게임 내리기) */
     reject(id, adminId, reason) {
