@@ -258,7 +258,7 @@ test('결과가 많으면 24개씩 더 보기', async () => {
 test('게임명 검색: 결과 → 상세, 결과 없음', async () => {
   const page = await browser.newPage();
   await page.goto(base);
-  const box = page.getByRole('searchbox', { name: '게임명 검색' });
+  const box = page.getByRole('combobox', { name: '게임명 검색' });
   await box.fill('던전');
   await box.press('Enter');
   await page.waitForURL(/\/search\?q=/);

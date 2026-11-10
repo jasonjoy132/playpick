@@ -7,6 +7,7 @@ import { Avatar } from './Avatar.jsx';
 import { NameBadge } from './Badge.jsx';
 import { ThemeToggle } from './ThemeToggle.jsx';
 import { NotificationBell } from './NotificationBell.jsx';
+import { addRecent, clearRecent, readRecent, removeRecent } from '../lib/recentSearch.js';
 
 const NAV = [
   ['/', '홈'],
@@ -21,18 +22,120 @@ function SearchBox() {
   const { pathname, search } = useLocation();
   const current = pathname === '/search' ? new URLSearchParams(search).get('q') || '' : '';
   const [q, setQ] = useState(current);
+  const [recent, setRecent] = useState(readRecent);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const inputRef = useRef(null);
   useEffect(() => setQ(current), [current]);
+  // 검색 결과 화면으로 바로 들어와도(주소 입력·링크) 최근 검색어에 기록
+  useEffect(() => {
+    if (current.trim()) setRecent(addRecent(current));
+  }, [current]);
+  const t = q.trim().toLowerCase();
+  const shown = t ? recent.filter((x) => x.toLowerCase().includes(t) && x.toLowerCase() !== t) : recent;
+  const isOpen = open && shown.length > 0;
+  const go = (text) => {
+    const v = text.trim();
+    if (!v) return;
+    setRecent(addRecent(v));
+    setQ(v);
+    setOpen(false);
+    setActive(-1);
+    inputRef.current?.blur();
+    navigate(`/search?q=${encodeURIComponent(v)}`);
+  };
   const submit = (e) => {
     e.preventDefault();
-    const t = q.trim();
-    if (t) navigate(`/search?q=${encodeURIComponent(t)}`);
+    go(isOpen && active >= 0 ? shown[active] : q);
+  };
+  const onKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      if (isOpen) e.preventDefault(); // 검색창 기본 동작(입력 지우기) 대신 목록만 닫기
+      setOpen(false);
+      setActive(-1);
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!isOpen) return setOpen(true);
+      e.preventDefault();
+      const d = e.key === 'ArrowDown' ? 1 : -1;
+      // -1(입력창) → 0 … n-1 → -1 로 돌기
+      setActive((i) => ((i + 1 + d + shown.length + 1) % (shown.length + 1)) - 1);
+    }
+  };
+  const remove = (x) => {
+    const next = removeRecent(x);
+    setRecent(next);
+    setActive(-1);
+    inputRef.current?.focus();
   };
   return (
-    <form className="searchbox" role="search" onSubmit={submit}>
+    <form
+      className="searchbox"
+      role="search"
+      onSubmit={submit}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+          setOpen(false);
+          setActive(-1);
+        }
+      }}
+    >
       <span className="searchbox-icon" aria-hidden="true">
         ⌕
       </span>
-      <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="게임 검색" aria-label="게임명 검색" maxLength={50} />
+      <input
+        ref={inputRef}
+        type="search"
+        value={q}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setOpen(true);
+          setActive(-1);
+        }}
+        onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
+        onKeyDown={onKeyDown}
+        placeholder="게임 검색"
+        aria-label="게임명 검색"
+        maxLength={50}
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={isOpen}
+        aria-controls="search-recent-list"
+        aria-autocomplete="list"
+        aria-activedescendant={isOpen && active >= 0 && active < shown.length ? `search-recent-${active}` : undefined}
+      />
+      {isOpen && (
+        <div className="search-recent" data-testid="search-recent" onMouseDown={(e) => e.preventDefault()} /* 누르는 동안 입력창 포커스 유지 */>
+          <div className="search-recent-head">
+            <span>최근 검색어</span>
+            <button
+              type="button"
+              className="link-btn"
+              data-testid="search-recent-clear"
+              onClick={() => {
+                setRecent(clearRecent());
+                setOpen(false);
+                inputRef.current?.focus();
+              }}
+            >
+              전체 삭제
+            </button>
+          </div>
+          <ul id="search-recent-list" role="listbox" aria-label="최근 검색어">
+            {shown.map((x, i) => (
+              <li key={x} id={`search-recent-${i}`} role="option" aria-selected={i === active} className={`search-recent-item${i === active ? ' is-active' : ''}`} data-testid="search-recent-item">
+                <button type="button" className="search-recent-go" tabIndex={-1} onClick={() => go(x)} onMouseEnter={() => setActive(i)}>
+                  <span aria-hidden="true">🕘</span>
+                  <span className="search-recent-text">{x}</span>
+                </button>
+                <button type="button" className="search-recent-remove" tabIndex={-1} aria-label={`‘${x}’ 지우기`} data-testid="search-recent-remove" onClick={() => remove(x)}>
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </form>
   );
 }

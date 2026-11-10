@@ -1271,3 +1271,16 @@ h1, h2 { font-weight: 800; letter-spacing: -0.02em; }
   .contrib-top-1 { padding-top: 18px; }
   .home-contrib { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 112px; overflow-x: auto; padding-bottom: 4px; }
 }
+
+/* ── 헤더 검색창 최근 검색어 ── */
+.search-recent { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 30; padding: 6px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); color: var(--text); }
+.search-recent-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px 8px; font-size: 0.82rem; font-weight: 700; color: var(--muted); }
+.search-recent-head .link-btn { font-size: 0.8rem; color: var(--muted); }
+.search-recent ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.search-recent-item { display: flex; align-items: center; min-width: 0; border-radius: 10px; }
+.search-recent-item.is-active, .search-recent-item:hover { background: var(--nav-bg); }
+.search-recent-go { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 0; background: none; color: var(--text); font: inherit; font-size: 0.95rem; text-align: left; cursor: pointer; }
+.search-recent-go span:first-child { font-size: 0.85rem; opacity: 0.7; }
+.search-recent-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-recent-remove { flex-shrink: 0; width: 32px; height: 32px; margin-right: 4px; border: 0; border-radius: 50%; background: none; color: var(--muted); font-size: 1.1rem; line-height: 1; cursor: pointer; }
+.search-recent-remove:hover { background: var(--surface-2); color: var(--text); }
