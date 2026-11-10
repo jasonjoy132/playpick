@@ -102,6 +102,6 @@
 
 ## 남은 일 (우선순위)
 
-1. **배포** — 코드 준비는 `deploy` 브랜치(계획·사용자 할 일은 `docs/deploy-plan.md`). 남은 것: 사용자가 Turso·Vercel 가입하고 환경 변수 입력 → `deploy` push → 미리 보기 주소에서 확인 → main에 합치기
+1. **배포됨** — https://playpick-sooty.vercel.app (Vercel Hobby + Turso, main push → 자동 배포, 안내 `docs/deploy-plan.md`). 남은 확인: 관리자 이메일로 먼저 가입, 가입·로그인·찜·리뷰·사진 올리기·비밀번호 메일·`/admin`, 다시 배포해도 회원·사진이 남는지
 2. GitHub: 공개 저장소 `jasonjoy132/playpick`(main). push 전 `git status`로 `.env`·`.data/`·`.cache/` 안 올라가는지 확인
 3. (선택) 모바일 화면 점검, 게임 상세 페이지 제목·미리보기, 친구와 같이 고르는 '파티 투표'
