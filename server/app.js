@@ -174,9 +174,9 @@ export function createApp(config, deps = {}) {
     },
     { ttl: 60_000 },
   );
-  /** 추천 인원이 아무 데도 없어(IGDB·파일·DB 모두) AI에게 물어볼 수 있는 게임인지 */
+  /** 추천 인원 숫자가 아무 데도 없어(IGDB·파일·DB) AI에게 물어볼 수 있는 게임인지 (파일에서 '모름'이었던 게임도 상세에서 한 번 더 물음) */
   const playersMissing = async (g) =>
-    canAskPlayers(g) && 'recommendedPlayers' in g && !g.recommendedPlayers && (partySize.isMissing ? partySize.isMissing(g) : true) && (await aiPlayers.cached(g)) === undefined;
+    canAskPlayers(g) && 'recommendedPlayers' in g && !g.recommendedPlayers && (await aiPlayers.cached(g)) === undefined;
   const aiPlaytime = deps.aiPlaytime ?? createAiPlaytime(db, config.aiPlaytime ?? {}, { ...deps, log: (m) => console.log(m) });
   // IGDB 이용자 기록 플레이 시간은 기록한 사람이 이만큼 이상일 때만 씀(적으면 한두 사람 값에 크게 흔들림)
   const IGDB_TTB_MIN = 3;
@@ -692,7 +692,7 @@ const SLIDES = 5;
       const found = await findGame(id);
       const [g] = await decorate([(await partySize.fill([found])).games[0]], u);
       if (g.recommendedPlayers) return sendJson(res, 200, { players: g.recommendedPlayers, status: 'known' });
-      if (!canAskPlayers(g) || !('recommendedPlayers' in g) || (partySize.isMissing && !partySize.isMissing(g))) return sendJson(res, 200, { players: null, status: 'none' });
+      if (!canAskPlayers(g) || !('recommendedPlayers' in g)) return sendJson(res, 200, { players: null, status: 'none' });
       if ((await aiPlayers.cached(g)) !== undefined) return sendJson(res, 200, { players: null, status: 'cached' }); // AI가 모른다고 한 게임
       if (!aiPlayers.enabled) return sendJson(res, 200, { players: null, status: 'off' });
       if (!limits.aiPlayers.hit(`p|${u.id}`)) return sendJson(res, 200, { players: null, status: 'limit' });

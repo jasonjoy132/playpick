@@ -14,7 +14,7 @@ const GAMES = {
   'igdb-1': game('igdb-1', 'Party Brawl', { players: { min: 1, max: 4 } }), // AI 2~8 → IGDB 최대 4로 줄임
   'igdb-2': game('igdb-2', 'Unknown Indie'),
   'igdb-3': game('igdb-3', 'Has Coop', { recommendedPlayers: { min: 2, max: 4, source: 'igdb' } }),
-  'igdb-4': game('igdb-4', 'File Unknown'), // 파일에서 AI가 '모름'
+  'igdb-4': game('igdb-4', 'File Unknown'), // 파일에서 AI가 '모름' → 상세에서 한 번 더 물음
   'igdb-5': game('igdb-5', 'Fifth'),
   'igdb-6': game('igdb-6', 'Broken'),
   'igdb-7': game('igdb-7', 'Seventh'),
@@ -32,7 +32,7 @@ const fetchImpl = async (url, init) => {
   const prompt = JSON.parse(init.body).contents[0].parts[0].text;
   asked.push(prompt);
   if (prompt.includes('Broken')) return { ok: false, status: 503, json: async () => ({}) };
-  const ans = prompt.includes('Party Brawl') ? { min: 2, max: 8 } : prompt.includes('Fifth') ? { min: 1, max: 2 } : { min: null, max: null };
+  const ans = prompt.includes('Party Brawl') ? { min: 2, max: 8 } : prompt.includes('Fifth') ? { min: 1, max: 2 } : prompt.includes('File Unknown') ? { min: 1, max: 3 } : { min: null, max: null };
   return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify(ans) }] } }] }) };
 };
 
@@ -42,7 +42,7 @@ before(async () => {
   const dataFile = path.join(tmp, 'party-size.json');
   fs.writeFileSync(dataFile, JSON.stringify({ 4: { unknown: true, hours: null }, 99: { min: 1, max: 1 } }));
   server = createApp(
-    { ...getConfig(), dataSource: 'demo', dbFile: ':memory:', appStore: {}, rawg: {}, aiPlayers: { apiKey: 'k', live: true, dailyLimit: 3 }, aiPlaytime: { live: false } },
+    { ...getConfig(), dataSource: 'demo', dbFile: ':memory:', appStore: {}, rawg: {}, aiPlayers: { apiKey: 'k', live: true, dailyLimit: 4 }, aiPlaytime: { live: false } },
     { catalog, partySize: createPartySize({ dataFile }), fetchImpl, mailer: { configured: false, devLog: false, send: async () => {} } },
   );
   await new Promise((r) => server.listen(0, r));
@@ -114,23 +114,25 @@ test('AI가 모른다고 하면 정보 없음으로 저장, 다시 묻지 않음
   assert.equal(asked.length, before + 1);
 });
 
-test('IGDB에 인원이 있거나 파일에서 이미 모름이면 묻지 않음', async () => {
+test('IGDB에 인원이 있으면 묻지 않음, 파일에서 모름이었던 게임은 한 번 더 물음', async () => {
   const u = await member(3);
   const before = asked.length;
   const coop = (await u('GET', '/api/games/igdb-3')).body.game;
   assert.equal(coop.recommendedPlayers.source, 'igdb');
   assert.equal(coop.playersAsk, false);
   assert.equal((await u('POST', '/api/games/igdb-3/players', {})).body.status, 'known');
-  assert.equal((await u('GET', '/api/games/igdb-4')).body.game.playersAsk, false);
-  assert.equal((await u('POST', '/api/games/igdb-4/players', {})).body.status, 'none');
   assert.equal(asked.length, before);
+  assert.equal((await u('GET', '/api/games/igdb-4')).body.game.playersAsk, true);
+  assert.deepEqual((await u('POST', '/api/games/igdb-4/players', {})).body, { players: { min: 1, max: 3, source: 'ai' }, status: 'asked' });
+  assert.deepEqual((await client()('GET', '/api/games/igdb-4')).body.game.recommendedPlayers, { min: 1, max: 3, source: 'ai' });
+  assert.equal(asked.length, before + 1);
 });
 
 test('AI 오류는 저장하지 않고 다음에 다시, 하루 상한을 넘으면 묻지 않음', async () => {
   const u = await member(4);
   assert.deepEqual((await u('POST', '/api/games/igdb-6/players', {})).body, { players: null, status: 'error' });
   assert.equal((await u('GET', '/api/games/igdb-6')).body.game.playersAsk, true);
-  // 저장 2건(igdb-1, igdb-2), 상한 3 → 1건 더 되고 그다음은 limit
+  // 저장 3건(igdb-1, igdb-2, igdb-4), 상한 4 → 1건 더 되고 그다음은 limit
   assert.deepEqual((await u('POST', '/api/games/igdb-5/players', {})).body, { players: { min: 1, max: 2, source: 'ai' }, status: 'asked' });
   const before = asked.length;
   assert.deepEqual((await u('POST', '/api/games/igdb-7/players', {})).body, { players: null, status: 'limit' });

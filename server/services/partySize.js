@@ -421,7 +421,8 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
       if (e.recentNew && game.ratingDate && now() - Date.parse(game.ratingDate) < RECENT_NEW_DAYS * 86_400_000) out = { ...out, aiRecent: true };
     }
     if (!('recommendedPlayers' in game) || game.recommendedPlayers) return out;
-    if (e && (e.unknown || Number.isInteger(e.min))) return e.unknown ? out : { ...out, recommendedPlayers: { min: e.min, max: e.max, source: 'ai' } };
+    if (e && Number.isInteger(e.min)) return { ...out, recommendedPlayers: { min: e.min, max: e.max, source: 'ai' } };
+    // 파일에서 '모름'이었어도 상세에서 다시 물어 답을 얻었으면 그 값
     const a = asked.get(cacheKey(game));
     if (a) return { ...out, recommendedPlayers: { min: a.min, max: a.max, source: 'ai' } };
     if (e) return out; // 서비스 종료 여부만 저장된 항목(인원은 아직 안 물음)
