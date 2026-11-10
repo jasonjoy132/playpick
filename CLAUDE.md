@@ -76,6 +76,7 @@
 
 ## 회원 기능 (`server/community/`)
 
+- 문의 연락처: `InfoPages.jsx`의 `CONTACT_EMAIL`(개인정보처리방침·이용약관에 표시)
 - 계정·세션·비밀번호 재설정(메일: Brevo), 찜, 별점·리뷰(1인 1리뷰, 수정 불가·삭제 후 재작성), 최근 본 게임
 - **회원 탈퇴**(`/mypage/delete`, `POST /api/me/delete`, 비밀번호 + '탈퇴' 입력): 검토 중인 제보·프로필 사진 파일을 지우고 `users` 행 삭제 → DB 외래 키로 세션·찜·리뷰·최근 본 게임·알림도 삭제. 승인·거절된 제보와 리뷰 신고는 작성자만 NULL('(탈퇴한 회원)')
 - **제보**(모두 로그인 필요, 관리자 승인 후 반영, 관리자가 직접 올리면 바로 승인)
@@ -102,6 +103,5 @@
    - 메모리 기반 요청 제한(rateLimit)은 인스턴스마다 따로라는 점 고려
    - `vercel.json`, 환경 변수 목록 정리
    - 전환하면 개인정보처리방침(`client/src/pages/InfoPages.jsx`) '처리 위탁'에 Vercel(호스팅)·Supabase(DB·사진 저장) 추가
-2. 문의 연락처: `InfoPages.jsx`의 `CONTACT_EMAIL`이 비어 있음('연락처 준비 중'으로 표시) — 사용자에게 받아 넣기.
-3. GitHub: 공개 저장소 `jasonjoy132/playpick`(main). push 전 `git status`로 `.env`·`.data/`·`.cache/` 안 올라가는지 확인
-4. (선택) 모바일 화면 점검, 게임 상세 페이지 제목·미리보기, 친구와 같이 고르는 '파티 투표'
+2. GitHub: 공개 저장소 `jasonjoy132/playpick`(main). push 전 `git status`로 `.env`·`.data/`·`.cache/` 안 올라가는지 확인
+3. (선택) 모바일 화면 점검, 게임 상세 페이지 제목·미리보기, 친구와 같이 고르는 '파티 투표'

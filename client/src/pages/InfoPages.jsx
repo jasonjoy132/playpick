@@ -3,7 +3,7 @@ import { Link } from '../lib/router.jsx';
 
 const EFFECTIVE = '2026년 11월 5일';
 // 문의 연락처: 정해지면 이메일 주소를 넣으세요 (예: 'help@example.com'). 비어 있으면 '준비 중'으로 표시
-const CONTACT_EMAIL = '';
+const CONTACT_EMAIL = 'jason040215@ajou.ac.kr';
 
 function Contact() {
   return CONTACT_EMAIL ? <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> : <span className="muted">연락처 준비 중</span>;
