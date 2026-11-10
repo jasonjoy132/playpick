@@ -87,6 +87,15 @@ export function createImageSubmissions(db, { images, now = () => Date.now() }) {
       return toItem(q.byId.get(Number(lastInsertRowid)));
     },
     mine: (userId) => q.mine.all(userId).map(toItem),
+    /** 회원 탈퇴: 검토 중인 제보(사진 파일 포함) 지우기 */
+    removePendingOf(userId) {
+      const rows = db.prepare("SELECT id, image_file FROM image_submissions WHERE user_id = ? AND status = 'pending'").all(userId);
+      for (const r of rows) {
+        q.del.run(r.id);
+        images.remove(r.image_file);
+      }
+      return rows.length;
+    },
     cancel(userId, id) {
       const r = q.byId.get(Number(id));
       if (!r || r.user_id !== userId) throw fail('NOT_FOUND', '제보를 찾을 수 없어요.', 404);

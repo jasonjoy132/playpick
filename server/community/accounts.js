@@ -29,6 +29,7 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
     useReset: db.prepare('UPDATE password_resets SET used = 1 WHERE user_id = ?'),
     setNick: db.prepare('UPDATE users SET nickname = ? WHERE id = ?'),
     setAvatar: db.prepare('UPDATE users SET avatar_file = ? WHERE id = ?'),
+    delUser: db.prepare('DELETE FROM users WHERE id = ?'),
     delOtherSessions: db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?'),
   };
 
@@ -138,6 +139,17 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
       if (currentPassword === newPassword) throw fail('INVALID_INPUT', '현재 비밀번호와 다른 비밀번호를 입력해 주세요.');
       q.setPw.run(hashPassword(newPassword), userId);
       q.delOtherSessions.run(userId, sha256(currentToken));
+      return { ok: true };
+    },
+
+/** 회원 탈퇴: 비밀번호·확인 문구 확인 → 프로필 사진 파일 삭제 → 계정 삭제(세션·찜·리뷰·알림 등은 DB가 함께 지움) */
+    deleteAccount(userId, { password, confirm } = {}, beforeDelete = () => {}) {
+      const user = q.byId.get(userId);
+      if (!user || !verifyPassword(String(password ?? ''), user.password_hash)) throw fail('WRONG_PASSWORD', '비밀번호가 올바르지 않습니다.', 400);
+      if (String(confirm ?? '').trim() !== '탈퇴') throw fail('INVALID_INPUT', "확인 칸에 '탈퇴'라고 입력해 주세요.");
+      beforeDelete();
+      q.delUser.run(userId);
+      if (user.avatar_file) avatars.remove(user.avatar_file);
       return { ok: true };
     },
 

@@ -36,6 +36,34 @@ function SearchBox() {
   );
 }
 
+/** 회원 탈퇴 직후 한 번 보이는 안내 (마이페이지가 sessionStorage에 표시를 남김) */
+function ByeNotice() {
+  const { pathname } = useLocation();
+  const [show, setShow] = useState(false);
+  // Layout은 화면을 옮겨도 그대로라서 주소가 바뀔 때마다 확인
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem('pp-bye')) {
+        sessionStorage.removeItem('pp-bye');
+        setShow(true);
+      } else setShow(false); // 다른 화면으로 가면 닫힘
+    } catch {
+      /* 저장소를 못 쓰면 안내 없이 */
+    }
+  }, [pathname]);
+  if (!show) return null;
+  return (
+    <div className="bye-notice" role="status" data-testid="bye-notice">
+      <p>
+        <b>탈퇴했어요.</b> 그동안 플레이픽을 이용해 주셔서 고마워요. 계정과 찜·리뷰·알림을 모두 지웠어요.
+      </p>
+      <button type="button" className="link-btn" onClick={() => setShow(false)} aria-label="안내 닫기">
+        닫기
+      </button>
+    </div>
+  );
+}
+
 export function Layout({ meta, children }) {
   const { openFinder } = useFinder();
   const { pathname } = useLocation();
@@ -70,6 +98,7 @@ export function Layout({ meta, children }) {
       </header>
       {meta?.isDemo && <DemoBanner />}
       <main id="main" className="container main">
+        <ByeNotice />
         {children}
       </main>
       <footer className="site-footer">

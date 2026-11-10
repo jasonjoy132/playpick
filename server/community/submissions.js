@@ -224,6 +224,15 @@ export function createSubmissions(db, { images, now = () => Date.now() }) {
       return toItem(q.byId.get(Number(lastInsertRowid)));
     },
     mine: (userId) => q.mine.all(userId).map(toItem),
+    /** 회원 탈퇴: 검토 중인 제보(사진 파일 포함) 지우기 */
+    removePendingOf(userId) {
+      const rows = db.prepare("SELECT id, image_file FROM game_submissions WHERE user_id = ? AND status = 'pending'").all(userId);
+      for (const r of rows) {
+        q.del.run(r.id);
+        images.remove(r.image_file);
+      }
+      return rows.length;
+    },
     /** 검토 중인 내 제보 취소 */
     cancel(userId, id) {
       const r = q.byId.get(Number(id));

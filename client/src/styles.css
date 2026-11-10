@@ -1214,3 +1214,15 @@ h1, h2 { font-weight: 800; letter-spacing: -0.02em; }
 .edited-label { font-weight: 700; margin-right: 4px; }
 .edited del { color: var(--muted); }
 .edited ins { text-decoration: none; font-weight: 700; color: var(--text); }
+
+/* ── 회원 탈퇴 ── */
+.mypage-nav a.mypage-danger { color: var(--bad); }
+.withdraw { display: grid; gap: 16px; }
+.withdraw-warn { padding: 12px 14px; border-radius: 10px; background: var(--bad-soft); border: 1px solid var(--bad-line); color: var(--bad); }
+.withdraw-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.withdraw-lists .panel { margin: 0; }
+.withdraw-lists ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.withdraw-h { font-size: 1rem; margin: 0 0 10px; }
+.withdraw .auth-form { margin: 0; }
+.bye-notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 16px; padding: 12px 14px; border-radius: 10px; background: var(--ok-soft); color: var(--ok); }
+.bye-notice p { margin: 0; }

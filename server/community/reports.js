@@ -203,6 +203,14 @@ export function createReports(db, { now = () => Date.now() } = {}) {
       return toItem(q.byId.get(Number(lastInsertRowid)));
     },
     mineGameReports: (userId) => q.mine.all(userId).map(toItem),
+/** 회원 탈퇴: 검토 중인 제보(기록) 지우기 */
+    removePendingOf(userId) {
+      const rows = db.prepare("SELECT id FROM game_reports WHERE user_id = ? AND status = 'pending'").all(userId);
+      for (const r of rows) {
+        q.del.run(r.id);
+      }
+      return rows.length;
+    },
     cancelGameReport(userId, id) {
       const r = q.byId.get(Number(id));
       if (!r || r.user_id !== userId) throw fail('NOT_FOUND', '제보를 찾을 수 없어요.', 404);

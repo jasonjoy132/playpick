@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
 import { useAuth } from '../lib/auth.jsx';
-import { Link } from '../lib/router.jsx';
+import { Link, navigate } from '../lib/router.jsx';
 import { toAvatarDataUrl } from '../lib/image.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { BadgeIcon, NameBadge, UserBadge } from '../components/Badge.jsx';
@@ -13,7 +13,7 @@ import { RatingBadge, StarsDisplay } from '../components/Stars.jsx';
 import { ErrorState, Loading } from '../components/Status.jsx';
 
 const MENU = [
-  { group: '내 정보', items: [['profile', '프로필 설정'], ['password', '비밀번호 변경']] },
+  { group: '내 정보', items: [['profile', '프로필 설정'], ['password', '비밀번호 변경'], ['delete', '회원 탈퇴']] },
   { group: '게임', items: [['wishlist', '찜 목록'], ['reviews', '내 리뷰']] },
   { group: '활동', items: [['recent', '최근 본 게임'], ['submissions', '내 제보'], ['badges', '뱃지·칭호']] },
 ];
@@ -44,6 +44,7 @@ export function MyPage({ section = 'profile', options }) {
   const content = {
     profile: <ProfileSection />,
     password: <PasswordSection />,
+    delete: <DeleteAccountSection />,
     wishlist: <WishlistSection options={options} />,
     reviews: <ReviewsSection />,
     recent: <RecentSection />,
@@ -68,7 +69,7 @@ export function MyPage({ section = 'profile', options }) {
           <nav key={m.group} aria-label={m.group}>
             <p className="mypage-group">{m.group}</p>
             {m.items.map(([key, label]) => (
-              <Link key={key} to={`/mypage/${key}`} className={key === section ? 'is-active' : ''} aria-current={key === section ? 'page' : undefined}>
+              <Link key={key} to={`/mypage/${key}`} className={`${key === section ? 'is-active' : ''}${key === 'delete' ? ' mypage-danger' : ''}`} aria-current={key === section ? 'page' : undefined}>
                 {label}
               </Link>
             ))}
@@ -231,6 +232,81 @@ function PasswordSection() {
         비밀번호 변경
       </button>
     </form>
+  );
+}
+
+/** 회원 탈퇴: 지워지는 것·남는 것 안내 → 비밀번호 + '탈퇴' 입력 → 삭제 후 홈으로 */
+function DeleteAccountSection() {
+  const { logout, wishCount } = useAuth();
+  const counts = useAsync(async () => {
+    const [rv, s, im, rp] = await Promise.all([api.myReviews(), api.mySubmissions(), api.myImageSubmissions(), api.myReports()]);
+    const pending = [...s.items, ...im.items, ...rp.items].filter((x) => x.status === 'pending').length;
+    return { reviews: rv.items.length, pending };
+  }, []);
+  const [f, setF] = useState({ password: '', confirm: '' });
+  const [state, setState] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const ready = f.password.length > 0 && f.confirm.trim() === '탈퇴';
+  const n = (v) => (v == null ? '' : ` ${v}개`);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!ready) return;
+    setBusy(true);
+    setState(null);
+    try {
+      await api.deleteAccount({ password: f.password, confirm: f.confirm.trim() });
+      try {
+        sessionStorage.setItem('pp-bye', '1');
+      } catch {
+        /* 안내만 못 보여 줌 */
+      }
+      await logout().catch(() => {});
+      navigate('/', { replace: true });
+    } catch (err) {
+      setState({ error: err.message });
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="withdraw" data-testid="withdraw">
+      <div className="withdraw-warn" role="note">
+        <b>탈퇴하면 되돌릴 수 없어요.</b> 같은 아이디·이메일로 다시 가입할 수는 있지만, 지운 기록은 돌아오지 않아요.
+      </div>
+      <div className="withdraw-lists">
+        <div className="panel">
+          <h2 className="withdraw-h">바로 지워져요</h2>
+          <ul>
+            <li>계정(아이디·이메일·닉네임·프로필 사진)과 로그인 기록</li>
+            <li>찜 목록{n(wishCount)}</li>
+            <li>별점·리뷰{n(counts.data?.reviews)} — 게임 평점도 다시 계산돼요</li>
+            <li>검토 중인 제보{n(counts.data?.pending)}</li>
+            <li>최근 본 게임, 알림, 칭호</li>
+          </ul>
+        </div>
+        <div className="panel">
+          <h2 className="withdraw-h">작성자 없이 남아요</h2>
+          <ul>
+            <li>관리자가 승인한 게임·표지 사진·정보 수정·서비스 종료 제보 — 이미 게임 정보가 되어 '(탈퇴한 회원)'으로 표시돼요</li>
+            <li>거절된 제보와 리뷰 신고 기록(누가 했는지는 지워져요)</li>
+          </ul>
+        </div>
+      </div>
+      <form className="panel auth-form narrow" onSubmit={submit} noValidate>
+        <div className="form-field">
+          <label htmlFor="w-pw">비밀번호</label>
+          <input id="w-pw" type="password" value={f.password} onChange={set('password')} autoComplete="current-password" maxLength={64} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="w-confirm">확인을 위해 <b>탈퇴</b>라고 입력해 주세요</label>
+          <input id="w-confirm" value={f.confirm} onChange={set('confirm')} autoComplete="off" maxLength={10} placeholder="탈퇴" />
+        </div>
+        <Notice state={state} />
+        <button type="submit" className="btn btn-danger" disabled={busy || !ready} data-testid="confirm-withdraw">
+          {busy ? '지우는 중…' : '회원 탈퇴'}
+        </button>
+      </form>
+    </div>
   );
 }
 

@@ -70,6 +70,7 @@ export const api = {
   setAvatar: (dataUrl) => request('PUT', '/api/me/avatar', { dataUrl }),
   removeAvatar: () => request('DELETE', '/api/me/avatar'),
   changePassword: (b) => request('POST', '/api/me/password', b),
+  deleteAccount: (b) => request('POST', '/api/me/delete', b),
   myReviews: () => get('/api/me/reviews'),
   recent: () => get('/api/me/recent'),
   removeRecent: (id) => request('DELETE', `/api/me/recent/${gid(id)}`),

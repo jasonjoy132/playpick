@@ -342,6 +342,17 @@ const SLIDES = 5;
       if (!limits.login.hit(`pw|${u.id}`)) throw apiError('RATE_LIMIT', '시도가 너무 많습니다. 10분 뒤 다시 시도해 주세요.', 429);
       return sendJson(res, 200, accounts.changePassword(u.id, token, await readJson(req)));
     }
+    if (p === '/api/me/delete' && method === 'POST') {
+      // 회원 탈퇴: 검토 중인 제보 정리 → 계정 삭제(DB가 세션·찜·리뷰·알림 함께 삭제, 승인된 제보는 작성자 없이 남음)
+      const u = requireUser();
+      if (!limits.login.hit(`pw|${u.id}`)) throw apiError('RATE_LIMIT', '시도가 너무 많습니다. 10분 뒤 다시 시도해 주세요.', 429);
+      accounts.deleteAccount(u.id, await readJson(req), () => {
+        submissions.removePendingOf(u.id);
+        imageSubs.removePendingOf(u.id);
+        reports.removePendingOf(u.id);
+      });
+      return sendJson(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie('', 0) });
+    }
     if (p === '/api/me/reviews' && method === 'GET') return sendJson(res, 200, { items: withoutEnded(community.myReviews(requireUser().id)) });
     if (p === '/api/me/recent' && method === 'GET') return sendJson(res, 200, { items: withoutEnded(community.recent(requireUser().id)) });
     if (p === '/api/me/recent' && method === 'DELETE') {
