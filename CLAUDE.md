@@ -83,7 +83,12 @@
 
 - 문의 연락처: `InfoPages.jsx`의 `CONTACT_EMAIL`(개인정보처리방침·이용약관에 표시)
 - 계정·세션·비밀번호 재설정(메일: Brevo), 찜, 별점·리뷰(1인 1리뷰, 수정 불가·삭제 후 재작성), 최근 본 게임
-- **회원 탈퇴**(`/mypage/delete`, `POST /api/me/delete`, 비밀번호 + '탈퇴' 입력): 검토 중인 제보·프로필 사진 파일을 지우고 `users` 행 삭제 → DB 외래 키로 세션·찜·리뷰·최근 본 게임·알림도 삭제. 승인·거절된 제보와 리뷰 신고는 작성자만 NULL('(탈퇴한 회원)')
+- **다른 계정으로 로그인(Google·Discord)** `oauth.js`(제공자 주소·코드 교환) + `accounts.oauth*`: 서버가 제공자로 보냈다가(`/api/auth/oauth/:p/start`) 돌아온 코드를 서버에서 바꿈(`…/callback`, state는 HttpOnly 쿠키 `pp_oauth`). 연결 표 `user_identities`(provider, subject)
+  - 이미 연결 → 로그인 / **인증된** 같은 이메일 회원 → 그 계정에 연결 / 처음 → `/signup/social`에서 닉네임 정하기(`oauth_pending`, 쿠키 `pp_oauth_pending` 30분) / 인증 안 된 이메일 → 거절
+  - 소셜로만 가입한 계정: 아이디 `g_…`·`d_…` 자동, `password_hash = ''`(`hasPassword: false`) → 비밀번호 '만들기'(현재 비밀번호 없이), 탈퇴는 '탈퇴'만, 아이디 찾기 메일은 '○○로 로그인' 안내
+  - 마이페이지 '연결된 계정'(`/mypage/accounts`): 연결(`?mode=link`)·끊기(마지막 로그인 방법은 못 끊음). 오류는 `?oauthError=코드&provider=`로 돌아와 화면이 문구로 바꿈(`SocialLogin.jsx`의 `oauthErrorText`)
+  - 키 `GOOGLE_CLIENT_ID/SECRET`·`DISCORD_CLIENT_ID/SECRET`(둘 다 있는 것만 버튼 보임). 돌아올 주소 `<APP_BASE_URL>/api/auth/oauth/<google|discord>/callback`을 각 콘솔에 등록. 테스트는 `deps.oauthFetch`·`deps.oauthEndpoints`로 가짜 제공자
+- **회원 탈퇴**(`/mypage/delete`, `POST /api/me/delete`, 비밀번호(있으면) + '탈퇴' 입력): 검토 중인 제보·프로필 사진 파일을 지우고 `users` 행 삭제 → 세션·연결된 계정·찜·리뷰·최근 본 게임·알림도 삭제. 승인·거절된 제보와 리뷰 신고는 작성자만 NULL('(탈퇴한 회원)')
 - **제보**(모두 로그인 필요, 관리자 승인 후 반영, 관리자가 직접 올리면 바로 승인)
   - **고쳐서 승인**: 게임 제보·정보 수정 제보는 관리자가 틀린 칸만 고쳐 승인(이미 승인된 것도 '고치기'). 회원이 낸 원래 값은 `original_json`·`original_payload`에, 바뀐 칸은 응답 `edited`(원래 → 반영)로 관리자 카드·회원 '내 제보'·알림에 보임. 표지 사진·서비스 종료 제보는 승인·거절만
   - 게임 제보 `submissions.js` → 승인 시 `user-<번호>` 게임

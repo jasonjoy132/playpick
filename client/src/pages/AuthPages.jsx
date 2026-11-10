@@ -3,6 +3,9 @@ import { Link, navigate, useLocation } from '../lib/router.jsx';
 import { useAuth } from '../lib/auth.jsx';
 import { api } from '../lib/api.js';
 import { LoginPanel } from '../components/LoginPanel.jsx';
+import { SocialButtons, ProviderMark, oauthErrorText } from '../components/SocialLogin.jsx';
+import { useAsync } from '../lib/useAsync.js';
+import { Loading } from '../components/Status.jsx';
 
 const safeNext = (search) => {
   const n = new URLSearchParams(search).get('next') || '/';
@@ -48,10 +51,68 @@ export function LoginPage() {
       </Shell>
     );
   }
+  // 소셜 로그인에서 돌아온 오류(?oauthError=…&provider=…)
+  const qs = new URLSearchParams(search);
+  const oauthError = qs.get('oauthError') ? oauthErrorText(qs.get('oauthError'), qs.get('provider')) : null;
   return (
     <div className="auth-page">
-      <LoginPanel next={next} />
+      <LoginPanel next={next} initialError={oauthError} key={oauthError || 'login'} />
     </div>
+  );
+}
+
+/** 처음 온 소셜 계정: 닉네임을 정해 가입 마치기 */
+export function SocialSignupPage() {
+  const { completeSocial } = useAuth();
+  const info = useAsync(() => api.oauthPending(), []);
+  const pending = info.data?.pending;
+  const [nickname, setNickname] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  if (info.status === 'loading') return <Loading />;
+  if (!pending) {
+    return (
+      <Shell title="가입 시간이 지났어요" desc="다른 계정으로 로그인을 처음부터 다시 해 주세요." footer={<Link to="/login">로그인 화면으로</Link>}>
+        <SocialButtons divider={null} />
+      </Shell>
+    );
+  }
+  const nick = nickname ?? pending.nickname ?? '';
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await completeSocial({ nickname: nick.trim() });
+      navigate(r.next || '/', { replace: true });
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Shell title="닉네임을 정해 주세요" desc="한 번만 정하면 돼요. 나중에 마이페이지에서 바꿀 수 있어요.">
+      <p className="social-who" data-testid="social-who">
+        <ProviderMark provider={pending.provider} size={20} />
+        <span>
+          <b>{pending.providerLabel}</b> 계정 · {pending.email}
+        </span>
+      </p>
+      <form className="auth-form" onSubmit={submit} noValidate data-testid="social-signup-form">
+        <Field label="닉네임" name="nickname" value={nick} onChange={(e) => setNickname(e.target.value)} maxLength={12} autoFocus hint="리뷰에 표시돼요. 한글·영문·숫자·밑줄 2~12자" />
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        <p className="form-note muted" data-testid="signup-consent">
+          가입하면 <Link to="/terms">이용약관</Link>과 <Link to="/privacy">개인정보처리방침</Link>에 동의하는 것으로 봅니다. {pending.providerLabel}에서는 이메일·이름·계정 번호만 받아요.
+        </p>
+        <button type="submit" className="btn btn-gold btn-block btn-lg" disabled={busy || !nick.trim()}>
+          {busy ? '가입 중…' : '가입하고 시작하기'}
+        </button>
+      </form>
+    </Shell>
   );
 }
 
@@ -77,6 +138,7 @@ export function SignupPage() {
   };
   return (
     <Shell title="회원가입" desc="가입하면 게임을 찜하고 별점·리뷰를 남길 수 있어요." footer={<>이미 계정이 있나요? <Link to="/login">로그인</Link></>}>
+      <SocialButtons divider={null} below="또는 아이디로 가입" />
       <form className="auth-form" onSubmit={submit} noValidate data-testid="signup-form">
         <Field label="아이디" name="loginId" value={f.loginId} onChange={set('loginId')} autoComplete="username" maxLength={20} hint="영문 소문자·숫자·밑줄(_) 4~20자" />
         <Field label="비밀번호" name="password" type="password" value={f.password} onChange={set('password')} autoComplete="new-password" maxLength={64} hint="영문과 숫자를 포함해 8자 이상" />
@@ -92,7 +154,7 @@ export function SignupPage() {
           가입하면 <Link to="/terms">이용약관</Link>과 <Link to="/privacy">개인정보처리방침</Link>에 동의하는 것으로 봅니다.
         </p>
         <button type="submit" className="btn btn-gold btn-block btn-lg" disabled={busy}>
-          {busy ? '가입 중…' : '가입하기'}
+          {busy ? '가입 중…' : '아이디로 가입하기'}
         </button>
       </form>
     </Shell>

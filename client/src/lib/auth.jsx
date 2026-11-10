@@ -59,6 +59,13 @@ export function AuthProvider({ children }) {
     setUser(r.user);
     return r.user;
   }, []);
+  /** 소셜 가입 마치기(닉네임) */
+  const completeSocial = useCallback(async (form) => {
+    const r = await api.oauthComplete(form);
+    setWishOverrides({});
+    setUser(r.user);
+    return r;
+  }, []);
   const logout = useCallback(async () => {
     try {
       await api.logout();
@@ -86,7 +93,7 @@ export function AuthProvider({ children }) {
   );
 
   return (
-    <AuthCtx.Provider value={{ user, ready, login, signup, logout, isWished, toggleWish, wishCount, refreshWishCount, setUser, refreshUser }}>{children}</AuthCtx.Provider>
+    <AuthCtx.Provider value={{ user, ready, login, signup, completeSocial, logout, isWished, toggleWish, wishCount, refreshWishCount, setUser, refreshUser }}>{children}</AuthCtx.Provider>
   );
 }
 

@@ -9,6 +9,7 @@ import { DataSourceError } from './providers/errors.js';
 import { createTranslator, withKoreanSummaries } from './services/translator.js';
 import { openDb } from './db.js';
 import { createAccounts } from './community/accounts.js';
+import { createOAuth } from './community/oauth.js';
 import { createCommunity } from './community/community.js';
 import { createMailer } from './community/mailer.js';
 import { createRateLimiter } from './community/rateLimit.js';
@@ -37,6 +38,8 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
 };
 const COOKIE = 'pp_session';
+const OAUTH_COOKIE = 'pp_oauth'; // 소셜 로그인 진행 중(state·돌아갈 화면), 10분
+const PENDING_COOKIE = 'pp_oauth_pending'; // 처음 온 소셜 계정이 닉네임을 정하는 동안, 30분
 
 function sendJson(res, status, body, headers = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
@@ -96,6 +99,7 @@ export function createApp(config, deps = {}) {
   const legacyDir = !config.dbFile || config.dbFile === ':memory:' || config.vercel ? null : path.dirname(config.dbFile);
   const avatars = createAvatarStore(db);
   const accounts = createAccounts(db, { mailer, baseUrl, avatars });
+  const oauth = deps.oauth ?? createOAuth(config.oauth ?? {}, { baseUrl, fetchImpl: deps.oauthFetch, endpoints: deps.oauthEndpoints });
   const badges = createBadges(db);
   const community = createCommunity(db, { badgeOf: async (id, cache) => await badges.displayFor(id, cache) });
   // 게임 제보 표지(s…)·표지 사진 제보(p…)
@@ -123,6 +127,7 @@ export function createApp(config, deps = {}) {
     login: createRateLimiter({ limit: 5, windowMs: 10 * 60e3 }),
     mail: createRateLimiter({ limit: 5, windowMs: 10 * 60e3 }),
     signup: createRateLimiter({ limit: 10, windowMs: 60 * 60e3 }),
+    oauth: createRateLimiter({ limit: 30, windowMs: 10 * 60e3 }),
     write: createRateLimiter({ limit: 60, windowMs: 60e3 }),
     aiPlaytime: createRateLimiter({ limit: 30, windowMs: 60 * 60e3 }), // 회원 한 명이 AI 플레이 시간을 새로 물을 수 있는 수(시간당)
   };
@@ -155,8 +160,15 @@ export function createApp(config, deps = {}) {
 const SLIDES = 5;
   const distDir = path.join(config.root, 'client', 'dist');
 
-  const sessionCookie = (token, maxAge) =>
-    `${COOKIE}=${token ? encodeURIComponent(token) : ''}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secureCookie ? '; Secure' : ''}`;
+  const cookieOf = (name, value, maxAge, cookiePath = '/') =>
+    `${name}=${value ? encodeURIComponent(value) : ''}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secureCookie ? '; Secure' : ''}`;
+  const sessionCookie = (token, maxAge) => cookieOf(COOKIE, token, maxAge);
+  const oauthCookie = (value, maxAge) => cookieOf(OAUTH_COOKIE, value, maxAge, '/api/auth/oauth');
+  const pendingCookie = (value, maxAge) => cookieOf(PENDING_COOKIE, value, maxAge, '/api/auth/oauth');
+  const redirect = (res, location, cookies = []) => {
+    res.writeHead(302, { Location: location, 'Cache-Control': 'no-store', ...(cookies.length ? { 'Set-Cookie': cookies } : {}) });
+    res.end();
+  };
 
   /**
    * 목록·검색에 보여도 되는 게임
@@ -305,6 +317,72 @@ const SLIDES = 5;
     if (p === '/api/auth/logout' && method === 'POST') {
       await accounts.logout(token);
       return sendJson(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie('', 0) });
+    }
+    // ── 다른 계정으로 로그인 (Google · Discord) ──
+    if (p === '/api/auth/providers' && method === 'GET') return sendJson(res, 200, { providers: oauth.enabled });
+    let om = /^\/api\/auth\/oauth\/(google|discord)\/(start|callback)$/.exec(p);
+    if (om && method === 'GET') {
+      const [, prov, step] = om;
+      if (step === 'start') {
+        const mode = url.searchParams.get('mode') === 'link' ? 'link' : 'login';
+        const next = url.searchParams.get('next') || '/';
+        const back = mode === 'link' ? '/mypage/accounts' : `/login?next=${encodeURIComponent(next)}`;
+        const sep = back.includes('?') ? '&' : '?';
+        if (mode === 'link' && !user) return redirect(res, `/login?next=${encodeURIComponent('/mypage/accounts')}`);
+        if (!limits.oauth.hit(ip)) return redirect(res, `${back}${sep}oauthError=RATE_LIMIT`);
+        if (!oauth.has(prov)) return redirect(res, `${back}${sep}oauthError=OAUTH_DISABLED&provider=${prov}`);
+        const { url: to, cookie } = oauth.start(prov, { next, mode });
+        return redirect(res, to, [oauthCookie(cookie, 600)]);
+      }
+      // callback: state 확인 → 코드를 토큰으로 → 로그인·연결·가입 대기
+      const saved = oauth.readCookie(readCookies(req)[OAUTH_COOKIE]);
+      const mode = saved?.mode === 'link' ? 'link' : 'login';
+      const next = saved?.next || '/';
+      const clear = oauthCookie('', 0);
+      const back = (code) =>
+        mode === 'link'
+          ? `/mypage/accounts?oauthError=${code}&provider=${prov}`
+          : `/login?oauthError=${code}&provider=${prov}&next=${encodeURIComponent(next)}`;
+      if (url.searchParams.get('error')) return redirect(res, back('OAUTH_DENIED'), [clear]);
+      if (!saved || saved.provider !== prov || saved.state !== url.searchParams.get('state')) return redirect(res, back('OAUTH_STATE'), [clear]);
+      if (!limits.oauth.hit(ip)) return redirect(res, back('RATE_LIMIT'), [clear]);
+      try {
+        const profile = await oauth.finish(prov, url.searchParams.get('code'));
+        if (mode === 'link') {
+          if (!user) return redirect(res, `/login?next=${encodeURIComponent('/mypage/accounts')}`, [clear]);
+          await accounts.oauthLink(user.id, profile);
+          return redirect(res, `/mypage/accounts?linked=${prov}`, [clear]);
+        }
+        const r = await accounts.oauthLogin(profile, { next });
+        if (r.pending) return redirect(res, '/signup/social', [clear, pendingCookie(r.pending.token, r.pending.maxAgeSec)]);
+        return redirect(res, next, [clear, sessionCookie(r.session.token, r.session.maxAgeSec)]);
+      } catch (err) {
+        if (!(err instanceof DataSourceError)) console.error('[playpick:oauth] 처리 오류:', err?.message);
+        return redirect(res, back(err instanceof DataSourceError ? err.code : 'OAUTH_FAILED'), [clear]);
+      }
+    }
+    if (p === '/api/auth/oauth/pending' && method === 'GET') {
+      return sendJson(res, 200, { pending: await accounts.oauthPending(readCookies(req)[PENDING_COOKIE]) });
+    }
+    if (p === '/api/auth/oauth/complete' && method === 'POST') {
+      if (!limits.signup.hit(ip)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
+      const r = await accounts.oauthComplete(readCookies(req)[PENDING_COOKIE], await readJson(req));
+      res.writeHead(201, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Set-Cookie': [sessionCookie(r.session.token, r.session.maxAgeSec), pendingCookie('', 0)],
+      });
+      return res.end(JSON.stringify({ user: await meOut(r.user), next: r.next }));
+    }
+    if (p === '/api/me/identities' && method === 'GET') {
+      const u = requireUser();
+      return sendJson(res, 200, { items: await accounts.identities(u.id), providers: oauth.enabled, hasPassword: u.hasPassword });
+    }
+    om = /^\/api\/me\/identities\/(google|discord)$/.exec(p);
+    if (om && method === 'DELETE') {
+      const u = requireUser();
+      await accounts.unlink(u.id, om[1]);
+      return sendJson(res, 200, { items: await accounts.identities(u.id) });
     }
     if (p === '/api/auth/find-id' && method === 'POST') {
       if (!limits.mail.hit(ip)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);

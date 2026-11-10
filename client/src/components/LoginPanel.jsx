@@ -7,14 +7,15 @@ import { BadgeIcon, NameBadge } from './Badge.jsx';
 import { BadgePicker } from './BadgePicker.jsx';
 import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
+import { SocialButtons } from './SocialLogin.jsx';
 
 /** 로그인 창 (첫 화면 오른쪽 위 / 로그인 페이지 공통) */
-export function LoginPanel({ next, compact = false }) {
+export function LoginPanel({ next, compact = false, initialError = null }) {
   const { login } = useAuth();
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(initialError);
   const [busy, setBusy] = useState(false);
 
   const submit = async (e) => {
@@ -64,6 +65,7 @@ export function LoginPanel({ next, compact = false }) {
           {busy ? '로그인 중…' : '로그인'}
         </button>
       </form>
+      <SocialButtons next={next} />
       <nav className="login-links" aria-label="계정 도움말">
         <Link to="/find-id">아이디 찾기</Link>
         <Link to="/find-password">비밀번호 찾기</Link>
@@ -92,7 +94,7 @@ export function ProfilePanel() {
             <NameBadge badge={user.badge} size="md" />
             {user.nickname}님
           </p>
-          <p className="profile-id">{user.loginId}</p>
+          <p className="profile-id">{user.hasPassword === false ? user.email : user.loginId}</p>
         </div>
         <Link to="/mypage/profile" className="pp-gear" aria-label="마이페이지" title="마이페이지">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)" /></svg>

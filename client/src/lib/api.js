@@ -61,6 +61,12 @@ export const api = {
   findId: (b) => request('POST', '/api/auth/find-id', b),
   resetRequest: (b) => request('POST', '/api/auth/reset-request', b),
   resetPassword: (b) => request('POST', '/api/auth/reset', b),
+  // 다른 계정으로 로그인
+  providers: () => get('/api/auth/providers'),
+  oauthPending: () => get('/api/auth/oauth/pending'),
+  oauthComplete: (b) => request('POST', '/api/auth/oauth/complete', b),
+  identities: () => get('/api/me/identities'),
+  unlinkIdentity: (provider) => request('DELETE', `/api/me/identities/${provider}`),
 
   wishlist: () => get('/api/wishlist'),
   wish: (id) => request('PUT', `/api/wishlist/${gid(id)}`),

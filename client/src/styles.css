@@ -480,6 +480,23 @@ img { max-width: 100%; }
 .profile-link:hover { background: rgba(255, 255, 255, 0.18); }
 .profile-link b { color: var(--gold); }
 
+/* ── 다른 계정으로 로그인 (Google·Discord). 버튼 색은 각 회사 안내(흰 바탕 G·보라 Discord)를 따름 ── */
+.social-login { display: grid; gap: 8px; margin-top: 14px; }
+.social-divider { display: flex; align-items: center; gap: 10px; margin: 2px 0; font-size: 0.8rem; color: inherit; opacity: 0.75; }
+.social-divider::before, .social-divider::after { content: ''; flex: 1; height: 1px; background: currentColor; opacity: 0.35; }
+.social-btn { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; padding: 0 16px; border-radius: 999px; font-weight: 700; text-decoration: none; border: 1px solid transparent; transition: filter 0.15s, box-shadow 0.15s; }
+.social-btn:hover { filter: brightness(0.96); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); }
+.social-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.social-google { background: #fff; color: #1f1f1f; border-color: #dadce0; }
+.social-discord { background: #5865f2; color: #fff; }
+.auth-card .social-login { margin: 16px 0 0; }
+.auth-card .social-login + .auth-form { margin-top: 6px; }
+.social-who { display: flex; align-items: center; gap: 10px; margin: 14px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--field, var(--surface)); border: 1px solid var(--line); overflow-wrap: anywhere; }
+.identity-list { list-style: none; margin: 14px 0 10px; padding: 0; display: grid; gap: 10px; }
+.identity-row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.identity-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; flex: none; }
+.identity-info { display: grid; gap: 2px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
 /* ── 인증 페이지 ── */
 .auth-page { display: grid; place-items: start center; padding: 12px 0 24px; }
 .auth-page > .login-panel { width: min(400px, 100%); }

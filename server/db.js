@@ -166,6 +166,26 @@ CREATE TABLE IF NOT EXISTS contrib_milestones (
   created_at TEXT NOT NULL,
   PRIMARY KEY (user_id, game_id, kind, level)
 );
+-- 다른 계정으로 로그인(Google·Discord): 제공자 계정 번호(subject) ↔ 회원
+CREATE TABLE IF NOT EXISTS user_identities (
+  provider TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email TEXT,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (provider, subject),
+  UNIQUE (user_id, provider)
+);
+-- 처음 온 소셜 계정: 닉네임을 정할 때까지 잠시 보관(30분)
+CREATE TABLE IF NOT EXISTS oauth_pending (
+  token_hash TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  email TEXT NOT NULL,
+  name TEXT,
+  next TEXT,
+  expires_at INTEGER NOT NULL
+);
 -- 업로드 사진(프로필·제보 표지·표지 사진 제보). 서버리스(Vercel)에는 디스크가 없어 DB 안에 저장
 CREATE TABLE IF NOT EXISTS images (
   name TEXT PRIMARY KEY,

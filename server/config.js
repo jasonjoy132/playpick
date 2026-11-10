@@ -43,6 +43,11 @@ export function getConfig() {
     // 게임위 게임 중 AI가 상태를 '모름'이라고 한 게임을 목록에서 숨길지 (기본 숨김, off 면 보임)
     hideUnknownGrac: env('HIDE_UNKNOWN_GRAC', 'on') !== 'off',
     adminEmails: env('ADMIN_EMAILS').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+    // 다른 계정으로 로그인. 둘 다 있어야 그 버튼이 보임. 돌아올 주소: <APP_BASE_URL>/api/auth/oauth/<google|discord>/callback
+    oauth: {
+      google: { clientId: env('GOOGLE_CLIENT_ID'), clientSecret: env('GOOGLE_CLIENT_SECRET') },
+      discord: { clientId: env('DISCORD_CLIENT_ID'), clientSecret: env('DISCORD_CLIENT_SECRET') },
+    },
     mail: {
       apiKey: env('BREVO_API_KEY'),
       fromEmail: env('MAIL_FROM_EMAIL'),

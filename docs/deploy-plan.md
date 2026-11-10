@@ -31,6 +31,7 @@
    | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | 1번에서 받은 값 |
    | `IGDB_CLIENT_ID`, `IGDB_CLIENT_SECRET`, `DEEPL_API_KEY`, `GEMINI_API_KEY` | 로컬 `.env`와 같은 값 |
    | `BREVO_API_KEY`, `MAIL_FROM_EMAIL` | 로컬 `.env`와 같은 값 |
+   | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | 각 콘솔에서 받은 값. 돌아올 주소 `https://playpick-sooty.vercel.app/api/auth/oauth/<google|discord>/callback` 등록 |
    | `ADMIN_EMAILS` | 관리자 이메일 |
    | `DATA_SOURCE` | `live` |
    | `APP_BASE_URL` | `https://<프로젝트 이름>.vercel.app` (첫 배포 뒤 주소 확인하고 넣고 다시 배포) |

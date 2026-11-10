@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
 import { useAuth } from '../lib/auth.jsx';
-import { Link, navigate } from '../lib/router.jsx';
+import { Link, navigate, useLocation } from '../lib/router.jsx';
 import { toAvatarDataUrl } from '../lib/image.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { BadgeIcon, NameBadge, UserBadge } from '../components/Badge.jsx';
@@ -12,9 +12,10 @@ import { EditedList } from '../components/AdminEdit.jsx';
 import { ImpactCard, ImpactLine } from '../components/Contributors.jsx';
 import { RatingBadge, StarsDisplay } from '../components/Stars.jsx';
 import { ErrorState, Loading } from '../components/Status.jsx';
+import { PROVIDER_LABEL, ProviderMark, oauthErrorText, oauthStartUrl } from '../components/SocialLogin.jsx';
 
 const MENU = [
-  { group: '내 정보', items: [['profile', '프로필 설정'], ['password', '비밀번호 변경'], ['delete', '회원 탈퇴']] },
+  { group: '내 정보', items: [['profile', '프로필 설정'], ['accounts', '연결된 계정'], ['password', '비밀번호 변경'], ['delete', '회원 탈퇴']] },
   { group: '게임', items: [['wishlist', '찜 목록'], ['reviews', '내 리뷰']] },
   { group: '활동', items: [['recent', '최근 본 게임'], ['submissions', '내 제보'], ['badges', '뱃지·칭호']] },
 ];
@@ -44,6 +45,7 @@ export function MyPage({ section = 'profile', options }) {
   if (!TITLES[section]) section = 'profile';
   const content = {
     profile: <ProfileSection />,
+    accounts: <AccountsSection />,
     password: <PasswordSection />,
     delete: <DeleteAccountSection />,
     wishlist: <WishlistSection options={options} />,
@@ -63,7 +65,7 @@ export function MyPage({ section = 'profile', options }) {
               <NameBadge badge={user.badge} size="md" />
               {user.nickname}님
             </p>
-            <p className="muted small">{user.loginId}</p>
+            <p className="muted small">{user.hasPassword === false ? user.email : user.loginId}</p>
           </div>
         </div>
         {MENU.map((m) => (
@@ -177,7 +179,7 @@ function ProfileSection() {
         <dl className="info-table compact">
           <div>
             <dt>아이디</dt>
-            <dd>{user.loginId}</dd>
+            <dd>{user.hasPassword === false ? <span className="muted">없음 — 연결된 계정으로 로그인해요</span> : user.loginId}</dd>
           </div>
           <div>
             <dt>이메일</dt>
@@ -194,6 +196,8 @@ function ProfileSection() {
 }
 
 function PasswordSection() {
+  const { user, refreshUser } = useAuth();
+  const making = user.hasPassword === false; // 소셜로만 가입: 현재 비밀번호 없이 처음 만들기
   const [f, setF] = useState({ current: '', next: '', next2: '' });
   const [state, setState] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -204,9 +208,10 @@ function PasswordSection() {
     setBusy(true);
     setState(null);
     try {
-      await api.changePassword({ currentPassword: f.current, newPassword: f.next });
+      await api.changePassword({ currentPassword: making ? undefined : f.current, newPassword: f.next });
       setF({ current: '', next: '', next2: '' });
-      setState({ ok: '비밀번호를 바꿨어요. 다른 기기에서는 로그아웃되었어요.' });
+      setState({ ok: making ? `비밀번호를 만들었어요. 이제 아이디 ${user.loginId}로도 로그인할 수 있어요.` : '비밀번호를 바꿨어요. 다른 기기에서는 로그아웃되었어요.' });
+      if (making) refreshUser();
     } catch (err) {
       setState({ error: err.message });
     } finally {
@@ -215,10 +220,16 @@ function PasswordSection() {
   };
   return (
     <form className="panel auth-form narrow" onSubmit={submit} noValidate>
-      <div className="form-field">
-        <label htmlFor="f-cur">현재 비밀번호</label>
-        <input id="f-cur" type="password" value={f.current} onChange={set('current')} autoComplete="current-password" maxLength={64} />
-      </div>
+      {making ? (
+        <p className="form-note muted" data-testid="password-making">
+          지금은 연결된 계정으로만 로그인해요. 비밀번호를 만들면 아이디 <b>{user.loginId}</b>와 비밀번호로도 로그인할 수 있어요.
+        </p>
+      ) : (
+        <div className="form-field">
+          <label htmlFor="f-cur">현재 비밀번호</label>
+          <input id="f-cur" type="password" value={f.current} onChange={set('current')} autoComplete="current-password" maxLength={64} />
+        </div>
+      )}
       <div className="form-field">
         <label htmlFor="f-new">새 비밀번호</label>
         <input id="f-new" type="password" value={f.next} onChange={set('next')} autoComplete="new-password" maxLength={64} />
@@ -230,15 +241,84 @@ function PasswordSection() {
       </div>
       <Notice state={state} />
       <button type="submit" className="btn btn-primary" disabled={busy}>
-        비밀번호 변경
+        {making ? '비밀번호 만들기' : '비밀번호 변경'}
       </button>
     </form>
   );
 }
 
+/** 연결된 계정: Google·Discord 연결하기·끊기 */
+function AccountsSection() {
+  const { search } = useLocation();
+  const qs = new URLSearchParams(search);
+  const [nonce, setNonce] = useState(0);
+  const info = useAsync(() => api.identities(), [nonce]);
+  const [state, setState] = useState(() =>
+    qs.get('oauthError') ? { error: oauthErrorText(qs.get('oauthError'), qs.get('provider')) } : qs.get('linked') ? { ok: `${PROVIDER_LABEL[qs.get('linked')] ?? ''} 계정을 연결했어요. 이제 이 계정으로도 로그인할 수 있어요.` } : null,
+  );
+  const [busy, setBusy] = useState(null);
+  if (info.status === 'loading') return <Loading />;
+  if (info.status === 'error') return <ErrorState error={info.error} onRetry={() => setNonce((n) => n + 1)} />;
+  const { items, providers, hasPassword } = info.data;
+  const all = [...new Set([...providers, ...items.map((x) => x.provider)])];
+  const unlink = async (p) => {
+    if (!window.confirm(`${PROVIDER_LABEL[p]} 계정 연결을 끊을까요? 이 계정으로는 더 이상 로그인할 수 없어요.`)) return;
+    setBusy(p);
+    setState(null);
+    try {
+      await api.unlinkIdentity(p);
+      setState({ ok: `${PROVIDER_LABEL[p]} 계정 연결을 끊었어요.` });
+      setNonce((n) => n + 1);
+    } catch (err) {
+      setState({ error: err.message });
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="panel" data-testid="accounts">
+      <p className="muted">연결한 계정으로 아이디·비밀번호 없이 로그인할 수 있어요. 받는 정보는 이메일·이름·계정 번호뿐이에요.</p>
+      <Notice state={state} />
+      {all.length === 0 && <p className="muted">지금은 연결할 수 있는 계정이 없어요.</p>}
+      <ul className="identity-list">
+        {all.map((p) => {
+          const linked = items.find((x) => x.provider === p);
+          const last = linked && !hasPassword && items.length <= 1;
+          return (
+            <li key={p} className="identity-row" data-testid={`identity-${p}`}>
+              <span className={`identity-mark social-${p}`}>
+                <ProviderMark provider={p} size={20} />
+              </span>
+              <div className="identity-info">
+                <b>{PROVIDER_LABEL[p]}</b>
+                <span className="muted small">{linked ? `${linked.email ?? ''} · ${fmtDate(linked.linkedAt)} 연결` : '연결 안 됨'}</span>
+              </div>
+              {linked ? (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => unlink(p)} disabled={busy === p || last} title={last ? '로그인할 방법이 하나뿐이라 끊을 수 없어요' : undefined}>
+                  연결 끊기
+                </button>
+              ) : providers.includes(p) ? (
+                <a className="btn btn-primary btn-sm" href={oauthStartUrl(p, { mode: 'link' })}>
+                  연결하기
+                </a>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      {!hasPassword && items.length <= 1 && (
+        <p className="muted small">
+          로그인할 방법이 하나뿐이라 끊을 수 없어요. <Link to="/mypage/password">비밀번호를 만들거나</Link> 다른 계정을 연결하면 끊을 수 있어요.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** 회원 탈퇴: 지워지는 것·남는 것 안내 → 비밀번호 + '탈퇴' 입력 → 삭제 후 홈으로 */
 function DeleteAccountSection() {
-  const { logout, wishCount } = useAuth();
+  const { user, logout, wishCount } = useAuth();
+  const noPassword = user.hasPassword === false;
   const counts = useAsync(async () => {
     const [rv, s, im, rp] = await Promise.all([api.myReviews(), api.mySubmissions(), api.myImageSubmissions(), api.myReports()]);
     const pending = [...s.items, ...im.items, ...rp.items].filter((x) => x.status === 'pending').length;
@@ -248,7 +328,7 @@ function DeleteAccountSection() {
   const [state, setState] = useState(null);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
-  const ready = f.password.length > 0 && f.confirm.trim() === '탈퇴';
+  const ready = (noPassword || f.password.length > 0) && f.confirm.trim() === '탈퇴';
   const n = (v) => (v == null ? '' : ` ${v}개`);
   const submit = async (e) => {
     e.preventDefault();
@@ -256,7 +336,7 @@ function DeleteAccountSection() {
     setBusy(true);
     setState(null);
     try {
-      await api.deleteAccount({ password: f.password, confirm: f.confirm.trim() });
+      await api.deleteAccount({ password: noPassword ? undefined : f.password, confirm: f.confirm.trim() });
       try {
         sessionStorage.setItem('pp-bye', '1');
       } catch {
@@ -278,7 +358,7 @@ function DeleteAccountSection() {
         <div className="panel">
           <h2 className="withdraw-h">바로 지워져요</h2>
           <ul>
-            <li>계정(아이디·이메일·닉네임·프로필 사진)과 로그인 기록</li>
+            <li>계정(아이디·이메일·닉네임·프로필 사진)과 로그인 기록, 연결된 Google·Discord 계정 정보</li>
             <li>찜 목록{n(wishCount)}</li>
             <li>별점·리뷰{n(counts.data?.reviews)} — 게임 평점도 다시 계산돼요</li>
             <li>검토 중인 제보{n(counts.data?.pending)}</li>
@@ -294,10 +374,12 @@ function DeleteAccountSection() {
         </div>
       </div>
       <form className="panel auth-form narrow" onSubmit={submit} noValidate>
-        <div className="form-field">
-          <label htmlFor="w-pw">비밀번호</label>
-          <input id="w-pw" type="password" value={f.password} onChange={set('password')} autoComplete="current-password" maxLength={64} />
-        </div>
+        {!noPassword && (
+          <div className="form-field">
+            <label htmlFor="w-pw">비밀번호</label>
+            <input id="w-pw" type="password" value={f.password} onChange={set('password')} autoComplete="current-password" maxLength={64} />
+          </div>
+        )}
         <div className="form-field">
           <label htmlFor="w-confirm">확인을 위해 <b>탈퇴</b>라고 입력해 주세요</label>
           <input id="w-confirm" value={f.confirm} onChange={set('confirm')} autoComplete="off" maxLength={10} placeholder="탈퇴" />
