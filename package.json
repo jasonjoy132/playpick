@@ -5,7 +5,7 @@
   "description": "플레이픽(PlayPick) - 인원수·플랫폼·장르 기반 맞춤형 게임 큐레이션 웹사이트",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -24,7 +24,8 @@
     "import:players": "node scripts/import-players.mjs",
     "prefill:ended": "node scripts/prefill-ended.mjs",
     "check:game": "node scripts/check-game.mjs",
-    "recheck:grac-igdb": "node scripts/recheck-grac-igdb.mjs"
+    "recheck:grac-igdb": "node scripts/recheck-grac-igdb.mjs",
+    "refresh:grac": "node scripts/refresh-grac.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

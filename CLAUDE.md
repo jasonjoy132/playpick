@@ -15,19 +15,23 @@
 4. `node_modules`, `.data`(회원 DB·업로드 이미지), `.cache`는 건드리지 않기(캐시 삭제가 필요하면 먼저 물어보기).
 5. 기능을 바꾸면 테스트도 함께 고치고 `npm test`, `npm run test:e2e` 통과 확인.
 6. `prefill:players`·`prefill:ended`·`import:status` 스크립트는 같은 파일(`server/data/party-size.json`)에 쓰므로 **동시에 두 개 돌리지 않기**. (`prefill:images`·`prefill:playtime`은 각자 다른 파일)
-7. 미리 만드는 데이터(`server/data/*.json`)는 git 파일로 배포(Vercel에서 읽기만). Supabase에는 회원이 만드는 데이터만.
+7. 미리 만드는 데이터(`server/data/*.json`)는 git 파일로 배포(Vercel에서 읽기만). Turso(회원 DB)에는 회원이 만드는 데이터만(사진 포함).
+8. DB 호출은 모두 비동기(`await db.prepare(sql).get/all/run(...)`). 원격 DB는 외래 키(ON DELETE)를 믿지 않으므로 지울 때 자식 행을 직접 지우기(`accounts.deleteAccount`·`community.deleteReview`처럼 `db.batch`)
 
 ## 스택
 
 - 서버: `node:http`(프레임워크 없음) — `server/index.js` → `server/app.js`(모든 API 라우트)
-- DB: `node:sqlite`(SQLite, 동기 API) — `.data/playpick.db`, 스키마·열 추가는 `server/db.js`(시작할 때 자동 생성·보충)
+- DB: libSQL(`@libsql/client`, SQLite 호환, **비동기**) — 로컬 `.data/playpick.db`, 배포 Turso(`TURSO_DATABASE_URL`·`TURSO_AUTH_TOKEN`), 테스트 `:memory:`. 스키마·열 추가는 `server/db.js`(첫 요청 때 자동 생성·보충)
+  - 업로드 사진(프로필 `u…`·제보 표지 `s…`·표지 사진 제보 `p…`)은 DB `images` 표(`avatars.js`). 예전 `.data/avatars` 파일은 로컬에서 읽기 전용으로 보임
+  - 승인된 제보 목록 등은 30초 캐시(`community/cached.js`) — 서버리스 인스턴스가 여러 개라도 곧 반영
+- 배포: Vercel — `api/index.js`(서버리스 함수가 `createApp`으로 넘김) + `vercel.json`(API·사진 주소 → 함수, 나머지 → `client/dist`). Vercel이면(`config.vercel`) 캐시 폴더 `/tmp`, IP는 `x-forwarded-for`, 게관위 색인 자동 갱신 끔
 - 화면: React 19 + esbuild(`scripts/build.mjs`, `client/public` 파일은 `client/dist`로 평평하게 복사), 자체 라우터 `client/src/lib/router.jsx`
   - 뒤로 가기 복원: 기록 항목마다 키(`history.state.ppKey`)를 붙여 불러온 목록·'더 보기' 상태·스크롤 위치를 메모리에 저장(`lib/pageMemory.js`의 `usePageState`, `useAsync(fn, deps, memo)`). 상세의 '추천 목록으로'는 바로 앞이 그 목록이면 뒤로 가기(`goBackTo`). 새 목록 화면을 만들면 이 둘을 쓰기
   - 디자인: MiniMax Colorful Cards 바탕 + 다크 모드 — **`DESIGN.md`**. 색은 `styles.css`의 토큰(`--bg`, `--surface-2`, `--field` 등)만 쓰기(직접 hex 쓰면 다크 모드에서 깨짐). 헤더 `ThemeToggle.jsx`, 첫 테마는 `client/index.html` 스크립트
 - 테스트: `node:test` 단위(`test/`), Playwright E2E(`e2e/`, 가짜 카탈로그 주입 방식)
   - 테스트 중에는 `.env`를 읽지 않음(`NODE_TEST_CONTEXT`, `server/config.js`). 테스트 서버는 항상 `dbFile: ':memory:'`
   - E2E의 '더 보기'는 `dispatchEvent('click')`으로 누르기(`click()`은 스크롤해서 자동 불러오기와 겹침)
-- 요구: Node 20+ (node:sqlite 사용)
+- 요구: Node 22+
 
 ## 명령어
 
@@ -45,6 +49,7 @@
 | `npm run prefill:images` | 게관위 모바일 게임 App Store 아이콘·스크린샷 저장 |
 | `npm run prefill:playtime -- [--limit N] [--pages N] [--dry] [--retry]` | RAWG 평균 플레이 시간 저장(인기·랭킹·신작·장르별 IGDB 게임, 기본 500개). RAWG 월 2만 건·게임당 최대 2건 |
 | `npm run recheck:grac-igdb -- [--limit N] [--dry]` | **화면에 보이는** 게관위 게임(종료·모름 제외, 약 9천 개, 동시 6묶음)이 IGDB에 있는지 새 방식(괄호 안 이름·플랫폼 표기 제거·전각 정리·slug, 꺼낸 이름은 플랫폼도 일치)으로 다시 확인 → `.cache/grac-igdb-check.json`(v2). 이어서 실행 가능 |
+| `npm run refresh:grac -- [--incremental] [--skip-grac]` | **배포용 데이터 갱신**: 게관위 전체 목록 → `server/data/grac-index.json`, `.cache`의 IGDB 존재 확인·번역 캐시 → `server/data/`로 합쳐 복사. 돌린 뒤 커밋 |
 | `npm run import:status -- <결과.csv>` | 외부 AI 결과(게관위 '모름'·IGDB 종료) 반영. `--dry`, `--force` |
 | `npm run prefill:players -- --grac-players --export` | 게관위 게임 추천 인원 외부 AI용 CSV 내보내기 → `server/data/players-review/players-partN.csv`(300개씩) + `players.map.json`. 질문은 `PROMPT-PLAYERS.md` |
 | `npm run import:players -- <결과.csv> [--dry] [--force]` | 외부 AI 추천 인원 결과 반영(`known: true`이고 1≤min≤max≤32만, 출처 `external`). 이미 숫자 있으면 건너뜀. 거의 다 1~1이면 '짐작' 경고 |
@@ -52,7 +57,7 @@
 ## 데이터 출처와 구조
 
 - **IGDB**(주 데이터, 전체 게임 실시간 조회): `server/providers/igdbProvider.js` (Apicalypse, 초당 4회 제한 `slot()`)
-- **게임물관리위원회(게관위)**: 전체 목록 색인 `.cache/grac-index.json`(약 3.3만 건, 매일 증분·주 1회 전체), IGDB에 있는지 확인 캐시 `.cache/grac-igdb-check.json`. IGDB에 없는 게관위 게임만 '게관위 카드'로 보임
+- **게임물관리위원회(게관위)**: 전체 목록 색인 `.cache/grac-index.json`(약 3.3만 건, 로컬은 매일 증분·주 1회 전체) + git 시드 `server/data/grac-index.json`(배포는 이것만 읽음, `refresh:grac`로 갱신), IGDB에 있는지 확인 캐시 `.cache/grac-igdb-check.json`(+ 시드 `server/data/`). IGDB에 없는 게관위 게임만 '게관위 카드'로 보임
   - 이름 맞추기(`igdbProvider.titleVariants`·`titleSlugs`, `catalog.createExistenceCache`): 'Portal 2(포탈 2)_PC' → Portal 2·포탈 2, 'Kartrider Drift' → slug kartrider-drift. 괄호 안 등 꺼낸 이름으로만 맞으면 플랫폼도 같아야 함(`samePlatform`)
 - **RAWG**: 평균 플레이 시간 — 서버는 실시간으로 부르지 않고 `server/data/rawg-playtime.json`(`prefill:playtime`)만 읽음. 파일에 없으면 AI 추정 → '정보 없음' (2026-11 RAWG 서버 522 다운으로 상세가 8초씩 걸려서 바꿈) / **DeepL**: 소개 번역·검색어 번역 / **App Store 검색 API**: 게관위 모바일 게임 아이콘(이름+개발사 모두 일치할 때만)
 - **Gemini**(기본 `gemini-flash-lite-latest`): 서버는 실시간으로 부르지 않고 **미리 저장한 파일만 읽음**
@@ -97,13 +102,6 @@
 
 ## 남은 일 (우선순위)
 
-1. **배포** — 계획은 `docs/deploy-plan.md`(Vercel Hobby + Turso 무료, 사진도 DB에). 아래는 예전 메모
-   **Vercel + Supabase 배포 전환** (학교 과제, Vercel Hobby 요금제)
-   - DB를 Supabase(PostgreSQL)로: 지금 `node:sqlite` 동기 호출을 전부 `await`로, SQL 문법(`?`→`$1`, `INSERT OR IGNORE`→`ON CONFLICT`, 자동 증가 등) 변환. Vercel에서는 Supabase **연결 풀러 주소(6543)** 사용. 로컬도 Supabase로 통일할지 사용자와 결정
-   - 업로드 이미지(`.data/` 아래 프로필·제보 사진) → Supabase Storage
-   - 게관위 색인 `.cache/grac-index.json`(git 제외 중)을 배포에 포함하는 방법 정하기(서버 시작마다 3만 건 다시 받으면 너무 느림)
-   - 메모리 기반 요청 제한(rateLimit)은 인스턴스마다 따로라는 점 고려
-   - `vercel.json`, 환경 변수 목록 정리
-   - 전환하면 개인정보처리방침(`client/src/pages/InfoPages.jsx`) '처리 위탁'에 Vercel(호스팅)·Supabase(DB·사진 저장) 추가
+1. **배포** — 코드 준비는 `deploy` 브랜치(계획·사용자 할 일은 `docs/deploy-plan.md`). 남은 것: 사용자가 Turso·Vercel 가입하고 환경 변수 입력 → `deploy` push → 미리 보기 주소에서 확인 → main에 합치기
 2. GitHub: 공개 저장소 `jasonjoy132/playpick`(main). push 전 `git status`로 `.env`·`.data/`·`.cache/` 안 올라가는지 확인
 3. (선택) 모바일 화면 점검, 게임 상세 페이지 제목·미리보기, 친구와 같이 고르는 '파티 투표'

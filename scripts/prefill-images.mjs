@@ -38,7 +38,7 @@ const art = createAppArt(config.appStore.artFile);
 console.log(`게임위 모바일 게임 아이콘 미리 받기 · 저장 파일 ${config.appStore.artFile} (이미 확인 ${art.size}개)`);
 
 // 1) 화면에 보이는 게임위 모바일 게임
-const index = createGracIndex({ grac: createGracProvider(config.grac), cacheFile: config.grac.indexFile, log: (m) => console.log(m) });
+const index = createGracIndex({ grac: createGracProvider(config.grac), cacheFile: config.grac.indexFile, seedFile: config.grac.indexSeed, log: (m) => console.log(m) });
 let snap = index.snapshot();
 if (snap.status !== 'ready') {
   console.log('게임위 전체 목록을 받는 중… (처음 한 번 몇 분)');

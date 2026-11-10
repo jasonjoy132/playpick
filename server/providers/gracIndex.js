@@ -102,9 +102,9 @@ export function createGracIndex({ grac, cacheFile, seedFile = null, autoRefresh 
     return [...byNo.values()];
   }
 
-  async function refresh() {
+  async function refresh({ full: force = false } = {}) {
     const t = now();
-    const full = !data || t - data.fullAt > 7 * DAY;
+    const full = force || !data || t - data.fullAt > 7 * DAY;
     const games = full ? await fullBuild() : await incremental();
     data = { fullAt: full ? t : data.fullAt, updatedAt: t, games };
     collapsed = collapse(games);
@@ -115,6 +115,8 @@ export function createGracIndex({ grac, cacheFile, seedFile = null, autoRefresh 
   }
 
   return {
+    /** 바로 갱신하고 끝날 때까지 기다림 (npm run refresh:grac). full: 전체 다시 받기 */
+    refresh,
     /** 오래됐거나 없으면 백그라운드 갱신 시작 (기다리지 않음) */
     ensure() {
       if (job) return job;

@@ -45,7 +45,7 @@ if (igdb.configured) {
   }
 } else console.log('IGDB 설정이 없어 IGDB 검색은 건너뜀');
 
-const index = createGracIndex({ grac: createGracProvider(config.grac), cacheFile: config.grac.indexFile });
+const index = createGracIndex({ grac: createGracProvider(config.grac), cacheFile: config.grac.indexFile, seedFile: config.grac.indexSeed });
 const snap = index.snapshot();
 if (snap.status === 'ready') {
   let exists = {};

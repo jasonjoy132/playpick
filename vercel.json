@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build",
+  "outputDirectory": "client/dist",
+  "regions": ["icn1"],
+  "functions": {
+    "api/index.js": { "includeFiles": "server/data/**", "maxDuration": 60 }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/avatars/(.*)", "destination": "/api/index" },
+    { "source": "/submission-images/(.*)", "destination": "/api/index" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

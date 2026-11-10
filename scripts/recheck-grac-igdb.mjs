@@ -36,12 +36,12 @@ if (!igdb.configured) {
   console.log('.env 에 IGDB_CLIENT_ID / IGDB_CLIENT_SECRET 이 없어요.');
   process.exit(1);
 }
-const snap = createGracIndex({ grac: createGracProvider(config.grac), cacheFile: config.grac.indexFile }).snapshot();
+const snap = createGracIndex({ grac: createGracProvider(config.grac), cacheFile: config.grac.indexFile, seedFile: config.grac.indexSeed }).snapshot();
 if (snap.status !== 'ready') {
   console.log('게임위 목록(.cache/grac-index.json)이 없어요. 서버를 한 번 켜서 목록을 받은 뒤 다시 실행하세요.');
   process.exit(1);
 }
-const cache = createExistenceCache(config.grac.igdbCheckFile);
+const cache = createExistenceCache(config.grac.igdbCheckFile, config.grac.igdbCheckSeed);
 // 화면에 보이는 게임위 게임 (server/app.js 의 listable 과 같은 기준)
 const ps = createPartySize({ ...config.gemini, live: false });
 const art = createAppArt(config.appStore.artFile);

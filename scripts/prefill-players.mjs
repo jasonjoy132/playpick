@@ -79,7 +79,7 @@ const todo = [];
 const igdb = createIgdbProvider(config.igdb ?? {});
 // 0) (--recheck) 화면에 보이는 게임위 게임 중 예전 기준 '서비스 중' → 엄격하게 다시 확인 (App Store에 있는 게임은 그대로 보이므로 제외)
 if (RECHECK) {
-  const index = createGracIndex({ grac: createGracProvider(config.grac), cacheFile: config.grac.indexFile, log: (m) => console.log(m) });
+  const index = createGracIndex({ grac: createGracProvider(config.grac), cacheFile: config.grac.indexFile, seedFile: config.grac.indexSeed, log: (m) => console.log(m) });
   let snap = index.snapshot();
   if (snap.status !== 'ready') {
     await index.ensure();
@@ -108,7 +108,7 @@ if (RECHECK) {
 }
 // 0-2) (--grac-players) 화면에 보이는 게임위 게임(IGDB에 없음, 종료·출시 예정 아님, AI '서비스 중' 또는 App Store에 있음) 중 인원 답이 없는 게임
 if (PLAYERS_ONLY) {
-  const index = createGracIndex({ grac: createGracProvider(config.grac), cacheFile: config.grac.indexFile, log: (m) => console.log(m) });
+  const index = createGracIndex({ grac: createGracProvider(config.grac), cacheFile: config.grac.indexFile, seedFile: config.grac.indexSeed, log: (m) => console.log(m) });
   let snap = index.snapshot();
   if (snap.status !== 'ready') {
     await index.ensure();
@@ -185,7 +185,7 @@ if (IGDB_N > 0 && !RECHECK) {
 // 2) (선택) 게임위 게임
 if (GRAC_N > 0 && !RECHECK) {
   const grac = createGracProvider(config.grac);
-  const index = createGracIndex({ grac, cacheFile: config.grac.indexFile, log: (m) => console.log(m) });
+  const index = createGracIndex({ grac, cacheFile: config.grac.indexFile, seedFile: config.grac.indexSeed, log: (m) => console.log(m) });
   let snap = index.snapshot();
   if (snap.status !== 'ready') {
     console.log('게임위 전체 목록을 받는 중… (처음 한 번 몇 분)');
@@ -201,7 +201,7 @@ if (GRAC_N > 0 && !RECHECK) {
       .sort((a, b) => String(b.ratingDate || '').localeCompare(String(a.ratingDate || '')))
       .filter((g) => ps.needsPrefill(g) && !seen.has(cacheKey(g)) && seen.add(cacheKey(g)))
       .slice(0, GRAC_N);
-    const check = createExistenceCache(config.grac.igdbCheckFile);
+    const check = createExistenceCache(config.grac.igdbCheckFile, config.grac.igdbCheckSeed);
     const inIgdb = new Set();
     if (igdb.configured) {
       const chunks = [];
