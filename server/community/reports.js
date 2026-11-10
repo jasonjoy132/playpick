@@ -6,6 +6,7 @@
 import { DataSourceError } from '../providers/errors.js';
 import { storeFromUrl } from '../providers/igdbProvider.js';
 import { validateSourceUrl } from './imageSubmissions.js';
+import { cached } from './cached.js';
 
 const fail = (code, message, status = 400) => new DataSourceError(code, message, status);
 export const MAX_PENDING_REPORTS = 20;
@@ -94,10 +95,7 @@ export function createReports(db, { now = () => Date.now() } = {}) {
     hide: db.prepare('UPDATE reviews SET hidden_at = ? WHERE id = ?'),
   };
   const iso = () => new Date(now()).toISOString();
-  let cache = null; // game_id → 반영할 값
-  const changed = () => {
-    cache = null;
-  };
+  const changed = () => overrides.clear();
 
   const toItem = (r) => ({
     id: r.id,
@@ -120,7 +118,7 @@ export function createReports(db, { now = () => Date.now() } = {}) {
    * 정보 수정 제보를 관리자가 고친 값으로 (비운 칸은 반영하지 않음). 바뀐 칸 목록을 돌려줌
    * edits: { playersMin, playersMax, hours, storeUrl } — 화면은 남길 칸을 모두 보냄
    */
-  function applyEdits(r, edits) {
+  async function applyEdits(r, edits) {
     if (!edits || typeof edits !== 'object') return [];
     if (r.kind !== 'fix') throw fail('BAD_REQUEST', '서비스 종료 제보는 고칠 내용이 없어요. 승인 또는 거절만 할 수 있어요.');
     const cur = JSON.parse(r.payload || '{}');
@@ -128,16 +126,15 @@ export function createReports(db, { now = () => Date.now() } = {}) {
     if (!Object.keys(next).length) throw fail('INVALID_REPORT', '반영할 내용이 하나도 없어요. 거절해 주세요.');
     const diff = diffFix(cur, next);
     if (!diff.length) return [];
-    q.setOriginal.run(r.payload || '{}', r.id);
-    q.setPayload.run(JSON.stringify(next), r.id);
+    await q.setOriginal.run(r.payload || '{}', r.id);
+    await q.setPayload.run(JSON.stringify(next), r.id);
     return diff;
   }
 
   /** 승인된 제보 → 게임별 반영 값 (같은 항목은 나중에 승인된 것이 우선) */
-  function overrides() {
-    if (cache) return cache;
-    cache = new Map();
-    for (const r of q.approved.all()) {
+  const overrides = cached(async () => {
+    const cache = new Map(); // game_id → 반영할 값
+    for (const r of await q.approved.all()) {
       const o = cache.get(r.game_id) ?? {};
       if (r.kind === 'ended') Object.assign(o, { ended: true, endedBy: r.nickname ?? null, endedSourceUrl: r.source_url });
       else {
@@ -150,11 +147,11 @@ export function createReports(db, { now = () => Date.now() } = {}) {
       cache.set(r.game_id, o);
     }
     return cache;
-  }
+  }, { now });
 
-  /** 게임에 승인된 제보 반영 */
-  function apply(g) {
-    const o = overrides().get(g.id);
+  /** 게임에 승인된 제보 반영 (map: overrides()) */
+  function apply(map, g) {
+    const o = map.get(g.id);
     if (!o) return g;
     let out = g;
     if (o.ended) out = { ...out, userEnded: true, endedSourceUrl: o.endedSourceUrl };
@@ -175,7 +172,7 @@ export function createReports(db, { now = () => Date.now() } = {}) {
   return {
     // ── 서비스 종료·정보 수정 제보 ──
     /** game: 서버가 다시 조회한 게임 */
-    createGameReport(user, game, input) {
+    async createGameReport(user, game, input) {
       if (!game || game.isDemo) throw fail('NOT_FOUND', '게임을 찾을 수 없어요.', 404);
       const kind = input?.kind;
       if (kind !== 'ended' && kind !== 'fix') throw fail('INVALID_REPORT', '알 수 없는 제보 종류예요.');
@@ -191,91 +188,95 @@ export function createReports(db, { now = () => Date.now() } = {}) {
         if (has(input?.sourceUrl)) sourceUrl = validateSourceUrl(input.sourceUrl);
       }
       if (!user.isAdmin) {
-        if (q.pendingCount.get(user.id).n >= MAX_PENDING_REPORTS) throw fail('TOO_MANY', `검토 중인 제보가 ${MAX_PENDING_REPORTS}개 있어요. 결과가 나온 뒤 다시 제보해 주세요.`, 429);
-        if (q.samePending.get(user.id, game.id, kind)) throw fail('DUPLICATE', '이 게임에 같은 종류의 검토 중인 제보가 이미 있어요.', 409);
+        if ((await q.pendingCount.get(user.id)).n >= MAX_PENDING_REPORTS) throw fail('TOO_MANY', `검토 중인 제보가 ${MAX_PENDING_REPORTS}개 있어요. 결과가 나온 뒤 다시 제보해 주세요.`, 429);
+        if (await q.samePending.get(user.id, game.id, kind)) throw fail('DUPLICATE', '이 게임에 같은 종류의 검토 중인 제보가 이미 있어요.', 409);
       }
       const at = iso();
       const status = user.isAdmin ? 'approved' : 'pending';
-      const { lastInsertRowid } = q.insert.run(
+      const { lastInsertRowid } = await q.insert.run(
         user.id, kind, game.id, String(game.title).slice(0, 120), JSON.stringify(payload), sourceUrl, note, status, at, user.isAdmin ? at : null, user.isAdmin ? user.id : null,
       );
       if (user.isAdmin) changed();
-      return toItem(q.byId.get(Number(lastInsertRowid)));
+      return toItem(await q.byId.get(Number(lastInsertRowid)));
     },
-    mineGameReports: (userId) => q.mine.all(userId).map(toItem),
+    mineGameReports: async (userId) => (await q.mine.all(userId)).map(toItem),
 /** 회원 탈퇴: 검토 중인 제보(기록) 지우기 */
-    removePendingOf(userId) {
-      const rows = db.prepare("SELECT id FROM game_reports WHERE user_id = ? AND status = 'pending'").all(userId);
+    async removePendingOf(userId) {
+      const rows = await db.prepare("SELECT id FROM game_reports WHERE user_id = ? AND status = 'pending'").all(userId);
       for (const r of rows) {
-        q.del.run(r.id);
+        await q.del.run(r.id);
       }
+      changed(); // 승인된 제보의 제보자 이름(탈퇴하면 비움)을 다시 읽게
       return rows.length;
     },
-    cancelGameReport(userId, id) {
-      const r = q.byId.get(Number(id));
+    async cancelGameReport(userId, id) {
+      const r = await q.byId.get(Number(id));
       if (!r || r.user_id !== userId) throw fail('NOT_FOUND', '제보를 찾을 수 없어요.', 404);
       if (r.status !== 'pending') throw fail('NOT_PENDING', '검토가 끝난 제보는 취소할 수 없어요.', 409);
-      q.del.run(r.id);
+      await q.del.run(r.id);
       return { ok: true };
     },
-    listGameReports(kind, status = 'pending') {
+    async listGameReports(kind, status = 'pending') {
       if (!['ended', 'fix'].includes(kind)) throw fail('BAD_REQUEST', '알 수 없는 제보 종류예요.');
       if (!['pending', 'approved', 'rejected'].includes(status)) throw fail('BAD_REQUEST', '알 수 없는 상태예요.');
       const counts = { pending: 0, approved: 0, rejected: 0 };
-      for (const c of q.counts.all(kind)) counts[c.status] = c.n;
-      return { items: q.byStatus.all(kind, status).map(toItem), counts };
+      for (const c of await q.counts.all(kind)) counts[c.status] = c.n;
+      return { items: (await q.byStatus.all(kind, status)).map(toItem), counts };
     },
     /** 승인 (edits: 관리자가 고친 정보 수정 값). changes: 이번에 고친 칸 */
-    approveGameReport(id, adminId, edits) {
-      const r = q.byId.get(Number(id));
+    async approveGameReport(id, adminId, edits) {
+      const r = await q.byId.get(Number(id));
       if (!r) throw fail('NOT_FOUND', '제보를 찾을 수 없어요.', 404);
-      const changes = applyEdits(r, edits);
-      q.setStatus.run('approved', null, iso(), adminId, r.id);
+      const changes = await applyEdits(r, edits);
+      await q.setStatus.run('approved', null, iso(), adminId, r.id);
       changed();
-      return { ...toItem(q.byId.get(r.id)), changes };
+      return { ...toItem(await q.byId.get(r.id)), changes };
     },
     /** 이미 승인된 정보 수정 제보 고치기 (알림 없음) */
-    editGameReport(id, edits) {
-      const r = q.byId.get(Number(id));
+    async editGameReport(id, edits) {
+      const r = await q.byId.get(Number(id));
       if (!r) throw fail('NOT_FOUND', '제보를 찾을 수 없어요.', 404);
       if (r.status !== 'approved') throw fail('NOT_APPROVED', '승인된 제보만 고칠 수 있어요. 검토 중이면 ‘고쳐서 승인’을 써 주세요.', 409);
-      const changes = applyEdits(r, edits);
+      const changes = await applyEdits(r, edits);
       if (!changes.length) throw fail('NO_CHANGE', '바뀐 내용이 없어요.');
       changed();
-      return { ...toItem(q.byId.get(r.id)), changes };
+      return { ...toItem(await q.byId.get(r.id)), changes };
     },
     /** 거절 또는 승인 취소(반영 되돌리기) */
-    rejectGameReport(id, adminId, reason) {
-      const r = q.byId.get(Number(id));
+    async rejectGameReport(id, adminId, reason) {
+      const r = await q.byId.get(Number(id));
       if (!r) throw fail('NOT_FOUND', '제보를 찾을 수 없어요.', 404);
       const why = clean(reason, 200, '거절 사유');
       if (!why) throw fail('INVALID_REPORT', '거절 사유를 입력해 주세요.');
-      q.setStatus.run('rejected', why, iso(), adminId, r.id);
+      await q.setStatus.run('rejected', why, iso(), adminId, r.id);
       changed();
-      return toItem(q.byId.get(r.id));
+      return toItem(await q.byId.get(r.id));
     },
-    applyAll: (games) => (overrides().size ? games.map(apply) : games),
+    async applyAll(games) {
+      const map = await overrides();
+      return map.size ? games.map((g) => apply(map, g)) : games;
+    },
 
     // ── 리뷰 신고 ──
-    reportReview(userId, reviewId, input) {
-      const r = q.review.get(Number(reviewId));
+    async reportReview(userId, reviewId, input) {
+      const r = await q.review.get(Number(reviewId));
       if (!r || r.hidden_at) throw fail('NOT_FOUND', '리뷰를 찾을 수 없어요.', 404);
       if (r.user_id === userId) throw fail('OWN_REVIEW', '내 리뷰는 신고할 수 없어요.');
       const reason = input?.reason;
       if (!REVIEW_REASONS[reason]) throw fail('INVALID_REPORT', '신고 사유를 골라 주세요.');
       const note = clean(input?.note, 300, '설명');
-      if (q.rrSame.get(r.id, userId)) throw fail('DUPLICATE', '이미 신고한 리뷰예요.', 409);
-      q.rrInsert.run(r.id, userId, reason, note, iso());
+      if (await q.rrSame.get(r.id, userId)) throw fail('DUPLICATE', '이미 신고한 리뷰예요.', 409);
+      await q.rrInsert.run(r.id, userId, reason, note, iso());
       return { ok: true };
     },
     /** 이 게임에서 내가 신고한 리뷰 id */
-    reportedIds: (userId, gameId) => new Set(q.rrMine.all(userId, gameId).map((x) => x.review_id)),
-    listReviewReports(status = 'pending') {
+    reportedIds: async (userId, gameId) => new Set((await q.rrMine.all(userId, gameId)).map((x) => x.review_id)),
+    async listReviewReports(status = 'pending') {
       if (!['pending', 'upheld', 'dismissed'].includes(status)) throw fail('BAD_REQUEST', '알 수 없는 상태예요.');
       const counts = { pending: 0, upheld: 0, dismissed: 0 };
-      for (const c of q.rrCounts.all()) counts[c.status] = c.n;
-      const items = q.rrReviews.all(status).map((r) => {
-        const reports = q.rrOf.all(r.id).map((x) => ({ reason: x.reason, reasonText: REVIEW_REASONS[x.reason] ?? x.reason, note: x.note, status: x.status, reporter: x.nickname ?? null, createdAt: x.created_at }));
+      for (const c of await q.rrCounts.all()) counts[c.status] = c.n;
+      const items = await Promise.all((await q.rrReviews.all(status)).map(async (r) => {
+        const reports = (await q.rrOf.all(r.id)).map((x) => ({ reason: x.reason, reasonText: REVIEW_REASONS[x.reason] ?? x.reason, note: x.note, status: x.status, reporter: x.nickname ?? null, createdAt: x.created_at }));
         return {
           reviewId: r.id,
           gameId: r.game_id,
@@ -288,22 +289,22 @@ export function createReports(db, { now = () => Date.now() } = {}) {
           reports,
           count: reports.length,
         };
-      });
+      }));
       return { items, counts };
     },
     /** hide: 숨김(신고 인정) · dismiss: 문제 없음 · restore: 숨긴 리뷰 다시 보이기 */
-    resolveReview(reviewId, adminId, action) {
-      const r = q.review.get(Number(reviewId));
+    async resolveReview(reviewId, adminId, action) {
+      const r = await q.review.get(Number(reviewId));
       if (!r) throw fail('NOT_FOUND', '리뷰를 찾을 수 없어요.', 404);
       const at = iso();
       if (action === 'hide') {
-        q.hide.run(at, r.id);
-        q.rrSet.run('upheld', at, adminId, r.id, 'pending');
+        await q.hide.run(at, r.id);
+        await q.rrSet.run('upheld', at, adminId, r.id, 'pending');
       } else if (action === 'dismiss') {
-        q.rrSet.run('dismissed', at, adminId, r.id, 'pending');
+        await q.rrSet.run('dismissed', at, adminId, r.id, 'pending');
       } else if (action === 'restore') {
-        q.hide.run(null, r.id);
-        q.rrSet.run('dismissed', at, adminId, r.id, 'upheld');
+        await q.hide.run(null, r.id);
+        await q.rrSet.run('dismissed', at, adminId, r.id, 'upheld');
       } else throw fail('BAD_REQUEST', '알 수 없는 처리예요.');
       return { ok: true };
     },

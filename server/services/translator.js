@@ -23,11 +23,13 @@ export function createTranslator(cfg = {}, { fetchImpl = globalThis.fetch } = {}
   const url = configured ? deeplUrlFor(cfg.apiKey, cfg.apiUrl) : null;
   const cacheFile = cfg.cacheFile || null;
   let cache = {};
-  if (cacheFile && fs.existsSync(cacheFile)) {
+  // git 에 올린 시작값(server/data, 읽기 전용) 위에 쓰는 캐시(.cache 또는 /tmp)를 덮음
+  for (const f of [cfg.seedFile, cacheFile]) {
+    if (!f || !fs.existsSync(f)) continue;
     try {
-      cache = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+      Object.assign(cache, JSON.parse(fs.readFileSync(f, 'utf8')));
     } catch {
-      cache = {};
+      /* 깨진 파일은 무시 */
     }
   }
   const save = () => {

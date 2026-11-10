@@ -29,47 +29,46 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
     useReset: db.prepare('UPDATE password_resets SET used = 1 WHERE user_id = ?'),
     setNick: db.prepare('UPDATE users SET nickname = ? WHERE id = ?'),
     setAvatar: db.prepare('UPDATE users SET avatar_file = ? WHERE id = ?'),
-    delUser: db.prepare('DELETE FROM users WHERE id = ?'),
     delOtherSessions: db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?'),
   };
 
-  function createSession(userId) {
+  async function createSession(userId) {
     const token = newToken();
-    q.purge.run(now());
-    q.newSession.run(sha256(token), userId, now() + SESSION_DAYS * 864e5);
+    await q.purge.run(now());
+    await q.newSession.run(sha256(token), userId, now() + SESSION_DAYS * 864e5);
     return { token, maxAgeSec: SESSION_DAYS * 86400 };
   }
 
   return {
-    signup({ loginId, password, nickname, email }) {
+    async signup({ loginId, password, nickname, email }) {
       loginId = String(loginId ?? '').trim().toLowerCase();
       nickname = String(nickname ?? '').trim();
       email = String(email ?? '').trim().toLowerCase();
       const err = check('loginId', loginId) || checkPassword(password) || check('nickname', nickname) || check('email', email);
       if (err) throw fail('INVALID_INPUT', err);
-      if (q.byLogin.get(loginId)) throw fail('DUPLICATE_LOGIN_ID', '이미 사용 중인 아이디입니다.', 409);
-      if (q.byNick.get(nickname)) throw fail('DUPLICATE_NICKNAME', '이미 사용 중인 닉네임입니다.', 409);
-      if (q.byEmail.get(email)) throw fail('DUPLICATE_EMAIL', '이미 가입된 이메일입니다. 아이디 찾기를 이용해 주세요.', 409);
-      const { lastInsertRowid } = q.insert.run(loginId, nickname, email, hashPassword(password), new Date(now()).toISOString());
-      const user = q.byId.get(Number(lastInsertRowid));
-      return { user: publicUser(user), session: createSession(user.id) };
+      if (await q.byLogin.get(loginId)) throw fail('DUPLICATE_LOGIN_ID', '이미 사용 중인 아이디입니다.', 409);
+      if (await q.byNick.get(nickname)) throw fail('DUPLICATE_NICKNAME', '이미 사용 중인 닉네임입니다.', 409);
+      if (await q.byEmail.get(email)) throw fail('DUPLICATE_EMAIL', '이미 가입된 이메일입니다. 아이디 찾기를 이용해 주세요.', 409);
+      const { lastInsertRowid } = await q.insert.run(loginId, nickname, email, hashPassword(password), new Date(now()).toISOString());
+      const user = await q.byId.get(Number(lastInsertRowid));
+      return { user: publicUser(user), session: await createSession(user.id) };
     },
 
-    login({ loginId, password }) {
+    async login({ loginId, password }) {
       loginId = String(loginId ?? '').trim().toLowerCase();
-      const user = loginId ? q.byLogin.get(loginId) : null;
+      const user = loginId ? await q.byLogin.get(loginId) : null;
       const ok = user ? verifyPassword(String(password ?? ''), user.password_hash) : (burnTime(String(password ?? '')), false);
       if (!ok) throw fail('INVALID_LOGIN', '아이디 또는 비밀번호가 올바르지 않습니다.', 401);
-      return { user: publicUser(user), session: createSession(user.id) };
+      return { user: publicUser(user), session: await createSession(user.id) };
     },
 
-    logout(token) {
-      if (token) q.delSession.run(sha256(token));
+    async logout(token) {
+      if (token) await q.delSession.run(sha256(token));
     },
 
-    userFromToken(token) {
+    async userFromToken(token) {
       if (!token) return null;
-      return publicUser(q.session.get(sha256(token), now()));
+      return publicUser(await q.session.get(sha256(token), now()));
     },
 
     /** 아이디 찾기: 가입 여부와 관계없이 같은 응답(계정 존재 여부 노출 방지) */
@@ -78,7 +77,7 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
       const err = check('email', email);
       if (err) throw fail('INVALID_INPUT', err);
       if (!mailer.configured && !mailer.devLog) throw fail('MAIL_NOT_CONFIGURED', '메일 발송 설정이 없어 아이디 찾기를 할 수 없습니다. 관리자에게 문의해 주세요.', 503);
-      const user = q.byEmail.get(email);
+      const user = await q.byEmail.get(email);
       if (user) {
         await mailer.send({
           to: email,
@@ -96,10 +95,10 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
       const err = check('loginId', loginId) || check('email', email);
       if (err) throw fail('INVALID_INPUT', err);
       if (!mailer.configured && !mailer.devLog) throw fail('MAIL_NOT_CONFIGURED', '메일 발송 설정이 없어 비밀번호 찾기를 할 수 없습니다. 관리자에게 문의해 주세요.', 503);
-      const user = q.byLogin.get(loginId);
+      const user = await q.byLogin.get(loginId);
       if (user && user.email.toLowerCase() === email) {
         const token = newToken();
-        q.newReset.run(sha256(token), user.id, now() + RESET_MINUTES * 60e3);
+        await q.newReset.run(sha256(token), user.id, now() + RESET_MINUTES * 60e3);
         await mailer.send({
           to: email,
           subject: '[플레이픽] 비밀번호 재설정',
@@ -111,56 +110,69 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
     },
 
     /** 닉네임 변경 */
-    updateProfile(userId, { nickname }) {
+    async updateProfile(userId, { nickname }) {
       nickname = String(nickname ?? '').trim();
       const err = check('nickname', nickname);
       if (err) throw fail('INVALID_INPUT', err);
-      const other = q.byNick.get(nickname);
+      const other = await q.byNick.get(nickname);
       if (other && other.id !== userId) throw fail('DUPLICATE_NICKNAME', '이미 사용 중인 닉네임입니다.', 409);
-      q.setNick.run(nickname, userId);
-      return publicUser(q.byId.get(userId));
+      await q.setNick.run(nickname, userId);
+      return publicUser(await q.byId.get(userId));
     },
 
     /** 프로필 이미지 변경(dataUrl) / 삭제(null) */
-    setAvatar(userId, dataUrl) {
-      const before = q.byId.get(userId)?.avatar_file;
-      const file = dataUrl ? avatars.save(userId, dataUrl) : null;
-      q.setAvatar.run(file, userId);
-      if (before) avatars.remove(before);
-      return publicUser(q.byId.get(userId));
+    async setAvatar(userId, dataUrl) {
+      const before = (await q.byId.get(userId))?.avatar_file;
+      const file = dataUrl ? await avatars.save(userId, dataUrl) : null;
+      await q.setAvatar.run(file, userId);
+      if (before) await avatars.remove(before);
+      return publicUser(await q.byId.get(userId));
     },
 
     /** 비밀번호 변경: 현재 비밀번호 확인, 이 기기 말고 다른 기기는 로그아웃 */
-    changePassword(userId, currentToken, { currentPassword, newPassword }) {
-      const user = q.byId.get(userId);
+    async changePassword(userId, currentToken, { currentPassword, newPassword }) {
+      const user = await q.byId.get(userId);
       if (!user || !verifyPassword(String(currentPassword ?? ''), user.password_hash)) throw fail('WRONG_PASSWORD', '현재 비밀번호가 올바르지 않습니다.', 400);
       const err = checkPassword(newPassword);
       if (err) throw fail('INVALID_INPUT', err);
       if (currentPassword === newPassword) throw fail('INVALID_INPUT', '현재 비밀번호와 다른 비밀번호를 입력해 주세요.');
-      q.setPw.run(hashPassword(newPassword), userId);
-      q.delOtherSessions.run(userId, sha256(currentToken));
+      await q.setPw.run(hashPassword(newPassword), userId);
+      await q.delOtherSessions.run(userId, sha256(currentToken));
       return { ok: true };
     },
 
 /** 회원 탈퇴: 비밀번호·확인 문구 확인 → 프로필 사진 파일 삭제 → 계정 삭제(세션·찜·리뷰·알림 등은 DB가 함께 지움) */
-    deleteAccount(userId, { password, confirm } = {}, beforeDelete = () => {}) {
-      const user = q.byId.get(userId);
+    async deleteAccount(userId, { password, confirm } = {}, beforeDelete = () => {}) {
+      const user = await q.byId.get(userId);
       if (!user || !verifyPassword(String(password ?? ''), user.password_hash)) throw fail('WRONG_PASSWORD', '비밀번호가 올바르지 않습니다.', 400);
       if (String(confirm ?? '').trim() !== '탈퇴') throw fail('INVALID_INPUT', "확인 칸에 '탈퇴'라고 입력해 주세요.");
-      beforeDelete();
-      q.delUser.run(userId);
-      if (user.avatar_file) avatars.remove(user.avatar_file);
+      await beforeDelete();
+      // 원격 DB는 외래 키(ON DELETE)를 믿지 않으므로 자식 행을 직접 지우고, 남기는 기록은 작성자만 비움 — 한 트랜잭션으로
+      const del = (t, col = 'user_id') => [`DELETE FROM ${t} WHERE ${col} = ?`, [userId]];
+      const nul = (t, col = 'user_id') => [`UPDATE ${t} SET ${col} = NULL WHERE ${col} = ?`, [userId]];
+      await db.batch([
+        ...['sessions', 'password_resets', 'wishlist', 'recent_views', 'notifications', 'contrib_milestones'].map((t) => del(t)),
+        ['DELETE FROM review_reports WHERE review_id IN (SELECT id FROM reviews WHERE user_id = ?)', [userId]],
+        del('reviews'),
+        nul('game_submissions'),
+        nul('image_submissions'),
+        nul('game_reports'),
+        nul('review_reports', 'reporter_id'),
+        nul('ai_playtime', 'requested_by'),
+        del('users', 'id'),
+      ]);
+      if (user.avatar_file) await avatars.remove(user.avatar_file);
       return { ok: true };
     },
 
-    resetPassword({ token, password }) {
+    async resetPassword({ token, password }) {
       const err = checkPassword(password);
       if (err) throw fail('INVALID_INPUT', err);
-      const row = token ? q.reset.get(sha256(String(token)), now()) : null;
+      const row = token ? await q.reset.get(sha256(String(token)), now()) : null;
       if (!row) throw fail('INVALID_TOKEN', '재설정 링크가 만료되었거나 이미 사용되었습니다. 비밀번호 찾기를 다시 해 주세요.', 400);
-      q.setPw.run(hashPassword(password), row.user_id);
-      q.useReset.run(row.user_id);
-      q.delUserSessions.run(row.user_id); // 다른 기기 로그아웃
+      await q.setPw.run(hashPassword(password), row.user_id);
+      await q.useReset.run(row.user_id);
+      await q.delUserSessions.run(row.user_id); // 다른 기기 로그아웃
       return { ok: true };
     },
   };

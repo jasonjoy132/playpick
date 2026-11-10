@@ -68,35 +68,46 @@ export function createBadges(db) {
     reports: db.prepare(`SELECT COUNT(DISTINCT kind || ':' || game_id) AS n FROM game_reports WHERE user_id = ? AND status = 'approved'`),
     upheld: db.prepare(`SELECT COUNT(*) AS n FROM review_reports WHERE reporter_id = ? AND status = 'upheld'`),
   };
-  const countIn = (sql, ids, userId) => (ids.length ? Number(db.prepare(sql.replace('(?)', `(${ids.map(() => '?').join(',')})`)).get(...ids, userId).n) : 0);
+  const countIn = async (sql, ids, userId) => (ids.length ? Number((await db.prepare(sql.replace('(?)', `(${ids.map(() => '?').join(',')})`)).get(...ids, userId)).n) : 0);
 
   /** 회원의 제보 실적 */
-  function stats(userId) {
-    const rows = q.approved.all(userId);
+  async function stats(userId) {
+    // 원격 DB 왕복을 줄이려고 서로 상관없는 조회는 동시에
+    const [rows, rv, firsts, photos, reports, upheld] = await Promise.all([
+      q.approved.all(userId),
+      q.reviews.get(userId),
+      q.firsts.get(userId),
+      q.photos.get(userId),
+      q.reports.get(userId),
+      q.upheld.get(userId),
+    ]);
     const ids = rows.map((r) => `user-${r.id}`);
-    const rv = q.reviews.get(userId);
+    const [wishes, reviewedGames] = await Promise.all([
+      countIn('SELECT COUNT(*) AS n FROM wishlist WHERE game_id IN (?) AND user_id != ?', ids, userId),
+      countIn('SELECT COUNT(DISTINCT game_id) AS n FROM reviews WHERE game_id IN (?) AND user_id != ? AND hidden_at IS NULL', ids, userId),
+    ]);
     return {
       reviews: Number(rv.n),
       longReviews: Number(rv.long ?? 0),
-      firstReviews: Number(q.firsts.get(userId).n),
+      firstReviews: Number(firsts.n),
       approved: rows.length,
-      photos: Number(q.photos.get(userId).n),
-      reports: Number(q.reports.get(userId).n),
-      upheldReports: Number(q.upheld.get(userId).n),
+      photos: Number(photos.n),
+      reports: Number(reports.n),
+      upheldReports: Number(upheld.n),
       complete: rows.filter((r) => r.image_file && r.store_url && r.summary && r.players_min != null).length,
       local: rows.filter((r) => JSON.parse(r.platforms).some((p) => p === 'mobile' || p === 'arcade')).length,
       early: rows.some((r) => r.reviewed_at && r.reviewed_at < EARLY_UNTIL) ? 1 : 0,
-      wishes: countIn('SELECT COUNT(*) AS n FROM wishlist WHERE game_id IN (?) AND user_id != ?', ids, userId),
-      reviewedGames: countIn('SELECT COUNT(DISTINCT game_id) AS n FROM reviews WHERE game_id IN (?) AND user_id != ? AND hidden_at IS NULL', ids, userId),
+      wishes,
+      reviewedGames,
     };
   }
 
   /** 전체 뱃지 목록 + 받았는지 + 진행도 */
-  function list(userId) {
-    const s = stats(userId);
+  async function list(userId) {
+    const s = await stats(userId);
     const badges = ALL.map((b) => ({ ...pub(b), desc: b.desc, need: b.need, have: Math.min(s[b.stat], b.need), earned: s[b.stat] >= b.need }));
     const earned = new Set(badges.filter((b) => b.earned).map((b) => b.id));
-    const chosen = q.selected.get(userId)?.title_badge ?? null;
+    const chosen = (await q.selected.get(userId))?.title_badge ?? null;
     // 자동 칭호: 제보·리뷰·사진·정보 단계 중 가장 높은 것 (같으면 제보 > 리뷰 > 사진 > 정보)
     const topOf = (list) => [...list].reverse().find((t) => earned.has(t.id));
     const top = [topOf(TIERS), topOf(REVIEW_TIERS), topOf(PHOTO_TIERS), topOf(INFO_TIERS)].filter(Boolean).reduce((a, b) => (!a || b.tier > a.tier ? b : a), null);
@@ -108,7 +119,7 @@ export function createBadges(db) {
     // 최근 획득: 알림을 확인한 순서(badges_seen 끝쪽이 최근) 중 지금도 가진 것 3개
     let seenOrder = [];
     try {
-      seenOrder = JSON.parse(q.seen.get(userId)?.badges_seen ?? '[]');
+      seenOrder = JSON.parse((await q.seen.get(userId))?.badges_seen ?? '[]');
     } catch {
       seenOrder = [];
     }
@@ -135,12 +146,12 @@ export function createBadges(db) {
      * 새로 받은 뱃지 (알림용). 알림을 확인하기 전까지 계속 돌려줌. 잃었다가 다시 얻으면 다시 알림
      * 처음(기록 없음)에는 지금 가진 뱃지를 '이미 봄'으로 기록하고 알리지 않음
      */
-    newBadges(userId) {
-      const { badges } = list(userId);
+    async newBadges(userId) {
+      const { badges } = await list(userId);
       const earned = badges.filter((b) => b.earned);
-      const raw = q.seen.get(userId)?.badges_seen;
+      const raw = (await q.seen.get(userId))?.badges_seen;
       if (raw == null) {
-        q.setSeen.run(JSON.stringify(earned.map((b) => b.id)), userId);
+        await q.setSeen.run(JSON.stringify(earned.map((b) => b.id)), userId);
         return [];
       }
       let seen;
@@ -152,38 +163,39 @@ export function createBadges(db) {
       // 잃은 뱃지(리뷰 삭제·제보 게임 내림 등)는 '봄' 기록에서 지워, 다시 얻으면 다시 알림
       const earnedIds = new Set(earned.map((b) => b.id));
       const kept = [...seen].filter((id) => earnedIds.has(id));
-      if (kept.length !== seen.size) q.setSeen.run(JSON.stringify(kept), userId);
+      if (kept.length !== seen.size) await q.setSeen.run(JSON.stringify(kept), userId);
       return earned.filter((b) => !seen.has(b.id)).map(({ have, need, earned: _e, ...b }) => b);
     },
     /** 알림 확인: 받은 뱃지 중 ids 를 '봄'으로 */
-    markSeen(userId, ids) {
-      const earned = new Set(list(userId).badges.filter((b) => b.earned).map((b) => b.id));
+    async markSeen(userId, ids) {
+      const earned = new Set((await list(userId)).badges.filter((b) => b.earned).map((b) => b.id));
       let seen = [];
       try {
-        seen = JSON.parse(q.seen.get(userId)?.badges_seen ?? '[]');
+        seen = JSON.parse((await q.seen.get(userId))?.badges_seen ?? '[]');
       } catch {
         seen = [];
       }
       const next = [...new Set([...seen, ...(Array.isArray(ids) ? ids : []).filter((id) => earned.has(id))])];
-      q.setSeen.run(JSON.stringify(next), userId);
+      await q.setSeen.run(JSON.stringify(next), userId);
       return { ok: true };
     },
     /** 닉네임 옆에 달 대표 뱃지 (없으면 null). cache(Map)를 주면 한 요청 안에서 같은 회원은 한 번만 계산 */
-    displayFor(userId, cache) {
+    async displayFor(userId, cache) {
       if (userId == null) return null;
-      if (!cache) return list(userId).display;
-      if (!cache.has(userId)) cache.set(userId, list(userId).display);
+      if (!cache) return (await list(userId)).display;
+      // 같은 요청 안에서 동시에 불려도 한 번만 계산(Promise 를 저장)
+      if (!cache.has(userId)) cache.set(userId, list(userId).then((x) => x.display));
       return cache.get(userId);
     },
     /** 대표 칭호 고르기 (받은 뱃지만, null 이면 자동) */
-    select(userId, id) {
+    async select(userId, id) {
       if (id != null) {
-        const mine = list(userId).badges.find((b) => b.id === id);
+        const mine = (await list(userId)).badges.find((b) => b.id === id);
         if (!mine) throw new DataSourceError('BAD_BADGE', '알 수 없는 뱃지예요.', 400);
         if (!mine.earned) throw new DataSourceError('BAD_BADGE', '아직 받지 않은 뱃지예요.', 400);
       }
-      q.select.run(id ?? null, userId);
-      return list(userId);
+      await q.select.run(id ?? null, userId);
+      return await list(userId);
     },
   };
 }

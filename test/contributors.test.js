@@ -99,26 +99,26 @@ test('영향력 점수: 기본 점수 + 다른 회원 반응(내 몫 비율), �
   assert.ok(n.some((x) => x.kind === 'impact' && /‘앨리스 협동 게임’에 첫 리뷰가 달렸어요/.test(x.title)));
 });
 
-test('찜 이정표는 한 번만, 게임당 한 달 반응 상한', () => {
+test('찜 이정표는 한 번만, 게임당 한 달 반응 상한', async () => {
   const db = openDb(':memory:');
   const t = '2026-11-05T00:00:00.000Z';
-  db.prepare("INSERT INTO users (login_id, nickname, email, password_hash, created_at) VALUES ('maker', 'maker', 'm@x.com', 'x', ?)").run(t);
-  db.prepare("INSERT INTO game_submissions (user_id, status, title, platforms, genres, created_at, reviewed_at) VALUES (1, 'approved', '인기 게임', '[\"pc\"]', '[\"puzzle\"]', ?, ?)").run(t, t);
+  await db.prepare("INSERT INTO users (login_id, nickname, email, password_hash, created_at) VALUES ('maker', 'maker', 'm@x.com', 'x', ?)").run(t);
+  await db.prepare("INSERT INTO game_submissions (user_id, status, title, platforms, genres, created_at, reviewed_at) VALUES (1, 'approved', '인기 게임', '[\"pc\"]', '[\"puzzle\"]', ?, ?)").run(t, t);
   const sent = [];
   const c = createContributors(db, { notify: (uid, note) => sent.push([uid, note.title]), now: () => Date.parse('2026-11-20T00:00:00Z') });
   for (let i = 2; i <= 31; i++) {
-    db.prepare("INSERT INTO users (login_id, nickname, email, password_hash, created_at) VALUES (?, ?, ?, 'x', ?)").run(`u${i}`, `u${i}`, `u${i}@x.com`, t);
-    db.prepare("INSERT INTO wishlist (user_id, game_id, title, created_at) VALUES (?, 'user-1', '인기 게임', '2026-11-10T00:00:00.000Z')").run(i);
-    if (i === 6) c.afterReaction('user-1');
+    await db.prepare("INSERT INTO users (login_id, nickname, email, password_hash, created_at) VALUES (?, ?, ?, 'x', ?)").run(`u${i}`, `u${i}`, `u${i}@x.com`, t);
+    await db.prepare("INSERT INTO wishlist (user_id, game_id, title, created_at) VALUES (?, 'user-1', '인기 게임', '2026-11-10T00:00:00.000Z')").run(i);
+    if (i === 6) await c.afterReaction('user-1');
   }
-  c.afterReaction('user-1');
-  c.afterReaction('user-1');
+  await c.afterReaction('user-1');
+  await c.afterReaction('user-1');
   const wishNotes = sent.filter(([, title]) => /찜했어요/.test(title)).map(([, title]) => title.match(/(\d+)명/)[1]);
   assert.deepEqual(wishNotes, ['5', '10'], '5명·10명 이정표 각각 한 번');
-  const top = c.leaderboard({ period: 'month' }).items[0];
+  const top = (await c.leaderboard({ period: 'month' })).items[0];
   assert.equal(top.reaction, MONTH_CAP, '찜 30개여도 한 달 20점');
   assert.equal(top.score, 3 + MONTH_CAP);
   // 지난달 승인은 이번 달 기본 점수에 없음
-  assert.equal(createContributors(db, { now: () => Date.parse('2026-12-03T00:00:00Z') }).leaderboard({ period: 'month' }).items.length, 0);
-  assert.equal(createContributors(db, { now: () => Date.parse('2026-12-03T00:00:00Z') }).leaderboard({ period: 'all' }).items[0].score, 23);
+  assert.equal((await createContributors(db, { now: () => Date.parse('2026-12-03T00:00:00Z') }).leaderboard({ period: 'month' })).items.length, 0);
+  assert.equal((await createContributors(db, { now: () => Date.parse('2026-12-03T00:00:00Z') }).leaderboard({ period: 'all' })).items[0].score, 23);
 });

@@ -163,12 +163,12 @@ test('읽음 처리: 하나·모두, 남의 알림은 못 읽음', async () => {
   assert.equal((await v('POST', '/api/me/notifications/read', { all: true })).body.unread, 0);
 });
 
-test('사용자마다 최근 100개만 남김', () => {
+test('사용자마다 최근 100개만 남김', async () => {
   const db = openDb(':memory:');
-  db.prepare("INSERT INTO users (login_id, nickname, email, password_hash, created_at) VALUES ('a', 'a', 'a@x.com', 'x', '2026')").run();
+  await db.prepare("INSERT INTO users (login_id, nickname, email, password_hash, created_at) VALUES ('a', 'a', 'a@x.com', 'x', '2026')").run();
   const n = createNotifications(db);
-  for (let i = 0; i < 120; i++) n.add(1, { kind: 'info', title: `알림 ${i}` });
-  const list = n.list(1);
+  for (let i = 0; i < 120; i++) await n.add(1, { kind: 'info', title: `알림 ${i}` });
+  const list = await n.list(1);
   assert.equal(list.items.length, 30, '목록은 최근 30개');
   assert.equal(list.items[0].title, '알림 119');
   assert.equal(list.unread, 100);

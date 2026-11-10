@@ -1,8 +1,10 @@
-// SQLite 저장소 (Node.js 내장 node:sqlite — 별도 설치 불필요, Node 22.13 이상)
-// 회원·세션·비밀번호 재설정·찜·리뷰를 저장합니다. 파일: .data/playpick.db (git 제외)
+// 회원 DB (libSQL = SQLite 호환). 로컬은 파일(.data/playpick.db, git 제외), 배포(Vercel)는 Turso 원격 DB
+//  - 회원·세션·비밀번호 재설정·찜·리뷰·제보·알림·업로드 사진을 저장
+//  - 모든 호출은 비동기: db.prepare(sql).get/all/run(...) 이 Promise 를 돌려줌
+//  - 원격 DB는 요청마다 연결이 달라 외래 키(ON DELETE)를 믿지 않음 → 지울 때 자식 행을 직접 지움(accounts.deleteAccount 등)
 import fs from 'node:fs';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { createClient } from '@libsql/client';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -164,6 +166,13 @@ CREATE TABLE IF NOT EXISTS contrib_milestones (
   created_at TEXT NOT NULL,
   PRIMARY KEY (user_id, game_id, kind, level)
 );
+-- 업로드 사진(프로필·제보 표지·표지 사진 제보). 서버리스(Vercel)에는 디스크가 없어 DB 안에 저장
+CREATE TABLE IF NOT EXISTS images (
+  name TEXT PRIMARY KEY,
+  mime TEXT NOT NULL,
+  data BLOB NOT NULL,
+  created_at TEXT NOT NULL
+);
 `;
 
 // 기존 DB 파일에 나중에 추가된 열 보충
@@ -178,14 +187,56 @@ const COLUMNS = [
   ['game_reports', 'original_payload', 'TEXT'], // 관리자가 고쳐서 승인한 정보 수정 제보의 원래 값
 ];
 
-export function openDb(file) {
-  if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
-  const db = new DatabaseSync(file);
-  db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
-  db.exec(SCHEMA);
-  for (const [table, col, type] of COLUMNS) {
-    const has = db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col);
-    if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+/**
+ * @param {string} target  ':memory:' | 파일 경로 | libsql://… (Turso)
+ * @param {{ authToken?: string }} [opt]
+ */
+export function openDb(target, { authToken } = {}) {
+  const remote = /^(libsql|https?|wss?):/.test(target);
+  let url = target;
+  if (!remote && target !== ':memory:') {
+    const file = target.replace(/^file:/, '');
+    fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
+    url = `file:${file}`;
   }
-  return db;
+  const client = createClient({ url, authToken: authToken || undefined, intMode: 'number' });
+  let ready = null;
+  /** 처음 한 번: 표 만들기·나중에 추가된 열 보충 */
+  const init = () =>
+    (ready ??= (async () => {
+      if (!remote) await client.execute('PRAGMA foreign_keys = ON');
+      if (!remote && target !== ':memory:') await client.execute('PRAGMA journal_mode = WAL');
+      await client.executeMultiple(SCHEMA);
+      for (const [table, col, type] of COLUMNS) {
+        const { rows } = await client.execute(`PRAGMA table_info(${table})`);
+        if (!rows.some((c) => c.name === col)) await client.execute(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+      }
+    })().catch((e) => {
+      ready = null; // 실패하면 다음 요청에서 다시 시도
+      throw e;
+    }));
+  const args = (a) => a.map((v) => (v === undefined ? null : v));
+  const exec = async (sql, a) => {
+    await init();
+    return client.execute({ sql, args: args(a) });
+  };
+  return {
+    remote,
+    ready: init,
+    /** node:sqlite 와 같은 모양(get/all/run)이지만 모두 Promise */
+    prepare: (sql) => ({
+      get: async (...a) => (await exec(sql, a)).rows[0],
+      all: async (...a) => (await exec(sql, a)).rows,
+      run: async (...a) => {
+        const r = await exec(sql, a);
+        return { changes: r.rowsAffected, lastInsertRowid: r.lastInsertRowid };
+      },
+    }),
+    /** 여러 문장을 한 번에(트랜잭션). list: [[sql, args?], …] */
+    async batch(list) {
+      await init();
+      return client.batch(list.map(([sql, a = []]) => ({ sql, args: args(a) })), 'write');
+    },
+    close: () => client.close(),
+  };
 }

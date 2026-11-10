@@ -40,26 +40,26 @@ export function createNotifications(db, { now = () => Date.now(), earnedOf = () 
   const typeQ = Object.fromEntries(Object.entries(TYPES).map(([k, t]) => [k, db.prepare(t.sql)]));
   const quote = (t) => `‘${t}’`;
 
-  function add(userId, { kind, tone = 'info', title, body = null, link = null }) {
+  async function add(userId, { kind, tone = 'info', title, body = null, link = null }) {
     if (userId == null) return;
-    q.insert.run(userId, kind, tone, String(title).slice(0, 120), body ? String(body).slice(0, 300) : null, link, iso());
-    q.prune.run(userId, userId);
+    await q.insert.run(userId, kind, tone, String(title).slice(0, 120), body ? String(body).slice(0, 300) : null, link, iso());
+    await q.prune.run(userId, userId);
   }
 
-  const earnedIds = (userId) => (userId == null ? new Set() : new Set(earnedOf(userId).map((b) => b.id)));
+  const earnedIds = async (userId) => (userId == null ? new Set() : new Set((await earnedOf(userId)).map((b) => b.id)));
 
   /** 새로 받은 칭호 알림 (before: 일이 생기기 전 가진 뱃지 id) */
-  function badgeDiff(userId, before) {
+  async function badgeDiff(userId, before) {
     if (userId == null) return;
-    for (const b of earnedOf(userId)) {
-      if (!before.has(b.id)) add(userId, { kind: 'badge', tone: 'badge', title: `새 칭호 ‘${b.name}’을(를) 받았어요`, body: '뱃지·칭호에서 대표 칭호로 고를 수 있어요.', link: '/mypage/badges' });
+    for (const b of await earnedOf(userId)) {
+      if (!before.has(b.id)) await add(userId, { kind: 'badge', tone: 'badge', title: `새 칭호 ‘${b.name}’을(를) 받았어요`, body: '뱃지·칭호에서 대표 칭호로 고를 수 있어요.', link: '/mypage/badges' });
     }
   }
 
   return {
     add,
-    list(userId) {
-      const items = q.list.all(userId).map((r) => ({
+    async list(userId) {
+      const items = (await q.list.all(userId)).map((r) => ({
         id: r.id,
         kind: r.kind,
         tone: r.tone,
@@ -69,39 +69,39 @@ export function createNotifications(db, { now = () => Date.now(), earnedOf = () 
         createdAt: r.created_at,
         read: r.read_at != null,
       }));
-      return { items, unread: Number(q.unread.get(userId).n) };
+      return { items, unread: Number((await q.unread.get(userId)).n) };
     },
-    unread: (userId) => Number(q.unread.get(userId).n),
+    unread: async (userId) => Number((await q.unread.get(userId)).n),
     /** ids: 읽은 알림 id 목록, all: 모두 읽음 */
-    markRead(userId, { ids, all } = {}) {
+    async markRead(userId, { ids, all } = {}) {
       const at = iso();
-      if (all) q.readAll.run(at, userId);
+      if (all) await q.readAll.run(at, userId);
       else if (Array.isArray(ids)) {
         for (const id of ids.slice(0, 100)) {
           const n = Number(id);
-          if (Number.isInteger(n) && n > 0) q.readOne.run(at, userId, n);
+          if (Number.isInteger(n) && n > 0) await q.readOne.run(at, userId, n);
         }
       } else throw fail('BAD_REQUEST', '읽을 알림을 골라 주세요.');
-      return { ok: true, unread: Number(q.unread.get(userId).n) };
+      return { ok: true, unread: Number((await q.unread.get(userId)).n) };
     },
     /** 관리자: 검토를 기다리는 제보·신고 수 */
-    pendingCount: () => Number(q.pending.get().n),
+    pendingCount: async () => Number((await q.pending.get()).n),
 
-    welcome(userId, nickname) {
-      add(userId, { kind: 'welcome', tone: 'info', title: `${nickname}님, 플레이픽에 오신 걸 환영해요!`, body: '인원·플랫폼을 골라 친구들과 같이 할 게임을 찾아보세요.', link: '/' });
+    async welcome(userId, nickname) {
+      await add(userId, { kind: 'welcome', tone: 'info', title: `${nickname}님, 플레이픽에 오신 걸 환영해요!`, body: '인원·플랫폼을 골라 친구들과 같이 할 게임을 찾아보세요.', link: '/' });
     },
 
     /**
      * 제보 처리 전에 부름: 제보한 사람·이전 상태·가진 뱃지를 기억
      * @param {'submission'|'image'|'report'} type
      */
-    beforeReview(type, id) {
-      const r = typeQ[type]?.get(Number(id));
+    async beforeReview(type, id) {
+      const r = await typeQ[type]?.get(Number(id));
       if (!r) return null;
-      return { type, id: Number(id), userId: r.user_id, prev: r.status, title: r.title, gameId: r.game_id, kind: r.kind, before: earnedIds(r.user_id) };
+      return { type, id: Number(id), userId: r.user_id, prev: r.status, title: r.title, gameId: r.game_id, kind: r.kind, before: await earnedIds(r.user_id) };
     },
     /** 제보 처리 뒤에 부름: 제보한 사람(본인 처리 제외)과 필요하면 찜한 사람에게 알림 */
-    afterReview(ctx, { status, reason, adminId, gameId, changes = [] }) {
+    async afterReview(ctx, { status, reason, adminId, gameId, changes = [] }) {
       if (!ctx || ctx.prev === status) return;
       const label = ctx.type === 'report' ? REPORT_LABEL[ctx.kind] ?? '제보' : TYPES[ctx.type].label;
       const link = gameId ?? (ctx.gameId ? `/games/${ctx.gameId}` : '/mypage/submissions');
@@ -111,43 +111,43 @@ export function createNotifications(db, { now = () => Date.now(), earnedOf = () 
           if (changes.length) {
             // 관리자가 일부 고쳐서 승인: 무엇이 바뀌었는지 함께
             const what = changes.map((c) => `${c.label} ${c.from} → ${c.to}`).join(', ');
-            add(ctx.userId, { kind: ctx.type, tone: 'ok', title: `${quote(ctx.title)} ${label}가 일부 수정되어 승인됐어요`, body: `관리자가 고친 내용: ${what}`, link });
-          } else add(ctx.userId, { kind: ctx.type, tone: 'ok', title: `${quote(ctx.title)} ${label}가 승인됐어요`, body, link });
+            await add(ctx.userId, { kind: ctx.type, tone: 'ok', title: `${quote(ctx.title)} ${label}가 일부 수정되어 승인됐어요`, body: `관리자가 고친 내용: ${what}`, link });
+          } else await add(ctx.userId, { kind: ctx.type, tone: 'ok', title: `${quote(ctx.title)} ${label}가 승인됐어요`, body, link });
         } else if (status === 'rejected') {
           const was = ctx.prev === 'approved' ? '승인이 취소됐어요' : '거절됐어요';
-          add(ctx.userId, { kind: ctx.type, tone: 'no', title: `${quote(ctx.title)} ${label}가 ${was}`, body: reason ? `사유: ${reason}` : null, link: '/mypage/submissions' });
+          await add(ctx.userId, { kind: ctx.type, tone: 'no', title: `${quote(ctx.title)} ${label}가 ${was}`, body: reason ? `사유: ${reason}` : null, link: '/mypage/submissions' });
         }
-        badgeDiff(ctx.userId, ctx.before);
+        await badgeDiff(ctx.userId, ctx.before);
       }
       // 서비스 종료가 확인되면 그 게임을 찜한 회원에게 (제보한 사람 제외)
       if (ctx.type === 'report' && ctx.kind === 'ended' && status === 'approved' && ctx.gameId) {
-        for (const { user_id: uid } of q.wishers.all(ctx.gameId)) {
+        for (const { user_id: uid } of await q.wishers.all(ctx.gameId)) {
           if (uid === ctx.userId) continue;
-          add(uid, { kind: 'wish', tone: 'warn', title: `찜한 ${quote(ctx.title)}의 서비스가 종료됐어요`, body: '회원 제보를 관리자가 확인했어요. 이제 목록과 찜 목록에 보이지 않아요.', link: '/mypage/wishlist' });
+          await add(uid, { kind: 'wish', tone: 'warn', title: `찜한 ${quote(ctx.title)}의 서비스가 종료됐어요`, body: '회원 제보를 관리자가 확인했어요. 이제 목록과 찜 목록에 보이지 않아요.', link: '/mypage/wishlist' });
         }
       }
     },
 
     /** 리뷰 신고 처리 전·후 (숨김·다시 보이기만 작성자에게 알림) */
-    beforeReviewAction(reviewId) {
-      const r = q.review.get(Number(reviewId));
+    async beforeReviewAction(reviewId) {
+      const r = await q.review.get(Number(reviewId));
       return r ? { userId: r.user_id, gameId: r.game_id, title: r.game_title || r.game_id, hidden: Boolean(r.hidden_at) } : null;
     },
-    afterReviewAction(ctx, action) {
+    async afterReviewAction(ctx, action) {
       if (!ctx) return;
       const link = `/games/${ctx.gameId}`;
       if (action === 'hide' && !ctx.hidden) {
-        add(ctx.userId, { kind: 'review', tone: 'no', title: `${quote(ctx.title)}에 남긴 리뷰가 숨김 처리됐어요`, body: '신고를 관리자가 확인했어요. 숨긴 리뷰는 나에게만 보이고 평점·칭호 계산에서 빠져요.', link });
+        await add(ctx.userId, { kind: 'review', tone: 'no', title: `${quote(ctx.title)}에 남긴 리뷰가 숨김 처리됐어요`, body: '신고를 관리자가 확인했어요. 숨긴 리뷰는 나에게만 보이고 평점·칭호 계산에서 빠져요.', link });
       } else if (action === 'restore' && ctx.hidden) {
         // 숨기는 동안 잃었다 되찾은 칭호는 따로 알리지 않음
-        add(ctx.userId, { kind: 'review', tone: 'ok', title: `${quote(ctx.title)}에 남긴 리뷰가 다시 보이게 됐어요`, body: '평점·칭호 계산에도 다시 들어가요.', link });
+        await add(ctx.userId, { kind: 'review', tone: 'ok', title: `${quote(ctx.title)}에 남긴 리뷰가 다시 보이게 됐어요`, body: '평점·칭호 계산에도 다시 들어가요.', link });
       }
     },
 
     /** 리뷰 작성 등 내가 한 일로 칭호가 생겼을 때 */
-    watchBadges: (userId) => {
-      const before = earnedIds(userId);
-      return () => badgeDiff(userId, before);
+    watchBadges: async (userId) => {
+      const before = await earnedIds(userId);
+      return async () => await badgeDiff(userId, before);
     },
   };
 }

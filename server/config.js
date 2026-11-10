@@ -4,6 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// 실행 중 쓰는 캐시 폴더: 로컬 .cache, Vercel(디스크 읽기 전용)은 /tmp (인스턴스가 바뀌면 사라짐 → server/data 시드 파일로 시작)
+const cacheDir = process.env.VERCEL ? '/tmp/playpick-cache' : path.join(root, '.cache');
+const seed = (name) => path.join(root, 'server', 'data', name);
 
 function loadDotEnv(file) {
   if (!fs.existsSync(file)) return;
@@ -30,6 +33,10 @@ export function getConfig() {
     dataSource: env('DATA_SOURCE', 'demo') === 'live' ? 'live' : 'demo',
     // 회원·찜·리뷰 저장 파일 (SQLite)
     dbFile: env('DB_FILE') || path.join(root, '.data', 'playpick.db'),
+    // 배포: Turso 원격 DB (있으면 dbFile 대신 사용)
+    turso: { url: env('TURSO_DATABASE_URL'), authToken: env('TURSO_AUTH_TOKEN') },
+    // Vercel(서버리스)에서 실행 중인지: 디스크 대신 /tmp, 프록시 IP 헤더 사용
+    vercel: Boolean(process.env.VERCEL),
     // 비밀번호 재설정 메일의 링크 주소
     baseUrl: env('APP_BASE_URL') || `http://localhost:${int('PORT', 4000)}`,
     // 관리자: 이 이메일로 가입한 계정 (쉼표로 여러 개). 게임 제보 승인·거절 화면을 볼 수 있음
@@ -51,8 +58,10 @@ export function getConfig() {
       cacheTtlSec: int('GRAC_CACHE_TTL', 3600),
       // 나만의 게임 찾기: IGDB에 없는 게임위 게임도 찾기 위한 전체 목록 색인 (GRAC_INDEX=off 로 끔)
       indexEnabled: env('GRAC_INDEX', 'on') !== 'off',
-      indexFile: path.join(root, '.cache', 'grac-index.json'),
-      igdbCheckFile: path.join(root, '.cache', 'grac-igdb-check.json'),
+      indexFile: path.join(cacheDir, 'grac-index.json'),
+      indexSeed: seed('grac-index.json'),
+      igdbCheckFile: path.join(cacheDir, 'grac-igdb-check.json'),
+      igdbCheckSeed: seed('grac-igdb-check.json'),
     },
     igdb: {
       clientId: env('IGDB_CLIENT_ID'),
@@ -77,7 +86,7 @@ export function getConfig() {
       model: env('GEMINI_MODEL', 'gemini-flash-lite-latest'),
       // 미리 정리한 추천 인원 (npm run prefill:players 로 만듦, git 에 올려 팀원과 공유 가능)
       dataFile: path.join(root, 'server', 'data', 'party-size.json'),
-      legacyCacheFile: path.join(root, '.cache', 'ai-players.json'),
+      legacyCacheFile: path.join(cacheDir, 'ai-players.json'),
       // on 이면 정리 안 된 게임을 검색할 때 그때그때 AI에게 물음(느릴 수 있음). 기본 끔
       live: env('AI_PLAYERS_LIVE', 'off') === 'on',
     },
@@ -91,7 +100,8 @@ export function getConfig() {
     deepl: {
       apiKey: env('DEEPL_API_KEY'),
       apiUrl: env('DEEPL_API_URL'),
-      cacheFile: path.join(root, '.cache', 'translations.json'),
+      cacheFile: path.join(cacheDir, 'translations.json'),
+      seedFile: seed('translations.json'),
     },
     krGameDb: {
       url: env('KR_GAME_DB_API_URL'),

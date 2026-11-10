@@ -38,32 +38,32 @@ export function createContributors(db, { adminEmails = new Set(), badgeOf = () =
   };
 
   /** 승인된 기여 전체: [{ userId, gameId, kind, title, at }] (같은 회원·게임·종류는 한 번) */
-  function contributions() {
+  async function contributions() {
     const out = [];
-    for (const r of q.games.all()) out.push({ userId: r.user_id, gameId: `user-${r.id}`, kind: 'game', title: r.title, at: r.reviewed_at });
-    for (const r of q.photos.all()) out.push({ userId: r.user_id, gameId: r.game_id, kind: 'photo', title: r.title, at: r.reviewed_at });
-    for (const r of q.reports.all()) out.push({ userId: r.user_id, gameId: r.game_id, kind: r.kind, title: r.title, at: r.reviewed_at });
+    for (const r of await q.games.all()) out.push({ userId: r.user_id, gameId: `user-${r.id}`, kind: 'game', title: r.title, at: r.reviewed_at });
+    for (const r of await q.photos.all()) out.push({ userId: r.user_id, gameId: r.game_id, kind: 'photo', title: r.title, at: r.reviewed_at });
+    for (const r of await q.reports.all()) out.push({ userId: r.user_id, gameId: r.game_id, kind: r.kind, title: r.title, at: r.reviewed_at });
     return out.filter((c) => c.at);
   }
 
-  function adminIds() {
+  async function adminIds() {
     const ids = new Set();
-    for (const u of q.users.all()) if (adminEmails.has(String(u.email).toLowerCase())) ids.add(u.id);
+    for (const u of await q.users.all()) if (adminEmails.has(String(u.email).toLowerCase())) ids.add(u.id);
     return ids;
   }
 
   /** 게임들의 반응 기록: gameId → { wishes:[{userId,at}], reviews:[{userId,at}], views:[{day,views}] } */
-  function reactionsOf(gameIds) {
+  async function reactionsOf(gameIds) {
     const map = new Map(gameIds.map((id) => [id, { wishes: [], reviews: [], views: [] }]));
     if (!gameIds.length) return map;
     const marks = gameIds.map(() => '?').join(',');
-    for (const r of db.prepare(`SELECT user_id, game_id, created_at FROM wishlist WHERE game_id IN (${marks})`).all(...gameIds)) {
+    for (const r of await db.prepare(`SELECT user_id, game_id, created_at FROM wishlist WHERE game_id IN (${marks})`).all(...gameIds)) {
       map.get(r.game_id).wishes.push({ userId: r.user_id, at: r.created_at });
     }
-    for (const r of db.prepare(`SELECT user_id, game_id, created_at FROM reviews WHERE hidden_at IS NULL AND game_id IN (${marks})`).all(...gameIds)) {
+    for (const r of await db.prepare(`SELECT user_id, game_id, created_at FROM reviews WHERE hidden_at IS NULL AND game_id IN (${marks})`).all(...gameIds)) {
       map.get(r.game_id).reviews.push({ userId: r.user_id, at: r.created_at });
     }
-    for (const r of db.prepare(`SELECT game_id, day, views FROM game_views WHERE game_id IN (${marks})`).all(...gameIds)) {
+    for (const r of await db.prepare(`SELECT game_id, day, views FROM game_views WHERE game_id IN (${marks})`).all(...gameIds)) {
       map.get(r.game_id).views.push({ day: r.day, views: Number(r.views) });
     }
     return map;
@@ -90,11 +90,11 @@ export function createContributors(db, { adminEmails = new Set(), badgeOf = () =
   }
 
   /** 회원별 점수: period 'month'(이번 달, 한국 시간) | 'all' */
-  function scores(period) {
+  async function scores(period) {
     const month = kstMonth(now());
-    const admins = adminIds();
-    const list = contributions().filter((c) => !admins.has(c.userId));
-    const rx = reactionsOf([...new Set(list.filter((c) => SHARE[c.kind] > 0).map((c) => c.gameId))]);
+    const admins = await adminIds();
+    const list = (await contributions()).filter((c) => !admins.has(c.userId));
+    const rx = await reactionsOf([...new Set(list.filter((c) => SHARE[c.kind] > 0).map((c) => c.gameId))]);
     const per = new Map();
     // 같은 회원이 같은 게임에 여러 종류로 기여하면 반응은 가장 큰 몫 하나로만
     const bestShare = new Map();
@@ -119,7 +119,7 @@ export function createContributors(db, { adminEmails = new Set(), badgeOf = () =
       for (const [m, n] of byMonth) if (period === 'all' || m === month) pts += Math.min(MONTH_CAP, n * share);
       per.get(c.userId).reaction += pts;
     }
-    const users = new Map(q.users.all().map((u) => [u.id, u]));
+    const users = new Map((await q.users.all()).map((u) => [u.id, u]));
     return [...per.values()]
       .map((s) => ({ ...s, reaction: Math.floor(s.reaction), score: s.base + Math.floor(s.reaction) }))
       .filter((s) => s.score > 0 && users.has(s.userId))
@@ -127,11 +127,11 @@ export function createContributors(db, { adminEmails = new Set(), badgeOf = () =
       .map((s, i) => ({ ...s, rank: i + 1, user: users.get(s.userId) }));
   }
 
-  const out = (s) => ({
+  const out = async (s) => ({
     rank: s.rank,
     nickname: s.user.nickname,
     avatarUrl: avatarUrl(s.user.avatar_file),
-    badge: badgeOf(s.userId),
+    badge: await badgeOf(s.userId),
     score: s.score,
     base: s.base,
     reaction: s.reaction,
@@ -141,10 +141,10 @@ export function createContributors(db, { adminEmails = new Set(), badgeOf = () =
   });
 
   /** 이 게임의 기여자(관리자 제외): [{ userId, kind, title }] — 한 회원은 가장 큰 기여 하나로 */
-  function contributorsOf(gameId) {
-    const admins = adminIds();
+  async function contributorsOf(gameId) {
+    const admins = await adminIds();
     const by = new Map();
-    for (const c of contributions()) {
+    for (const c of await contributions()) {
       if (c.gameId !== gameId || admins.has(c.userId) || !SHARE[c.kind]) continue;
       if (SHARE[c.kind] > (by.get(c.userId) ? SHARE[by.get(c.userId).kind] : 0)) by.set(c.userId, c);
     }
@@ -152,9 +152,9 @@ export function createContributors(db, { adminEmails = new Set(), badgeOf = () =
   }
 
   /** 이정표를 처음 넘었을 때만 알림 */
-  function milestone(c, kind, level, note) {
-    const r = q.milestone.run(c.userId, c.gameId, kind, level, new Date(now()).toISOString());
-    if (Number(r.changes) > 0) notify(c.userId, { kind: 'impact', tone: 'badge', link: `/games/${encodeURIComponent(c.gameId)}`, ...note });
+  async function milestone(c, kind, level, note) {
+    const r = await q.milestone.run(c.userId, c.gameId, kind, level, new Date(now()).toISOString());
+    if (Number(r.changes) > 0) await notify(c.userId, { kind: 'impact', tone: 'badge', link: `/games/${encodeURIComponent(c.gameId)}`, ...note });
   }
   const quote = (t) => `‘${t}’`;
 
@@ -163,29 +163,29 @@ export function createContributors(db, { adminEmails = new Set(), badgeOf = () =
   let seen = new Set();
 
   return {
-    leaderboard({ period = 'month', limit = 20 } = {}) {
+    async leaderboard({ period = 'month', limit = 20 } = {}) {
       if (!['month', 'all'].includes(period)) period = 'month';
-      return { period, month: kstMonth(now()), items: scores(period).slice(0, limit).map(out) };
+      return { period, month: kstMonth(now()), items: await Promise.all((await scores(period)).slice(0, limit).map(out)) };
     },
     /** 내 이번 달·전체 순위 (점수가 없으면 rank null) */
-    mine(userId) {
-      const pick = (period) => {
-        const s = scores(period).find((x) => x.userId === userId);
+    async mine(userId) {
+      const pick = async (period) => {
+        const s = (await scores(period)).find((x) => x.userId === userId);
         return s ? { rank: s.rank, score: s.score, base: s.base, reaction: s.reaction } : { rank: null, score: 0, base: 0, reaction: 0 };
       };
-      return { month: pick('month'), all: pick('all') };
+      return { month: await pick('month'), all: await pick('all') };
     },
 
     /** 내 기여가 만든 변화: 기여한 게임마다 다른 회원의 조회·찜·리뷰 (서비스 종료 제보 제외) */
-    impact(userId) {
-      const admins = adminIds();
+    async impact(userId) {
+      const admins = await adminIds();
       const mine = new Map();
-      for (const c of contributions()) {
+      for (const c of await contributions()) {
         if (c.userId !== userId || !SHARE[c.kind]) continue;
         const prev = mine.get(c.gameId);
         if (!prev || SHARE[c.kind] > SHARE[prev.kind]) mine.set(c.gameId, c);
       }
-      const rx = reactionsOf([...mine.keys()]);
+      const rx = await reactionsOf([...mine.keys()]);
       const items = [...mine.values()].map((c) => {
         const r = reactionOf(c, rx.get(c.gameId), admins);
         return { gameId: c.gameId, title: c.title, kind: c.kind, approvedAt: c.at, views: r.views, wishes: r.wishes, reviews: r.reviews };
@@ -196,7 +196,7 @@ export function createContributors(db, { adminEmails = new Set(), badgeOf = () =
     },
 
     /** 게임 상세를 열 때: 조회 수 +1 (하루 한 번, 기여자 본인·관리자 제외) → 조회 이정표 */
-    recordView(gameId, viewerKey, viewerUserId = null, viewerIsAdmin = false) {
+    async recordView(gameId, viewerKey, viewerUserId = null, viewerIsAdmin = false) {
       const day = kstDay(now());
       if (day !== seenDay) {
         seenDay = day;
@@ -206,32 +206,32 @@ export function createContributors(db, { adminEmails = new Set(), badgeOf = () =
       if (seen.has(key)) return false;
       seen.add(key);
       if (viewerIsAdmin) return false;
-      const contributors = contributorsOf(gameId);
+      const contributors = await contributorsOf(gameId);
       if (!contributors.length || contributors.some((c) => c.userId === viewerUserId)) return false;
-      q.view.run(gameId, day);
-      const admins = adminIds();
-      const rx = reactionsOf([gameId]).get(gameId);
+      await q.view.run(gameId, day);
+      const admins = await adminIds();
+      const rx = (await reactionsOf([gameId])).get(gameId);
       for (const c of contributors) {
         const n = reactionOf(c, rx, admins).views;
         for (const step of VIEW_STEPS) {
-          if (n >= step) milestone(c, 'views', step, { title: `${KIND_LABEL[c.kind]} ${quote(c.title)}이(가) 조회 ${step}회를 넘었어요 👀`, body: '회원들이 내 기여 덕분에 이 게임을 찾고 있어요.' });
+          if (n >= step) await milestone(c, 'views', step, { title: `${KIND_LABEL[c.kind]} ${quote(c.title)}이(가) 조회 ${step}회를 넘었어요 👀`, body: '회원들이 내 기여 덕분에 이 게임을 찾고 있어요.' });
         }
       }
       return true;
     },
 
     /** 찜·리뷰가 생긴 뒤: 그 게임 기여자에게 이정표 알림 */
-    afterReaction(gameId) {
-      const contributors = contributorsOf(gameId);
+    async afterReaction(gameId) {
+      const contributors = await contributorsOf(gameId);
       if (!contributors.length) return;
-      const admins = adminIds();
-      const rx = reactionsOf([gameId]).get(gameId);
+      const admins = await adminIds();
+      const rx = (await reactionsOf([gameId])).get(gameId);
       for (const c of contributors) {
         const r = reactionOf(c, rx, admins);
         for (const step of WISH_STEPS) {
-          if (r.wishes >= step) milestone(c, 'wishes', step, { title: `${KIND_LABEL[c.kind]} ${quote(c.title)}을(를) 회원 ${step}명이 찜했어요 🎉`, body: '내 기여 덕분에 친구와 할 게임을 찾은 회원들이에요.' });
+          if (r.wishes >= step) await milestone(c, 'wishes', step, { title: `${KIND_LABEL[c.kind]} ${quote(c.title)}을(를) 회원 ${step}명이 찜했어요 🎉`, body: '내 기여 덕분에 친구와 할 게임을 찾은 회원들이에요.' });
         }
-        if (r.reviews >= 1) milestone(c, 'review', 1, { title: `${KIND_LABEL[c.kind]} ${quote(c.title)}에 첫 리뷰가 달렸어요 💬`, body: '다른 회원이 이 게임을 해 보고 리뷰를 남겼어요.' });
+        if (r.reviews >= 1) await milestone(c, 'review', 1, { title: `${KIND_LABEL[c.kind]} ${quote(c.title)}에 첫 리뷰가 달렸어요 💬`, body: '다른 회원이 이 게임을 해 보고 리뷰를 남겼어요.' });
       }
     },
   };

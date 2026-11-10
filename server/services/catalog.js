@@ -223,8 +223,8 @@ export function createCatalog(config, deps = {}) {
   const sources = [...(igdb.configured ? [igdb.label] : []), grac.label, ...(kr.configured ? [kr.label] : [])];
   const gc = config.grac ?? {};
   const gracIndex =
-    deps.gracIndex ?? (gc.indexEnabled && grac.fetchPage ? createGracIndex({ grac, cacheFile: gc.indexFile, log: (m) => console.log(m) }) : null);
-  const igdbCheck = createExistenceCache(gc.igdbCheckFile);
+    deps.gracIndex ?? (gc.indexEnabled && grac.fetchPage ? createGracIndex({ grac, cacheFile: gc.indexFile, seedFile: gc.indexSeed, autoRefresh: !config.vercel, log: (m) => console.log(m) }) : null);
+  const igdbCheck = createExistenceCache(gc.igdbCheckFile, gc.igdbCheckSeed);
   const filtered = new Map(); // 조건별 후보 목록 (색인 갱신 시점 기준)
 
   return {
@@ -476,14 +476,17 @@ export function samePlatform(gracRaw, igdbClasses) {
   return !g.size || igdbClasses.some((c) => g.has(c));
 }
 
-export function createExistenceCache(file) {
+/** file: 쓰는 캐시(.cache 또는 /tmp), seedFile: git 에 올린 읽기 전용 시작값(server/data) */
+export function createExistenceCache(file, seedFile = null) {
   const TTL = 30 * 86_400_000;
   let map = new Map();
   let dirty = false;
-  try {
-    if (file) map = new Map(Object.entries(JSON.parse(fs.readFileSync(file, 'utf8'))));
-  } catch {
-    /* 없으면 새로 */
+  for (const f of [seedFile, file]) {
+    try {
+      if (f) for (const [k, v] of Object.entries(JSON.parse(fs.readFileSync(f, 'utf8')))) if (!map.has(k) || v.at > map.get(k).at) map.set(k, v);
+    } catch {
+      /* 없으면 새로 */
+    }
   }
   // v2: 제목 후보(괄호 안 이름·플랫폼 표기 제거·전각 기호 정리)와 slug로 찾음. 예전 방식으로 '없음'이 된 항목은 다시 확인
   const VERSION = 2;

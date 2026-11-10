@@ -4,6 +4,8 @@
 //  - 서버가 켜지면 백그라운드로 준비하고, 요청은 기다리지 않습니다(준비 중이면 status 로 알림).
 //  - 하루에 한 번 새로 등급분류된 것만(startdate) 추가로 받고, 7일마다 전체를 다시 받아
 //    그사이 취소된 등급을 반영합니다.
+//  - 배포(Vercel)에서는 갱신하지 않고 git 에 올린 server/data/grac-index.json(seedFile)만 읽음(autoRefresh: false).
+//    갱신은 로컬에서 npm run refresh:grac → 커밋
 import fs from 'node:fs';
 import path from 'node:path';
 import { collapseGrac } from '../services/catalog.js';
@@ -12,24 +14,29 @@ import { titleKeys } from './igdbProvider.js';
 const DAY = 86_400_000;
 const PAGE = 1000;
 
-export function createGracIndex({ grac, cacheFile, now = () => Date.now(), concurrency = 3, log = () => {} }) {
+export function createGracIndex({ grac, cacheFile, seedFile = null, autoRefresh = true, now = () => Date.now(), concurrency = 3, log = () => {} }) {
   let data = load(); // { fullAt, updatedAt, games: [...] }
   let collapsed = data ? collapse(data.games) : null;
   let job = null;
   let progress = null; // { done, total }
   let lastError = null;
 
+  /** 캐시 파일(최근 갱신분) → 없으면 git 시드 파일. 둘 다 있으면 더 최근 것 */
   function load() {
-    if (!cacheFile) return null;
-    try {
-      const d = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-      if (!Array.isArray(d?.games)) return null;
-      // 예전에 저장된 항목에는 recommendedPlayers 키가 없음 → 있어야 AI 추천 인원 대상(needsAi)·적용이 됨
-      d.games = d.games.map((g) => ('recommendedPlayers' in g ? g : { ...g, players: g.players ?? null, recommendedPlayers: null }));
-      return d;
-    } catch {
-      return null;
-    }
+    const read = (file) => {
+      if (!file) return null;
+      try {
+        const d = JSON.parse(fs.readFileSync(file, 'utf8'));
+        if (!Array.isArray(d?.games)) return null;
+        // 예전에 저장된 항목에는 recommendedPlayers 키가 없음 → 있어야 AI 추천 인원 대상(needsAi)·적용이 됨
+        d.games = d.games.map((g) => ('recommendedPlayers' in g ? g : { ...g, players: g.players ?? null, recommendedPlayers: null }));
+        return d;
+      } catch {
+        return null;
+      }
+    };
+    const [a, b] = [read(cacheFile), read(seedFile)];
+    return a && b ? (a.updatedAt >= b.updatedAt ? a : b) : a ?? b;
   }
   function save() {
     if (!cacheFile) return;
@@ -111,6 +118,7 @@ export function createGracIndex({ grac, cacheFile, now = () => Date.now(), concu
     /** 오래됐거나 없으면 백그라운드 갱신 시작 (기다리지 않음) */
     ensure() {
       if (job) return job;
+      if (!autoRefresh) return null;
       if (data && now() - data.updatedAt < DAY) return null;
       job = refresh()
         .catch((e) => {

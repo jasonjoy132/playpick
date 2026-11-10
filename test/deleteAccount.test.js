@@ -1,14 +1,10 @@
 // 회원 탈퇴: 비밀번호·확인 문구, 계정·세션·찜·리뷰·알림·검토 중 제보·프로필 사진 삭제, 승인된 제보는 작성자 없이 남음
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { createApp } from '../server/app.js';
 import { getConfig } from '../server/config.js';
 
 const PNG_1x1 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-const avatarsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-del-avatars-'));
 
 const GAMES = {
   'igdb-91': { id: 'igdb-91', title: '탈퇴 테스트 게임', source: 'IGDB', platforms: ['pc'], genres: ['action'], players: null, stores: [], imageUrl: 'https://x/y.jpg', altNames: [] },
@@ -25,16 +21,13 @@ const partySize = { configured: false, applyCached: (g) => g, fill: async (games
 let server, base;
 before(async () => {
   server = createApp(
-    { ...getConfig(), dataSource: 'demo', dbFile: ':memory:', rawg: {}, appStore: {}, adminEmails: ['boss@example.com'], avatarsDir },
+    { ...getConfig(), dataSource: 'demo', dbFile: ':memory:', rawg: {}, appStore: {}, adminEmails: ['boss@example.com'] },
     { catalog, partySize, mailer: { configured: false, devLog: false, send: async () => {} } },
   );
   await new Promise((r) => server.listen(0, r));
   base = `http://127.0.0.1:${server.address().port}`;
 });
-after(() => {
-  server.close();
-  fs.rmSync(avatarsDir, { recursive: true, force: true });
-});
+after(() => server.close());
 
 function client() {
   let cookie = '';
@@ -63,8 +56,7 @@ test('탈퇴: 로그인·비밀번호·확인 문구 검사 → 지울 것만 �
 
   // 활동: 프로필 사진·찜·리뷰·제보(승인 1, 검토 중 1)
   const avatarUrl = (await u('PUT', '/api/me/avatar', { dataUrl: PNG_1x1 })).body.user.avatarUrl;
-  const avatarFile = path.join(avatarsDir, path.basename(avatarUrl));
-  assert.ok(fs.existsSync(avatarFile));
+  assert.equal((await fetch(base + avatarUrl)).status, 200);
   await u('PUT', '/api/wishlist/igdb-91');
   await u('PUT', '/api/games/igdb-91/reviews/mine', { rating: 1, content: '별로' });
   await other('PUT', '/api/games/igdb-91/reviews/mine', { rating: 5, content: '최고' });
@@ -88,8 +80,8 @@ test('탈퇴: 로그인·비밀번호·확인 문구 검사 → 지울 것만 �
   // 세션 끊김·로그인 불가
   assert.equal((await u('GET', '/api/auth/me')).body.user, null);
   assert.equal((await client()('POST', '/api/auth/login', { loginId: 'leaver1', password: 'secret123' })).status, 401);
-  // 프로필 사진 파일 삭제
-  assert.equal(fs.existsSync(avatarFile), false);
+  // 프로필 사진 삭제(DB)
+  assert.equal((await fetch(base + avatarUrl)).status, 404);
   // 리뷰 삭제 → 평점 다시 계산
   const reviews = (await other('GET', '/api/games/igdb-91/reviews')).body;
   assert.equal(reviews.reviews.length, 1);

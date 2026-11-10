@@ -6,6 +6,7 @@
 import { DataSourceError } from '../providers/errors.js';
 import { storeFromUrl, normTitle } from '../providers/igdbProvider.js';
 import { PLATFORMS, GENRES } from '../services/taxonomy.js';
+import { cached } from './cached.js';
 
 const fail = (code, message, status = 400) => new DataSourceError(code, message, status);
 const PLATFORM_VALUES = new Set(PLATFORMS.filter((p) => !p.hidden).map((p) => p.value)); // 아케이드는 제보 불가
@@ -128,7 +129,6 @@ export function createSubmissions(db, { images, now = () => Date.now() }) {
     setOriginal: db.prepare('UPDATE game_submissions SET original_json = ? WHERE id = ? AND original_json IS NULL'),
     del: db.prepare('DELETE FROM game_submissions WHERE id = ?'),
   };
-  let approvedCache = null;
   const iso = () => new Date(now()).toISOString();
 
   /** DB 행 → 화면용 제보 */
@@ -156,14 +156,14 @@ export function createSubmissions(db, { images, now = () => Date.now() }) {
   });
 
   /** 관리자가 고친 값 반영 (회원이 낸 원래 값은 처음 한 번만 기록). 바뀐 칸 목록을 돌려줌 */
-  function applyEdits(r, edits) {
+  async function applyEdits(r, edits) {
     if (!edits || typeof edits !== 'object') return [];
     const cur = valuesOf(r);
     const v = validateSubmission({ ...cur, ...edits }, { now });
     const diff = diffSubmission(cur, v);
     if (!diff.length) return [];
-    q.setOriginal.run(JSON.stringify(cur), r.id);
-    q.update.run(v.title, v.originalTitle, v.publisher, v.releaseYear, JSON.stringify(v.platforms), JSON.stringify(v.genres), v.playersMin, v.playersMax, v.storeUrl, v.summary, r.id);
+    await q.setOriginal.run(JSON.stringify(cur), r.id);
+    await q.update.run(v.title, v.originalTitle, v.publisher, v.releaseYear, JSON.stringify(v.platforms), JSON.stringify(v.genres), v.playersMin, v.playersMax, v.storeUrl, v.summary, r.id);
     return diff;
   }
 
@@ -202,94 +202,90 @@ export function createSubmissions(db, { images, now = () => Date.now() }) {
     };
   };
 
-  function approvedGames() {
-    approvedCache ??= q.approved.all().map(toGame);
-    return approvedCache;
-  }
-  const changed = () => {
-    approvedCache = null;
-  };
+  const approvedGames = cached(async () => (await q.approved.all()).map(toGame), { now });
+  const changed = () => approvedGames.clear();
 
   return {
     /** 회원 제보 */
-    create(userId, input) {
+    async create(userId, input) {
       const v = validateSubmission(input, { now });
-      if (q.pendingCount.get(userId).n >= MAX_PENDING) throw fail('TOO_MANY', `검토 중인 제보가 ${MAX_PENDING}개 있어요. 결과가 나온 뒤 다시 제보해 주세요.`, 429);
-      if (q.sameTitle.get(userId, v.title)) throw fail('DUPLICATE', '같은 이름으로 이미 제보한 게임이 있어요. 마이페이지 ‘내 제보’에서 확인해 주세요.', 409);
-      const imageFile = input?.image ? images.save(userId, input.image) : null;
-      const { lastInsertRowid } = q.insert.run(
+      if ((await q.pendingCount.get(userId)).n >= MAX_PENDING) throw fail('TOO_MANY', `검토 중인 제보가 ${MAX_PENDING}개 있어요. 결과가 나온 뒤 다시 제보해 주세요.`, 429);
+      if (await q.sameTitle.get(userId, v.title)) throw fail('DUPLICATE', '같은 이름으로 이미 제보한 게임이 있어요. 마이페이지 ‘내 제보’에서 확인해 주세요.', 409);
+      const imageFile = input?.image ? await images.save(userId, input.image) : null;
+      const { lastInsertRowid } = await q.insert.run(
         userId, v.title, v.originalTitle, v.publisher, v.releaseYear, JSON.stringify(v.platforms), JSON.stringify(v.genres),
         v.playersMin, v.playersMax, v.storeUrl, v.summary, imageFile, iso(),
       );
-      return toItem(q.byId.get(Number(lastInsertRowid)));
+      return toItem(await q.byId.get(Number(lastInsertRowid)));
     },
-    mine: (userId) => q.mine.all(userId).map(toItem),
+    mine: async (userId) => (await q.mine.all(userId)).map(toItem),
     /** 회원 탈퇴: 검토 중인 제보(사진 파일 포함) 지우기 */
-    removePendingOf(userId) {
-      const rows = db.prepare("SELECT id, image_file FROM game_submissions WHERE user_id = ? AND status = 'pending'").all(userId);
+    async removePendingOf(userId) {
+      const rows = await db.prepare("SELECT id, image_file FROM game_submissions WHERE user_id = ? AND status = 'pending'").all(userId);
       for (const r of rows) {
-        q.del.run(r.id);
-        images.remove(r.image_file);
+        await q.del.run(r.id);
+        await images.remove(r.image_file);
       }
+      changed(); // 승인된 제보의 제보자 이름(탈퇴하면 비움)을 다시 읽게
       return rows.length;
     },
     /** 검토 중인 내 제보 취소 */
-    cancel(userId, id) {
-      const r = q.byId.get(Number(id));
+    async cancel(userId, id) {
+      const r = await q.byId.get(Number(id));
       if (!r || r.user_id !== userId) throw fail('NOT_FOUND', '제보를 찾을 수 없어요.', 404);
       if (r.status !== 'pending') throw fail('NOT_PENDING', '검토가 끝난 제보는 취소할 수 없어요.', 409);
-      q.del.run(r.id);
-      images.remove(r.image_file);
+      await q.del.run(r.id);
+      await images.remove(r.image_file);
       return { ok: true };
     },
 
     /** 관리자 */
-    list(status = 'pending') {
+    async list(status = 'pending') {
       if (!['pending', 'approved', 'rejected'].includes(status)) throw fail('BAD_REQUEST', '알 수 없는 상태예요.');
       const counts = Object.fromEntries(['pending', 'approved', 'rejected'].map((s) => [s, 0]));
-      for (const c of q.counts.all()) counts[c.status] = c.n;
-      return { items: q.byStatus.all(status).map(toItem), counts };
+      for (const c of await q.counts.all()) counts[c.status] = c.n;
+      return { items: (await q.byStatus.all(status)).map(toItem), counts };
     },
     /** 승인 (edits: 관리자가 고친 값, 없으면 회원이 낸 그대로). changes: 이번에 고친 칸 */
-    approve(id, adminId, edits) {
-      const r = q.byId.get(Number(id));
+    async approve(id, adminId, edits) {
+      const r = await q.byId.get(Number(id));
       if (!r) throw fail('NOT_FOUND', '제보를 찾을 수 없어요.', 404);
-      const changes = applyEdits(r, edits); // 잘못된 값이면 여기서 오류 → 상태 그대로
-      q.setStatus.run('approved', null, iso(), adminId, r.id);
+      const changes = await applyEdits(r, edits); // 잘못된 값이면 여기서 오류 → 상태 그대로
+      await q.setStatus.run('approved', null, iso(), adminId, r.id);
       changed();
-      return { ...toItem(q.byId.get(r.id)), changes };
+      return { ...toItem(await q.byId.get(r.id)), changes };
     },
     /** 이미 승인된 제보 고치기 (알림 없음) */
-    edit(id, edits) {
-      const r = q.byId.get(Number(id));
+    async edit(id, edits) {
+      const r = await q.byId.get(Number(id));
       if (!r) throw fail('NOT_FOUND', '제보를 찾을 수 없어요.', 404);
       if (r.status !== 'approved') throw fail('NOT_APPROVED', '승인된 제보만 고칠 수 있어요. 검토 중이면 ‘고쳐서 승인’을 써 주세요.', 409);
-      const changes = applyEdits(r, edits);
+      const changes = await applyEdits(r, edits);
       if (!changes.length) throw fail('NO_CHANGE', '바뀐 내용이 없어요.');
       changed();
-      return { ...toItem(q.byId.get(r.id)), changes };
+      return { ...toItem(await q.byId.get(r.id)), changes };
     },
     /** 거절(검토 중) 또는 승인 취소(이미 추가된 게임 내리기) */
-    reject(id, adminId, reason) {
-      const r = q.byId.get(Number(id));
+    async reject(id, adminId, reason) {
+      const r = await q.byId.get(Number(id));
       if (!r) throw fail('NOT_FOUND', '제보를 찾을 수 없어요.', 404);
       const why = text(reason, 200, '거절 사유', true);
-      q.setStatus.run('rejected', why, iso(), adminId, r.id);
+      await q.setStatus.run('rejected', why, iso(), adminId, r.id);
       changed();
-      return toItem(q.byId.get(r.id));
+      return toItem(await q.byId.get(r.id));
     },
 
     /** 승인된 게임 */
     approvedGames,
-    getGame(id) {
+    async getGame(id) {
       const m = /^user-(\d{1,9})$/.exec(String(id));
-      return m ? (approvedGames().find((g) => g.id === `user-${m[1]}`) ?? null) : null;
+      return m ? ((await approvedGames()).find((g) => g.id === `user-${m[1]}`) ?? null) : null;
     },
     /** 이름(한글·원제, 공백·기호 무시)에 검색어가 들어간 승인 게임 */
-    search(query) {
+    async search(query) {
       const n = normTitle(query);
       if (!n) return [];
-      return approvedGames().filter((g) => [g.title, g.originalTitle].some((t) => t && normTitle(t).includes(n)));
+      return (await approvedGames()).filter((g) => [g.title, g.originalTitle].some((t) => t && normTitle(t).includes(n)));
     },
   };
 }

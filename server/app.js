@@ -25,7 +25,6 @@ import { createAiPlaytime, canAskPlaytime } from './services/aiPlaytime.js';
 import { createPartySize } from './services/partySize.js';
 import { createAppStoreProvider } from './providers/appStoreProvider.js';
 import { createAppArt, pickArt } from './services/appArt.js';
-import os from 'node:os';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -87,36 +86,39 @@ export function createApp(config, deps = {}) {
   const partySize = deps.partySize ?? createPartySize(config.gemini ?? {}, { ...deps, log: (m) => console.log(m) });
   const appArt = deps.appArt ?? createAppArt(config.appStore?.artFile ?? null);
   const appStore = deps.appStore ?? createAppStoreProvider(config.appStore ?? { enabled: config.dataSource === 'live' }, deps);
-  const db = deps.db ?? openDb(config.dbFile ?? ':memory:');
+  // 회원 DB: 테스트는 메모리, 배포는 Turso(TURSO_DATABASE_URL), 로컬은 파일(.data/playpick.db)
+  const dbTarget = config.dbFile === ':memory:' || !config.dbFile ? config.dbFile ?? ':memory:' : config.turso?.url || config.dbFile;
+  const db = deps.db ?? openDb(dbTarget, { authToken: config.turso?.authToken });
   const baseUrl = (config.baseUrl || `http://localhost:${config.port ?? 4000}`).replace(/\/$/, '');
   const secureCookie = baseUrl.startsWith('https://');
   const mailer = deps.mailer ?? createMailer(config.mail ?? {}, deps);
-  const avatarsDir = config.avatarsDir ?? (config.dbFile && config.dbFile !== ':memory:' ? path.join(path.dirname(config.dbFile), 'avatars') : fs.mkdtempSync(path.join(os.tmpdir(), 'pp-avatars-')));
-  const avatars = createAvatarStore(avatarsDir);
+  // 업로드 사진은 DB(images 표)에. 예전에 디스크(.data/avatars 등)에 저장한 사진은 로컬에서만 읽기 전용으로 보여 줌
+  const legacyDir = !config.dbFile || config.dbFile === ':memory:' || config.vercel ? null : path.dirname(config.dbFile);
+  const avatars = createAvatarStore(db);
   const accounts = createAccounts(db, { mailer, baseUrl, avatars });
   const badges = createBadges(db);
-  const community = createCommunity(db, { badgeOf: (id, cache) => badges.displayFor(id, cache) });
-  // 게임 제보 (표지 이미지는 프로필 이미지 옆 폴더에)
-  const submissionImages = createAvatarStore(path.join(avatarsDir, '..', 'submission-images'), { prefix: 's', maxBytes: 1536 * 1024 });
+  const community = createCommunity(db, { badgeOf: async (id, cache) => await badges.displayFor(id, cache) });
+  // 게임 제보 표지(s…)·표지 사진 제보(p…)
+  const submissionImages = createAvatarStore(db, { prefix: 's', maxBytes: 1536 * 1024 });
   const submissions = createSubmissions(db, { images: submissionImages });
-  const photoImages = createAvatarStore(path.join(avatarsDir, '..', 'submission-images'), { prefix: 'p', maxBytes: 1536 * 1024 });
+  const photoImages = createAvatarStore(db, { prefix: 'p', maxBytes: 1536 * 1024 });
   const imageSubs = createImageSubmissions(db, { images: photoImages });
   const reports = createReports(db);
-  const notes = createNotifications(db, { earnedOf: (id) => badges.list(id).badges.filter((b) => b.earned) });
+  const notes = createNotifications(db, { earnedOf: async (id) => (await badges.list(id)).badges.filter((b) => b.earned) });
   /** 리뷰 목록 + 내가 신고한 리뷰 표시 */
-  const reviewsOut = (gameId, viewerId, opt) => {
-    const out = community.reviews(gameId, viewerId, opt);
+  const reviewsOut = async (gameId, viewerId, opt) => {
+    const out = await community.reviews(gameId, viewerId, opt);
     if (viewerId == null) return out;
-    const mine = reports.reportedIds(viewerId, gameId);
+    const mine = await reports.reportedIds(viewerId, gameId);
     return { ...out, reviews: out.reviews.map((r) => (mine.has(r.id) ? { ...r, reported: true } : r)) };
   };
   const admins = new Set((config.adminEmails ?? []).map((e) => String(e).toLowerCase()));
-  const contributors = createContributors(db, { adminEmails: admins, badgeOf: (id) => badges.displayFor(id), notify: (uid, n) => notes.add(uid, n) });
+  const contributors = createContributors(db, { adminEmails: admins, badgeOf: async (id) => await badges.displayFor(id), notify: async (uid, n) => await notes.add(uid, n) });
   const withRole = (u) => (u ? { ...u, isAdmin: admins.has(String(u.email).toLowerCase()) } : u);
   /** 화면에 돌려주는 내 정보: 관리자 여부 + 닉네임 옆 대표 뱃지 */
-  const meOut = (u) => (u ? { ...withRole(u), badge: badges.displayFor(u.id), newBadges: badges.newBadges(u.id) } : u);
+  const meOut = async (u) => (u ? { ...withRole(u), badge: await badges.displayFor(u.id), newBadges: await badges.newBadges(u.id) } : u);
   /** 일반 게임 + 승인된 제보 게임(user-…) */
-  const getAnyGame = (id) => (String(id).startsWith('user-') ? submissions.getGame(id) : catalog.getGame(id));
+  const getAnyGame = async (id) => (String(id).startsWith('user-') ? await submissions.getGame(id) : catalog.getGame(id));
   const limits = {
     login: createRateLimiter({ limit: 5, windowMs: 10 * 60e3 }),
     mail: createRateLimiter({ limit: 5, windowMs: 10 * 60e3 }),
@@ -137,14 +139,14 @@ export function createApp(config, deps = {}) {
    * 평균 플레이 시간 고르기 (출처 구분)
    * 회원 정보 수정 제보 → IGDB 이용자 기록(3명 이상) → RAWG(미리 받은 파일) → AI 추정(미리 받은 파일) → AI 추정(상세에서 물어 DB에 저장한 값)
    */
-  function playtimeOf(g, ttb = null) {
+  async function playtimeOf(g, ttb = null) {
     if (g.userPlaytime) return { hours: g.userPlaytime, source: 'user' };
     if (g.isDemo || g.source === '사용자 제보') return null;
     if (ttb) return { hours: ttb.normally ?? ttb.hastily, hastily: ttb.hastily, normally: ttb.normally, completely: ttb.completely, count: ttb.count, url: g.igdbUrl ?? null, source: 'igdb' };
     const r = rawgTimes.get(g.id);
     if (r) return { ...r, source: 'rawg' };
     if (g.aiPlaytime) return { hours: g.aiPlaytime, source: 'ai' };
-    const asked = aiPlaytime.cached(g.id);
+    const asked = await aiPlaytime.cached(g.id);
     return asked ? { hours: asked, source: 'ai' } : null;
   }
   const meta = () => ({ ...catalog.meta, translation: translator.configured, mail: mailer.configured || mailer.devLog, rawg: rawgTimes.size > 0, aiPlayers: partySize.configured });
@@ -182,10 +184,10 @@ const SLIDES = 5;
     return null;
   }
   /** 저장된 목록(찜·최근 본·내 리뷰)에서 서비스 종료 게임 빼기 — 저장된 id·제목으로 AI 판단·회원 제보를 확인 */
-  const withoutEnded = (items) => {
+  const withoutEnded = async (items) => {
     if (!items.length) return items;
     const probe = items.map((x) => ({ id: x.gameId, title: x.title ?? '', source: String(x.gameId).startsWith('igdb-') ? 'IGDB' : String(x.gameId).startsWith('grac-') ? '게임물관리위원회' : '기타', recommendedPlayers: null }));
-    const ended = new Set(reports.applyAll(partySize.applyCached(probe)).filter(isEnded).map((g) => g.id));
+    const ended = new Set((await reports.applyAll(partySize.applyCached(probe))).filter(isEnded).map((g) => g.id));
     return items.filter((x) => !ended.has(x.gameId) && !(x.platforms?.length && isArcadeOnly({ platforms: x.platforms })));
   };
   const listable = (g) =>
@@ -193,10 +195,10 @@ const SLIDES = 5;
   const listableRaw = (g) => listable(appArt.apply(partySize.applyCached([g])[0]));
 
   /** 목록·상세 게임에 평균 별점·찜 여부 붙이기 */
-  function decorate(games, user) {
-    const stats = community.statsAll();
-    const wished = user ? community.wishedIds(user.id) : new Set();
-    return reports.applyAll(imageSubs.applyAll(appArt.applyAll(partySize.applyCached(games)))).map(({ submittedById, ...g }) => ({ ...g, userRating: stats.get(g.id) ?? { count: 0, avg: null }, wished: wished.has(g.id) }));
+  async function decorate(games, user) {
+    const stats = await community.statsAll();
+    const wished = user ? await community.wishedIds(user.id) : new Set();
+    return (await reports.applyAll(await imageSubs.applyAll(appArt.applyAll(partySize.applyCached(games))))).map(({ submittedById, ...g }) => ({ ...g, userRating: stats.get(g.id) ?? { count: 0, avg: null }, wished: wished.has(g.id) }));
   }
 
   /**
@@ -257,9 +259,10 @@ const SLIDES = 5;
   async function handleApi(req, res, url) {
     const p = url.pathname;
     const method = req.method;
-    const ip = req.socket.remoteAddress || 'unknown';
+    // 배포(Vercel)는 프록시 뒤라서 실제 접속 IP가 x-forwarded-for 첫 값에 있음 (로컬에서는 이 헤더를 믿지 않음)
+    const ip = (config.vercel && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || 'unknown';
     const token = readCookies(req)[COOKIE];
-    const user = withRole(accounts.userFromToken(token));
+    const user = withRole(await accounts.userFromToken(token));
 
     // 상태를 바꾸는 요청: 다른 사이트에서 보낸 요청(CSRF) 차단
     if (method !== 'GET') {
@@ -273,34 +276,34 @@ const SLIDES = 5;
     };
 
     // ── 계정 ──
-    if (p === '/api/auth/me' && method === 'GET') return sendJson(res, 200, { user: meOut(user) });
+    if (p === '/api/auth/me' && method === 'GET') return sendJson(res, 200, { user: await meOut(user) });
     // ── 뱃지·칭호 ──
-    if (p === '/api/me/badges' && method === 'GET') return sendJson(res, 200, badges.list(requireUser().id));
+    if (p === '/api/me/badges' && method === 'GET') return sendJson(res, 200, await badges.list(requireUser().id));
     if (p === '/api/me/badges/seen' && method === 'POST') {
       const u = requireUser();
-      return sendJson(res, 200, badges.markSeen(u.id, (await readJson(req)).ids));
+      return sendJson(res, 200, await badges.markSeen(u.id, (await readJson(req)).ids));
     }
     if (p === '/api/me/badges/selected' && method === 'PUT') {
       const u = requireUser();
       const { id } = await readJson(req);
-      return sendJson(res, 200, badges.select(u.id, id ?? null));
+      return sendJson(res, 200, await badges.select(u.id, id ?? null));
     }
     if (p === '/api/auth/signup' && method === 'POST') {
       if (!limits.signup.hit(ip)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
-      const { user: u, session } = accounts.signup(await readJson(req));
-      notes.welcome(u.id, u.nickname);
-      return sendJson(res, 201, { user: meOut(u) }, { 'Set-Cookie': sessionCookie(session.token, session.maxAgeSec) });
+      const { user: u, session } = await accounts.signup(await readJson(req));
+      await notes.welcome(u.id, u.nickname);
+      return sendJson(res, 201, { user: await meOut(u) }, { 'Set-Cookie': sessionCookie(session.token, session.maxAgeSec) });
     }
     if (p === '/api/auth/login' && method === 'POST') {
       const body = await readJson(req);
       const key = `${ip}|${String(body.loginId || '').toLowerCase()}`;
       if (!limits.login.hit(key)) throw apiError('RATE_LIMIT', '로그인 시도가 너무 많습니다. 10분 뒤 다시 시도해 주세요.', 429);
-      const { user: u, session } = accounts.login(body);
+      const { user: u, session } = await accounts.login(body);
       limits.login.reset(key);
-      return sendJson(res, 200, { user: meOut(u) }, { 'Set-Cookie': sessionCookie(session.token, session.maxAgeSec) });
+      return sendJson(res, 200, { user: await meOut(u) }, { 'Set-Cookie': sessionCookie(session.token, session.maxAgeSec) });
     }
     if (p === '/api/auth/logout' && method === 'POST') {
-      accounts.logout(token);
+      await accounts.logout(token);
       return sendJson(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie('', 0) });
     }
     if (p === '/api/auth/find-id' && method === 'POST') {
@@ -313,66 +316,66 @@ const SLIDES = 5;
     }
     if (p === '/api/auth/reset' && method === 'POST') {
       if (!limits.mail.hit(`reset|${ip}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
-      return sendJson(res, 200, accounts.resetPassword(await readJson(req)));
+      return sendJson(res, 200, await accounts.resetPassword(await readJson(req)));
     }
 
     // ── 알림 ──
     if (p === '/api/me/notifications' && method === 'GET') {
       const u = requireUser();
-      return sendJson(res, 200, { ...notes.list(u.id), pending: u.isAdmin ? notes.pendingCount() : null });
+      return sendJson(res, 200, { ...await notes.list(u.id), pending: u.isAdmin ? await notes.pendingCount() : null });
     }
     if (p === '/api/me/notifications/count' && method === 'GET') {
       const u = requireUser();
-      return sendJson(res, 200, { unread: notes.unread(u.id), pending: u.isAdmin ? notes.pendingCount() : null });
+      return sendJson(res, 200, { unread: await notes.unread(u.id), pending: u.isAdmin ? await notes.pendingCount() : null });
     }
-    if (p === '/api/me/notifications/read' && method === 'POST') return sendJson(res, 200, notes.markRead(requireUser().id, await readJson(req)));
+    if (p === '/api/me/notifications/read' && method === 'POST') return sendJson(res, 200, await notes.markRead(requireUser().id, await readJson(req)));
 
     // ── 마이페이지: 내 정보 ──
     if (p === '/api/me/profile' && method === 'PATCH') {
       const u = requireUser();
-      return sendJson(res, 200, { user: meOut(accounts.updateProfile(u.id, await readJson(req))) });
+      return sendJson(res, 200, { user: await meOut(await accounts.updateProfile(u.id, await readJson(req))) });
     }
     if (p === '/api/me/avatar' && (method === 'PUT' || method === 'DELETE')) {
       const u = requireUser();
       if (!limits.write.hit(`a|${u.id}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
       const dataUrl = method === 'PUT' ? (await readJson(req, 1024 * 1024)).dataUrl : null;
       if (method === 'PUT' && !dataUrl) throw apiError('INVALID_IMAGE', '이미지를 선택해 주세요.', 400);
-      return sendJson(res, 200, { user: meOut(accounts.setAvatar(u.id, dataUrl)) });
+      return sendJson(res, 200, { user: await meOut(await accounts.setAvatar(u.id, dataUrl)) });
     }
     if (p === '/api/me/password' && method === 'POST') {
       const u = requireUser();
       if (!limits.login.hit(`pw|${u.id}`)) throw apiError('RATE_LIMIT', '시도가 너무 많습니다. 10분 뒤 다시 시도해 주세요.', 429);
-      return sendJson(res, 200, accounts.changePassword(u.id, token, await readJson(req)));
+      return sendJson(res, 200, await accounts.changePassword(u.id, token, await readJson(req)));
     }
     if (p === '/api/me/delete' && method === 'POST') {
       // 회원 탈퇴: 검토 중인 제보 정리 → 계정 삭제(DB가 세션·찜·리뷰·알림 함께 삭제, 승인된 제보는 작성자 없이 남음)
       const u = requireUser();
       if (!limits.login.hit(`pw|${u.id}`)) throw apiError('RATE_LIMIT', '시도가 너무 많습니다. 10분 뒤 다시 시도해 주세요.', 429);
-      accounts.deleteAccount(u.id, await readJson(req), () => {
-        submissions.removePendingOf(u.id);
-        imageSubs.removePendingOf(u.id);
-        reports.removePendingOf(u.id);
+      await accounts.deleteAccount(u.id, await readJson(req), async () => {
+        await submissions.removePendingOf(u.id);
+        await imageSubs.removePendingOf(u.id);
+        await reports.removePendingOf(u.id);
       });
       return sendJson(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie('', 0) });
     }
-    if (p === '/api/me/reviews' && method === 'GET') return sendJson(res, 200, { items: withoutEnded(community.myReviews(requireUser().id)) });
-    if (p === '/api/me/recent' && method === 'GET') return sendJson(res, 200, { items: withoutEnded(community.recent(requireUser().id)) });
+    if (p === '/api/me/reviews' && method === 'GET') return sendJson(res, 200, { items: await withoutEnded(await community.myReviews(requireUser().id)) });
+    if (p === '/api/me/recent' && method === 'GET') return sendJson(res, 200, { items: await withoutEnded(await community.recent(requireUser().id)) });
     if (p === '/api/me/recent' && method === 'DELETE') {
-      community.clearRecent(requireUser().id);
+      await community.clearRecent(requireUser().id);
       return sendJson(res, 200, { items: [] });
     }
     const recm = p.match(/^\/api\/me\/recent\/([^/]+)$/);
     if (recm && method === 'DELETE') {
       const u = requireUser();
-      community.removeRecent(u.id, decodeURIComponent(recm[1]));
-      return sendJson(res, 200, { items: withoutEnded(community.recent(u.id)) });
+      await community.removeRecent(u.id, decodeURIComponent(recm[1]));
+      return sendJson(res, 200, { items: await withoutEnded(await community.recent(u.id)) });
     }
 
     // ── 찜 ──
     if (p === '/api/wishlist' && method === 'GET') {
       const u = requireUser();
-      const stats = community.statsAll();
-      const items = withoutEnded(community.wishlist(u.id)).map((w) => ({ ...w, userRating: stats.get(w.gameId) ?? { count: 0, avg: null } }));
+      const stats = await community.statsAll();
+      const items = (await withoutEnded(await community.wishlist(u.id))).map((w) => ({ ...w, userRating: stats.get(w.gameId) ?? { count: 0, avg: null } }));
       return sendJson(res, 200, { items });
     }
     const wm = p.match(/^\/api\/wishlist\/([^/]+)$/);
@@ -381,9 +384,9 @@ const SLIDES = 5;
       if (!limits.write.hit(`w|${u.id}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
       const id = decodeURIComponent(wm[1]);
       if (method === 'PUT') {
-        community.addWish(u.id, await findGame(id));
-        contributors.afterReaction(id); // 내가 기여한 게임 찜 이정표
-      } else community.removeWish(u.id, id);
+        await community.addWish(u.id, await findGame(id));
+        await contributors.afterReaction(id); // 내가 기여한 게임 찜 이정표
+      } else await community.removeWish(u.id, id);
       return sendJson(res, 200, { gameId: id, wished: method === 'PUT' });
     }
 
@@ -393,22 +396,22 @@ const SLIDES = 5;
       const id = decodeURIComponent(rm[1]);
       if (!rm[2] && method === 'GET') {
         const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
-        return sendJson(res, 200, reviewsOut(id, user?.id, { limit: 20, offset }));
+        return sendJson(res, 200, await reviewsOut(id, user?.id, { limit: 20, offset }));
       }
       if (rm[2] && (method === 'PUT' || method === 'DELETE')) {
         const u = requireUser();
         if (!limits.write.hit(`r|${u.id}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
         if (method === 'PUT') {
           const body = await readJson(req);
-          const done = notes.watchBadges(u.id);
-          community.saveReview(u.id, await findGame(id), body); // 존재하는 게임에만, 제목·이미지는 서버 조회값
-          done(); // 리뷰로 새 칭호를 받았으면 알림
-          contributors.afterReaction(id); // 기여자에게 첫 리뷰 알림
+          const done = await notes.watchBadges(u.id);
+          await community.saveReview(u.id, await findGame(id), body); // 존재하는 게임에만, 제목·이미지는 서버 조회값
+          await done(); // 리뷰로 새 칭호를 받았으면 알림
+          await contributors.afterReaction(id); // 기여자에게 첫 리뷰 알림
         } else {
-          community.deleteReview(u.id, id);
-          badges.newBadges(u.id); // 잃은 칭호를 기록에서 지워, 다시 얻으면 다시 알리게
+          await community.deleteReview(u.id, id);
+          await badges.newBadges(u.id); // 잃은 칭호를 기록에서 지워, 다시 얻으면 다시 알리게
         }
-        return sendJson(res, 200, reviewsOut(id, u.id, { limit: 20 }));
+        return sendJson(res, 200, await reviewsOut(id, u.id, { limit: 20 }));
       }
     }
 
@@ -416,11 +419,11 @@ const SLIDES = 5;
     if (p === '/api/submissions' && method === 'POST') {
       const u = requireUser();
       if (!limits.write.hit(`s|${u.id}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
-      return sendJson(res, 201, { item: submissions.create(u.id, await readJson(req, 2.5 * 1024 * 1024)) });
+      return sendJson(res, 201, { item: await submissions.create(u.id, await readJson(req, 2.5 * 1024 * 1024)) });
     }
-    if (p === '/api/me/submissions' && method === 'GET') return sendJson(res, 200, { items: submissions.mine(requireUser().id) });
+    if (p === '/api/me/submissions' && method === 'GET') return sendJson(res, 200, { items: await submissions.mine(requireUser().id) });
     const smm = p.match(/^\/api\/me\/submissions\/(\d{1,9})$/);
-    if (smm && method === 'DELETE') return sendJson(res, 200, submissions.cancel(requireUser().id, smm[1]));
+    if (smm && method === 'DELETE') return sendJson(res, 200, await submissions.cancel(requireUser().id, smm[1]));
 
     // ── 표지 사진 제보 (회원) ──
     const pim = p.match(/^\/api\/games\/([^/]+)\/image-submissions$/);
@@ -436,12 +439,12 @@ const SLIDES = 5;
       if (!GAME_ID.test(gid)) throw apiError('BAD_ID', '잘못된 게임 ID입니다.', 400);
       const body = await readJson(req, 2.5 * 1024 * 1024);
       const found = await getAnyGame(gid);
-      const [game] = found ? decorate([found], null) : [null]; // 이미 사진(App Store·승인된 제보 등)이 있는지 확인
-      return sendJson(res, 201, { item: imageSubs.create(u, game, body) });
+      const [game] = found ? await decorate([found], null) : [null]; // 이미 사진(App Store·승인된 제보 등)이 있는지 확인
+      return sendJson(res, 201, { item: await imageSubs.create(u, game, body) });
     }
-    if (p === '/api/me/image-submissions' && method === 'GET') return sendJson(res, 200, { items: imageSubs.mine(requireUser().id) });
+    if (p === '/api/me/image-submissions' && method === 'GET') return sendJson(res, 200, { items: await imageSubs.mine(requireUser().id) });
     const pmm = p.match(/^\/api\/me\/image-submissions\/(\d{1,9})$/);
-    if (pmm && method === 'DELETE') return sendJson(res, 200, imageSubs.cancel(requireUser().id, pmm[1]));
+    if (pmm && method === 'DELETE') return sendJson(res, 200, await imageSubs.cancel(requireUser().id, pmm[1]));
 
     // ── 서비스 종료·정보 수정 제보, 리뷰 신고 (회원) ──
     const grm = p.match(/^\/api\/games\/([^/]+)\/reports$/);
@@ -457,57 +460,57 @@ const SLIDES = 5;
       if (!GAME_ID.test(gid)) throw apiError('BAD_ID', '잘못된 게임 ID입니다.', 400);
       const body = await readJson(req);
       const found = await getAnyGame(gid);
-      const [game] = found ? decorate([found], null) : [null];
-      return sendJson(res, 201, { item: reports.createGameReport(u, game, body) });
+      const [game] = found ? await decorate([found], null) : [null];
+      return sendJson(res, 201, { item: await reports.createGameReport(u, game, body) });
     }
-    if (p === '/api/me/reports' && method === 'GET') return sendJson(res, 200, { items: reports.mineGameReports(requireUser().id) });
+    if (p === '/api/me/reports' && method === 'GET') return sendJson(res, 200, { items: await reports.mineGameReports(requireUser().id) });
     const mrm = p.match(/^\/api\/me\/reports\/(\d{1,9})$/);
-    if (mrm && method === 'DELETE') return sendJson(res, 200, reports.cancelGameReport(requireUser().id, mrm[1]));
+    if (mrm && method === 'DELETE') return sendJson(res, 200, await reports.cancelGameReport(requireUser().id, mrm[1]));
     const rrm = p.match(/^\/api\/reviews\/(\d{1,12})\/report$/);
     if (rrm && method === 'POST') {
       const u = requireUser();
       if (!limits.write.hit(`rr|${u.id}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
-      return sendJson(res, 201, reports.reportReview(u.id, rrm[1], await readJson(req)));
+      return sendJson(res, 201, await reports.reportReview(u.id, rrm[1], await readJson(req)));
     }
 
     // ── 게임 제보 관리 (관리자) ──
     if (p.startsWith('/api/admin/')) {
       const u = requireUser();
       if (!u.isAdmin) throw apiError('FORBIDDEN', '관리자만 볼 수 있어요.', 403);
-      if (p === '/api/admin/submissions' && method === 'GET') return sendJson(res, 200, submissions.list(url.searchParams.get('status') || 'pending'));
+      if (p === '/api/admin/submissions' && method === 'GET') return sendJson(res, 200, await submissions.list(url.searchParams.get('status') || 'pending'));
       const am = p.match(/^\/api\/admin\/submissions\/(\d{1,9})\/(approve|reject|edit)$/);
       if (am && method === 'POST') {
         const body = await optionalJson(req);
-        if (am[2] === 'edit') return sendJson(res, 200, { item: submissions.edit(am[1], body.edits) }); // 이미 승인된 것 고치기(알림 없음)
-        const ctx = notes.beforeReview('submission', am[1]);
-        const item = am[2] === 'approve' ? submissions.approve(am[1], u.id, body.edits) : submissions.reject(am[1], u.id, body.reason);
-        notes.afterReview(ctx, { status: item.status, reason: item.rejectReason, adminId: u.id, gameId: item.gameId ? `/games/${item.gameId}` : null, changes: item.changes });
+        if (am[2] === 'edit') return sendJson(res, 200, { item: await submissions.edit(am[1], body.edits) }); // 이미 승인된 것 고치기(알림 없음)
+        const ctx = await notes.beforeReview('submission', am[1]);
+        const item = am[2] === 'approve' ? await submissions.approve(am[1], u.id, body.edits) : await submissions.reject(am[1], u.id, body.reason);
+        await notes.afterReview(ctx, { status: item.status, reason: item.rejectReason, adminId: u.id, gameId: item.gameId ? `/games/${item.gameId}` : null, changes: item.changes });
         return sendJson(res, 200, { item });
       }
-      if (p === '/api/admin/reports' && method === 'GET') return sendJson(res, 200, reports.listGameReports(url.searchParams.get('kind') || 'ended', url.searchParams.get('status') || 'pending'));
+      if (p === '/api/admin/reports' && method === 'GET') return sendJson(res, 200, await reports.listGameReports(url.searchParams.get('kind') || 'ended', url.searchParams.get('status') || 'pending'));
       const arm = p.match(/^\/api\/admin\/reports\/(\d{1,9})\/(approve|reject|edit)$/);
       if (arm && method === 'POST') {
         const body = await optionalJson(req);
-        if (arm[2] === 'edit') return sendJson(res, 200, { item: reports.editGameReport(arm[1], body.edits) });
-        const ctx = notes.beforeReview('report', arm[1]);
-        const item = arm[2] === 'approve' ? reports.approveGameReport(arm[1], u.id, body.edits) : reports.rejectGameReport(arm[1], u.id, body.reason);
-        notes.afterReview(ctx, { status: item.status, reason: item.rejectReason, adminId: u.id, changes: item.changes });
+        if (arm[2] === 'edit') return sendJson(res, 200, { item: await reports.editGameReport(arm[1], body.edits) });
+        const ctx = await notes.beforeReview('report', arm[1]);
+        const item = arm[2] === 'approve' ? await reports.approveGameReport(arm[1], u.id, body.edits) : await reports.rejectGameReport(arm[1], u.id, body.reason);
+        await notes.afterReview(ctx, { status: item.status, reason: item.rejectReason, adminId: u.id, changes: item.changes });
         return sendJson(res, 200, { item });
       }
-      if (p === '/api/admin/review-reports' && method === 'GET') return sendJson(res, 200, reports.listReviewReports(url.searchParams.get('status') || 'pending'));
+      if (p === '/api/admin/review-reports' && method === 'GET') return sendJson(res, 200, await reports.listReviewReports(url.searchParams.get('status') || 'pending'));
       const avm = p.match(/^\/api\/admin\/review-reports\/(\d{1,12})\/(hide|dismiss|restore)$/);
       if (avm && method === 'POST') {
-        const ctx = notes.beforeReviewAction(avm[1]);
-        const out = reports.resolveReview(avm[1], u.id, avm[2]);
-        notes.afterReviewAction(ctx, avm[2]);
+        const ctx = await notes.beforeReviewAction(avm[1]);
+        const out = await reports.resolveReview(avm[1], u.id, avm[2]);
+        await notes.afterReviewAction(ctx, avm[2]);
         return sendJson(res, 200, out);
       }
-      if (p === '/api/admin/image-submissions' && method === 'GET') return sendJson(res, 200, imageSubs.list(url.searchParams.get('status') || 'pending'));
+      if (p === '/api/admin/image-submissions' && method === 'GET') return sendJson(res, 200, await imageSubs.list(url.searchParams.get('status') || 'pending'));
       const aim = p.match(/^\/api\/admin\/image-submissions\/(\d{1,9})\/(approve|reject)$/);
       if (aim && method === 'POST') {
-        const ctx = notes.beforeReview('image', aim[1]);
-        const item = aim[2] === 'approve' ? imageSubs.approve(aim[1], u.id) : imageSubs.reject(aim[1], u.id, (await readJson(req)).reason);
-        notes.afterReview(ctx, { status: item.status, reason: item.rejectReason, adminId: u.id });
+        const ctx = await notes.beforeReview('image', aim[1]);
+        const item = aim[2] === 'approve' ? await imageSubs.approve(aim[1], u.id) : await imageSubs.reject(aim[1], u.id, (await readJson(req)).reason);
+        await notes.afterReview(ctx, { status: item.status, reason: item.rejectReason, adminId: u.id });
         return sendJson(res, 200, { item });
       }
       return sendJson(res, 404, { error: { code: 'NOT_FOUND', message: '요청한 API를 찾을 수 없습니다.' } });
@@ -523,11 +526,11 @@ const SLIDES = 5;
       } catch {
         throw apiError('BAD_ID', '잘못된 게임 ID입니다.', 400);
       }
-      const [g] = decorate([await findGame(id)], u);
-      const known = playtimeOf(g, await igdbTimeToBeat(g).catch(() => null));
+      const [g] = await decorate([await findGame(id)], u);
+      const known = await playtimeOf(g, await igdbTimeToBeat(g).catch(() => null));
       if (known) return sendJson(res, 200, { playtime: known, status: 'known' });
       if (!canAskPlaytime(g)) return sendJson(res, 200, { playtime: null, status: 'none' });
-      if (aiPlaytime.cached(g.id) !== undefined) return sendJson(res, 200, { playtime: null, status: 'cached' }); // AI가 모른다고 한 게임
+      if (await aiPlaytime.cached(g.id) !== undefined) return sendJson(res, 200, { playtime: null, status: 'cached' }); // AI가 모른다고 한 게임
       if (!aiPlaytime.enabled) return sendJson(res, 200, { playtime: null, status: 'off' });
       if (!limits.aiPlaytime.hit(`t|${u.id}`)) return sendJson(res, 200, { playtime: null, status: 'limit' });
       const r = await aiPlaytime.ask(g, u.id);
@@ -579,15 +582,15 @@ const SLIDES = 5;
         const gGames = grac?.games ?? (grac?.items ?? []).map((x) => x.game);
         if (grac?.aiWarning && !warnings.includes(grac.aiWarning)) warnings.push(grac.aiWarning);
         // 승인된 회원 제보 게임도 첫 요청에 함께 판정
-        const userGames = more ? [] : submissions.approvedGames();
-        const gResults = decorate([...userGames, ...gGames], user)
+        const userGames = more ? [] : await submissions.approvedGames();
+        const gResults = (await decorate([...userGames, ...gGames], user))
           .filter(listable) // 서비스 종료·출시 예정·상태 모름(게임위) 게임 빼기
           .map((game) => ({ game, evaluation: evaluateGame(game, criteria) }))
           .filter((x) => x.evaluation.matchedCount > 0 || x.game.source !== '사용자 제보');
         const gFull = gResults.filter((x) => x.evaluation.isFullMatch);
         const gPartial = gResults.filter((x) => !x.evaluation.isFullMatch);
-        const igdbFull = recommend(decorate(paged.games, user).filter(listable), criteria).fullMatches;
-        const poolPartial = pool ? recommend(decorate(pool.games, user).filter(listable), criteria).partialMatches : [];
+        const igdbFull = recommend((await decorate(paged.games, user)).filter(listable), criteria).fullMatches;
+        const poolPartial = pool ? recommend((await decorate(pool.games, user)).filter(listable), criteria).partialMatches : [];
         const fullMatches = interleave(igdbFull, gFull);
         const partialMatches = more ? gPartial : [...poolPartial, ...gPartial].sort(compareResults);
         const igdbHasMore = paged.skipped ? false : paged.hasMore;
@@ -603,8 +606,8 @@ const SLIDES = 5;
         });
       }
       const { games: listed, warnings } = pool ?? (await catalog.listGames(criteria));
-      const games = [...submissions.approvedGames(), ...listed];
-      const { fullMatches, partialMatches } = recommend(decorate(games, user).filter(listable), criteria);
+      const games = [...await submissions.approvedGames(), ...listed];
+      const { fullMatches, partialMatches } = recommend((await decorate(games, user)).filter(listable), criteria);
       if (paged?.failed) warnings.unshift(`IGDB 전체 검색에 실패해 (${paged.failed.message}) 인기 게임 후보 안에서만 찾았어요.`);
       return sendJson(res, 200, { meta: meta(), warnings, criteria, paged: false, totalGames: games.length, fullMatches: more ? [] : fullMatches, partialMatches: more ? [] : partialMatches });
     }
@@ -613,7 +616,7 @@ const SLIDES = 5;
       const { games: all, warnings } = await catalog.featured();
       const games = partySize.applyCached(all).filter((g) => listable(appArt.apply(g))); // 서비스 종료·출시 예정·상태 모름(게임위) 빼기
       const slides = await withKoreanSummaries(translator, games.slice(0, SLIDES));
-      return sendJson(res, 200, { meta: meta(), games: decorate([...slides, ...games.slice(SLIDES)], user), slideCount: Math.min(SLIDES, games.length), warnings });
+      return sendJson(res, 200, { meta: meta(), games: await decorate([...slides, ...games.slice(SLIDES)], user), slideCount: Math.min(SLIDES, games.length), warnings });
     }
 
     // ── 메뉴별 목록 ──
@@ -631,23 +634,23 @@ const SLIDES = 5;
       // 출시 예정: IGDB 기대작 + 국내 등급분류는 받았지만 아직 안 나온 게임위 게임(AI 판단, 첫 페이지에만)
       let domestic;
       if (kind === 'upcoming' && offset === 0) {
-        domestic = decorate(upcomingDomestic(), user).filter((g) => !platform || g.platforms?.includes(platform));
+        domestic = (await decorate(upcomingDomestic(), user)).filter((g) => !platform || g.platforms?.includes(platform));
       }
-      return sendJson(res, 200, { meta: meta(), games: decorate(games, user).filter(listable), hasMore, nextOffset: offset + 24, warnings, domestic });
+      return sendJson(res, 200, { meta: meta(), games: (await decorate(games, user)).filter(listable), hasMore, nextOffset: offset + 24, warnings, domestic });
     }
     if (p === '/api/contributors' && method === 'GET') {
-      const board = contributors.leaderboard({ period: url.searchParams.get('period') || 'month' });
-      return sendJson(res, 200, { ...board, me: user ? contributors.mine(user.id) : null });
+      const board = await contributors.leaderboard({ period: url.searchParams.get('period') || 'month' });
+      return sendJson(res, 200, { ...board, me: user ? await contributors.mine(user.id) : null });
     }
     if (p === '/api/me/impact' && method === 'GET') {
       const u = requireUser();
-      return sendJson(res, 200, { ...contributors.impact(u.id), rank: contributors.mine(u.id) });
+      return sendJson(res, 200, { ...await contributors.impact(u.id), rank: await contributors.mine(u.id) });
     }
     if (p === '/api/ranking/members') {
-      const top = community.topRated({ minCount: 1, limit: 50 });
+      const top = await community.topRated({ minCount: 1, limit: 50 });
       const extra = new Map((await catalog.getMany(top.map((g) => g.id))).map((g) => [g.id, g]));
       const games = top.map((g) => ({ ...(extra.get(g.id) ?? {}), ...g, imageUrl: extra.get(g.id)?.imageUrl ?? g.imageUrl, title: extra.get(g.id)?.title ?? g.title }));
-      const ranked = decorate(games, user).map((g, i) => ({ ...g, userRating: top[i].userRating }));
+      const ranked = (await decorate(games, user)).map((g, i) => ({ ...g, userRating: top[i].userRating }));
       return sendJson(res, 200, { meta: meta(), games: ranked.filter((g) => !blockedReason(g)), warnings: [] });
     }
 
@@ -656,11 +659,11 @@ const SLIDES = 5;
       if (q.length < 1 || q.length > 50) return sendJson(res, 400, { error: { code: 'INVALID_QUERY', message: '검색어는 1~50자로 입력해 주세요.' } });
       const translate = translator.translateTitles ? (texts, target) => translator.translateTitles(texts, target) : undefined;
       const found = await catalog.search(q, { translate });
-      const mine = [...submissions.search(q), ...(found.translatedQuery ? submissions.search(found.translatedQuery) : [])];
+      const mine = [...await submissions.search(q), ...(found.translatedQuery ? await submissions.search(found.translatedQuery) : [])];
       const ids = new Set(mine.map((g) => g.id));
       const games = [...mine, ...found.games.filter((g) => !ids.has(g.id))];
       // AI가 서비스 종료라고 판단한 게임위 게임은 숨김
-      return sendJson(res, 200, { meta: meta(), query: q, alsoSearched: found.translatedQuery ?? null, games: decorate(games, user).filter(listable), warnings: found.warnings });
+      return sendJson(res, 200, { meta: meta(), query: q, alsoSearched: found.translatedQuery ?? null, games: (await decorate(games, user)).filter(listable), warnings: found.warnings });
     }
 
     const m = p.match(/^\/api\/games\/([^/]+)$/);
@@ -675,14 +678,14 @@ const SLIDES = 5;
       const ttbP = found ? igdbTimeToBeat(found).catch(() => null) : null; // 번역 등과 동시에
       if (!found) return sendJson(res, 404, { error: { code: 'NOT_FOUND', message: '게임 정보를 찾을 수 없습니다.' } });
       const [withParty] = (await partySize.fill([found])).games;
-      const [decorated] = decorate(await withKoreanSummaries(translator, [withParty]), user);
+      const [decorated] = await decorate(await withKoreanSummaries(translator, [withParty]), user);
       const blocked = blockedReason(decorated);
       if (blocked && !user?.isAdmin) return sendJson(res, 410, { error: blocked });
-      if (found.source === '사용자 제보') decorated.submitterBadge = badges.displayFor(found.submittedById); // 제보자 닉네임 옆 뱃지
-      if (decorated.imageSource === '사용자 제보' && decorated.imageBy) decorated.imageByBadge = badges.displayFor(imageSubs.submitterOf(decorated.id));
-      const playtime = playtimeOf(decorated, await ttbP);
+      if (found.source === '사용자 제보') decorated.submitterBadge = await badges.displayFor(found.submittedById); // 제보자 닉네임 옆 뱃지
+      if (decorated.imageSource === '사용자 제보' && decorated.imageBy) decorated.imageByBadge = await badges.displayFor(await imageSubs.submitterOf(decorated.id));
+      const playtime = await playtimeOf(decorated, await ttbP);
       // 플레이 시간이 아무 데도 없고 AI에게 아직 안 물어본 게임 → 화면이 따로 물어봄(로그인한 회원만, POST …/playtime)
-      const playtimeAsk = !playtime && canAskPlaytime(decorated) && aiPlaytime.enabled && aiPlaytime.cached(decorated.id) === undefined;
+      const playtimeAsk = !playtime && canAskPlaytime(decorated) && aiPlaytime.enabled && await aiPlaytime.cached(decorated.id) === undefined;
       let game = { ...decorated, playtime, playtimeAsk, playtimeAvailable: rawgTimes.size > 0 };
       // 게임위 전용 게임: App Store에서 같은 앱(제목+개발사 일치)을 찾으면 아이콘·App Store 링크 보완
       // (목록과 같은 미리 받아 둔 아이콘은 decorate 에서 이미 붙음. 확인한 적 없는 게임만 그 자리에서 찾아봄)
@@ -708,8 +711,8 @@ const SLIDES = 5;
         }
       }
       game.canSubmitImage = imageSubs.canTake(game); // 사진이 끝내 없으면 '표지 사진 제보' 버튼
-      if (user) community.recordView(user.id, game); // 최근 본 게임
-      contributors.recordView(game.id, user ? `u${user.id}` : `ip${ip}`, user?.id ?? null, Boolean(user?.isAdmin)); // 기여한 게임 조회 수
+      if (user) await community.recordView(user.id, game); // 최근 본 게임
+      await contributors.recordView(game.id, user ? `u${user.id}` : `ip${ip}`, user?.id ?? null, Boolean(user?.isAdmin)); // 기여한 게임 조회 수
       const { criteria, errors } = parseCriteria(Object.fromEntries(url.searchParams));
       const evaluation = errors.length ? null : evaluateGame(game, criteria);
       return sendJson(res, 200, { meta: meta(), game, criteria: evaluation ? criteria : null, evaluation });
@@ -718,20 +721,27 @@ const SLIDES = 5;
     return sendJson(res, 404, { error: { code: 'NOT_FOUND', message: '요청한 API를 찾을 수 없습니다.' } });
   }
 
-  function serveAvatar(res, url, store = avatars, prefix = '/avatars/') {
+  async function serveAvatar(res, url, store = avatars, prefix = '/avatars/') {
     let file;
     try {
       file = decodeURIComponent(url.pathname.slice(prefix.length));
     } catch {
       file = '';
     }
-    const full = store.path(file);
-    if (!full || !fs.existsSync(full)) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      return res.end('Not found');
+    const headers = { 'Content-Type': avatarMime(file), 'Cache-Control': 'public, max-age=31536000, immutable', 'Content-Security-Policy': "default-src 'none'" };
+    const img = await store.read(file);
+    if (img) {
+      res.writeHead(200, { ...headers, 'Content-Type': img.mime });
+      return res.end(img.data);
     }
-    res.writeHead(200, { 'Content-Type': avatarMime(file), 'Cache-Control': 'public, max-age=31536000, immutable', 'Content-Security-Policy': "default-src 'none'" });
-    fs.createReadStream(full).pipe(res);
+    // 로컬: 예전에 디스크에 저장한 사진(읽기만)
+    const old = legacyDir && store.fileRe.test(file) ? path.join(legacyDir, prefix === '/avatars/' ? 'avatars' : 'submission-images', file) : null;
+    if (old && fs.existsSync(old)) {
+      res.writeHead(200, headers);
+      return fs.createReadStream(old).pipe(res);
+    }
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('Not found');
   }
 
   function serveStatic(req, res, url) {
@@ -764,8 +774,8 @@ const SLIDES = 5;
     try {
       if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
       if (req.method !== 'GET' && req.method !== 'HEAD') return sendJson(res, 405, { error: { code: 'METHOD', message: '허용되지 않은 요청입니다.' } });
-      if (url.pathname.startsWith('/avatars/')) return serveAvatar(res, url);
-      if (url.pathname.startsWith('/submission-images/')) return serveAvatar(res, url, /\/p\d/.test(url.pathname) ? photoImages : submissionImages, '/submission-images/');
+      if (url.pathname.startsWith('/avatars/')) return await serveAvatar(res, url);
+      if (url.pathname.startsWith('/submission-images/')) return await serveAvatar(res, url, /\/p\d/.test(url.pathname) ? photoImages : submissionImages, '/submission-images/');
       return serveStatic(req, res, url);
     } catch (err) {
       return sendError(res, err);

@@ -44,8 +44,8 @@ export function createAiPlaytime(db, cfg = {}, { fetchImpl = globalThis.fetch, n
   const inflight = new Map();
 
   /** 저장된 값: undefined(아직 안 물음) | null(AI가 모름) | 시간 */
-  function cached(id) {
-    const row = q.get.get(id);
+  async function cached(id) {
+    const row = await q.get.get(id);
     return row ? row.hours ?? null : undefined;
   }
 
@@ -88,17 +88,17 @@ export function createAiPlaytime(db, cfg = {}, { fetchImpl = globalThis.fetch, n
      * @returns {Promise<{ hours: number|null, status: 'cached'|'asked'|'off'|'limit'|'error' }>}
      */
     async ask(game, userId) {
-      const hit = cached(game.id);
+      const hit = await cached(game.id);
       if (hit !== undefined) return { hours: hit, status: 'cached' };
       if (!enabled) return { hours: null, status: 'off' };
       if (inflight.has(game.id)) return inflight.get(game.id);
       const today = new Date(now()).toISOString().slice(0, 10);
-      if (q.today.get(today).n >= dailyLimit) return { hours: null, status: 'limit' };
+      if ((await q.today.get(today)).n >= dailyLimit) return { hours: null, status: 'limit' };
       const p = (async () => {
         const t0 = now();
         try {
           const hours = await callGemini(game);
-          q.put.run(game.id, hours, model, userId ?? null, new Date(now()).toISOString());
+          await q.put.run(game.id, hours, model, userId ?? null, new Date(now()).toISOString());
           log(`[ai-playtime] ${game.id} ${hours ?? '모름'} (${now() - t0}ms)`);
           return { hours, status: 'asked' };
         } catch (e) {

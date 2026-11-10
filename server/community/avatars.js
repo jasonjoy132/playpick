@@ -1,6 +1,6 @@
-// 프로필 이미지 저장 (브라우저에서 256px 정사각형으로 줄여 보낸 이미지를 파일로 저장)
-// - PNG / JPEG / WebP 만 허용, 파일 앞부분(매직 바이트)으로 형식 확인, 최대 512KB
-import fs from 'node:fs';
+// 업로드 이미지 저장 (프로필 이미지 · 제보 게임 표지 · 표지 사진 제보)
+// - PNG / JPEG / WebP 만 허용, 파일 앞부분(매직 바이트)으로 형식 확인, 최대 크기 제한
+// - 서버리스(Vercel)에는 디스크가 없어 DB의 images 표에 저장(이름은 예전 파일 이름 규칙 그대로)
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { DataSourceError } from '../providers/errors.js';
@@ -15,29 +15,37 @@ export const AVATAR_FILE = /^u\d+-[a-f0-9]{16}\.(png|jpg|webp)$/;
 export const avatarMime = (file) => TYPES[path.extname(file).slice(1)]?.mime;
 
 /**
- * 이미지 파일 저장소 (프로필 이미지 · 제보 게임 표지 공용)
- * @param {{ prefix?: string, maxBytes?: number }} opt  파일 이름 앞글자(u: 프로필, s: 제보 표지)·최대 크기
+ * 이미지 저장소 (프로필 이미지 · 제보 게임 표지 공용, DB images 표)
+ * @param {{ prefix?: string, maxBytes?: number }} opt  이름 앞글자(u: 프로필, s: 제보 표지, p: 표지 사진 제보)·최대 크기
  */
-export function createAvatarStore(dir, { prefix = 'u', maxBytes = MAX_BYTES } = {}) {
+export function createAvatarStore(db, { prefix = 'u', maxBytes = MAX_BYTES, now = () => Date.now() } = {}) {
   const FILE = new RegExp(`^${prefix}\\d+-[a-f0-9]{16}\\.(png|jpg|webp)$`);
+  const q = {
+    put: db.prepare('INSERT INTO images (name, mime, data, created_at) VALUES (?, ?, ?, ?)'),
+    get: db.prepare('SELECT mime, data FROM images WHERE name = ?'),
+    del: db.prepare('DELETE FROM images WHERE name = ?'),
+  };
   return {
-    dir,
     fileRe: FILE,
-    save(userId, dataUrl) {
+    async save(userId, dataUrl) {
       const m = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
       if (!m) throw new DataSourceError('INVALID_IMAGE', 'PNG·JPG·WebP 이미지만 올릴 수 있어요.', 400);
       const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
       const buf = Buffer.from(m[2], 'base64');
       if (buf.length > maxBytes) throw new DataSourceError('INVALID_IMAGE', `이미지가 너무 커요. (최대 ${Math.round(maxBytes / 1024)}KB)`, 400);
       if (!TYPES[ext].ok(buf)) throw new DataSourceError('INVALID_IMAGE', '이미지 파일이 올바르지 않아요.', 400);
-      fs.mkdirSync(dir, { recursive: true });
       const file = `${prefix}${userId}-${crypto.randomBytes(8).toString('hex')}.${ext}`;
-      fs.writeFileSync(path.join(dir, file), buf);
+      await q.put.run(file, TYPES[ext].mime, buf, new Date(now()).toISOString());
       return file;
     },
-    remove(file) {
-      if (file && FILE.test(file)) fs.rmSync(path.join(dir, file), { force: true });
+    async remove(file) {
+      if (file && FILE.test(file)) await q.del.run(file);
     },
-    path: (file) => (FILE.test(file) ? path.join(dir, file) : null),
+    /** 이름 → { mime, data: Buffer } | null */
+    async read(file) {
+      if (!FILE.test(String(file))) return null;
+      const r = await q.get.get(file);
+      return r ? { mime: r.mime, data: Buffer.from(r.data) } : null;
+    },
   };
 }
