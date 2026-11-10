@@ -25,6 +25,8 @@ import { createRawgPlaytime } from './services/rawgPlaytime.js';
 import { createAiPlaytime, canAskPlaytime } from './services/aiPlaytime.js';
 import { createPartySize } from './services/partySize.js';
 import { createAppStoreProvider } from './providers/appStoreProvider.js';
+import { createGracNew, overlayEntries } from './services/gracNew.js';
+import { cached } from './community/cached.js';
 import { createAppArt, pickArt } from './services/appArt.js';
 
 const MIME = {
@@ -131,6 +133,35 @@ export function createApp(config, deps = {}) {
     write: createRateLimiter({ limit: 60, windowMs: 60e3 }),
     aiPlaytime: createRateLimiter({ limit: 30, windowMs: 60 * 60e3 }), // 회원 한 명이 AI 플레이 시간을 새로 물을 수 있는 수(시간당)
   };
+  // 게관위 새 게임: 하루 한 번 받아 DB에 두고(스토어 근거 + AI 인원), 색인·AI 판단에 덧붙임 (live 모드만)
+  const feed = catalog.gracFeed ?? null;
+  const gracNew = feed
+    ? deps.gracNew ??
+      createGracNew(db, {
+        grac: feed.grac,
+        appStore: appStore.enabled ? appStore : null,
+        seedGames: feed.seedGames,
+        hasFileJudgement: (g) => partySize.hasEntry?.({ ...g, source: '게임물관리위원회' }) ?? false,
+        ai: { ...(config.gemini ?? {}), live: config.gracNew?.ai !== false },
+        fetchImpl: deps.gracNewFetch,
+        log: (m) => console.log(m),
+      })
+    : null;
+  /** 새 게임·판단을 1분마다 다시 읽어 색인·AI 판단에 넣음 (다른 인스턴스가 수집해도 곧 반영) */
+  const newGames = cached(
+    async () => {
+      const d = await gracNew.load();
+      feed.setExtra(d.games);
+      partySize.setOverlay?.(overlayEntries(d));
+      return d.games.length;
+    },
+    { ttl: 60_000 },
+  );
+  const runGracNew = async () => {
+    const r = await gracNew.run();
+    newGames.clear();
+    return r;
+  };
   const aiPlaytime = deps.aiPlaytime ?? createAiPlaytime(db, config.aiPlaytime ?? {}, { ...deps, log: (m) => console.log(m) });
   // IGDB 이용자 기록 플레이 시간은 기록한 사람이 이만큼 이상일 때만 씀(적으면 한두 사람 값에 크게 흔들림)
   const IGDB_TTB_MIN = 3;
@@ -203,7 +234,7 @@ const SLIDES = 5;
     return items.filter((x) => !ended.has(x.gameId) && !(x.platforms?.length && isArcadeOnly({ platforms: x.platforms })));
   };
   const listable = (g) =>
-    !g.aiEnded && !g.userEnded && !isOffTopic(g) && (g.source !== '게임물관리위원회' || (!g.aiUpcoming && (!hideUnknown() || g.aiAlive === true || Boolean(g.appStoreUrl))));
+    !g.aiEnded && !g.userEnded && !isOffTopic(g) && (g.source !== '게임물관리위원회' || (!g.aiUpcoming && (!hideUnknown() || g.aiAlive === true || g.aiRecent === true || Boolean(g.appStoreUrl))));
   const listableRaw = (g) => listable(appArt.apply(partySize.applyCached([g])[0]));
 
   /** 목록·상세 게임에 평균 별점·찜 여부 붙이기 */
@@ -273,6 +304,13 @@ const SLIDES = 5;
     const method = req.method;
     // 배포(Vercel)는 프록시 뒤라서 실제 접속 IP가 x-forwarded-for 첫 값에 있음 (로컬에서는 이 헤더를 믿지 않음)
     const ip = (config.vercel && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || 'unknown';
+    if (gracNew) await newGames().catch((e) => console.log(`[grac-new] 읽기 실패: ${e.message}`));
+    // Vercel Cron(하루 1번): 게관위 새 게임 수집·판단. Vercel 이 CRON_SECRET 을 Authorization 헤더로 보냄
+    if (p === '/api/cron/grac' && method === 'GET') {
+      if (!config.cronSecret || req.headers.authorization !== `Bearer ${config.cronSecret}`) throw apiError('FORBIDDEN', '허용되지 않은 요청입니다.', 401);
+      if (!gracNew) return sendJson(res, 200, { ok: false, skipped: 'NOT_LIVE' });
+      return sendJson(res, 200, await runGracNew());
+    }
     const token = readCookies(req)[COOKIE];
     const user = withRole(await accounts.userFromToken(token));
 
@@ -555,6 +593,16 @@ const SLIDES = 5;
     if (p.startsWith('/api/admin/')) {
       const u = requireUser();
       if (!u.isAdmin) throw apiError('FORBIDDEN', '관리자만 볼 수 있어요.', 403);
+      // 게관위 새 게임: 최근 목록·판단 / 지금 받기
+      if (p === '/api/admin/grac-new' && method === 'GET') {
+        if (!gracNew) return sendJson(res, 200, { available: false, items: [], lastRun: null });
+        return sendJson(res, 200, { available: true, lastRun: await gracNew.lastRun(), items: await gracNew.recent(30) });
+      }
+      if (p === '/api/admin/grac-new/run' && method === 'POST') {
+        if (!gracNew) throw apiError('NOT_AVAILABLE', '실제 데이터(live) 모드에서만 쓸 수 있어요.', 400);
+        const r = await runGracNew();
+        return sendJson(res, 200, { ...r, lastRun: await gracNew.lastRun(), items: await gracNew.recent(30) });
+      }
       if (p === '/api/admin/submissions' && method === 'GET') return sendJson(res, 200, await submissions.list(url.searchParams.get('status') || 'pending'));
       const am = p.match(/^\/api\/admin\/submissions\/(\d{1,9})\/(approve|reject|edit)$/);
       if (am && method === 'POST') {
@@ -863,5 +911,16 @@ const SLIDES = 5;
     if (!deps.db) db.close();
   });
   server.catalog = catalog;
+  /** 로컬 서버 시작 때: 마지막 수집이 하루 넘었으면 백그라운드로 한 번 (배포는 Vercel Cron) */
+  server.runGracNewIfStale = async () => {
+    if (!gracNew || config.vercel) return;
+    try {
+      const last = await gracNew.lastRun();
+      if (last && Date.now() - Date.parse(last.last_at) < 86_400_000) return;
+      await runGracNew();
+    } catch (e) {
+      console.log(`[grac-new] 실패: ${e.message}`);
+    }
+  };
   return server;
 }

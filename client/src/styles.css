@@ -757,6 +757,7 @@ img { max-width: 100%; }
 .pill-user { background: var(--ai-soft); color: var(--ai-ink); border: 1px solid var(--ai-line); }
 .pill-wait { background: var(--unk-soft); color: var(--unk); border: 1px solid var(--unk-line); }
 .pill-ok { background: var(--ok-soft); color: var(--ok); border: 1px solid var(--ok-line); }
+.pill-new { background: var(--ok-soft); color: var(--ok); border: 1px dashed var(--ok-line); }
 .pill-no { background: var(--bad-soft); color: var(--bad); border: 1px solid var(--bad-line); }
 .btn-danger { background: var(--bad); color: #fff; }
 .btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -1301,3 +1302,10 @@ h1, h2 { font-weight: 800; letter-spacing: -0.02em; }
 .search-recent-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search-recent-remove { flex-shrink: 0; width: 32px; height: 32px; margin-right: 4px; border: 0; border-radius: 50%; background: none; color: var(--muted); font-size: 1.1rem; line-height: 1; cursor: pointer; }
 .search-recent-remove:hover { background: var(--surface-2); color: var(--text); }
+
+/* ── 관리자: 게관위 새 게임 ── */
+.grac-new { display: grid; gap: 12px; }
+.grac-new-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.grac-new-head p { margin: 0; }
+.grac-new-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.grac-new-list li { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; overflow-wrap: anywhere; }

@@ -20,6 +20,14 @@ export function createGracIndex({ grac, cacheFile, seedFile = null, autoRefresh 
   let job = null;
   let progress = null; // { done, total }
   let lastError = null;
+  let extra = []; // 시드 이후 새 게임(DB grac_new) — 배포에서 덧붙임
+  let extraSig = '';
+  let stamp = 0; // 덧붙인 게임이 바뀌면 올림(조건별 후보 캐시를 새로 만들게)
+  const merged = () => {
+    if (!data) return extra;
+    const nos = new Set(data.games.map((g) => g.ratingNo));
+    return [...data.games, ...extra.filter((g) => !nos.has(g.ratingNo))];
+  };
 
   /** 캐시 파일(최근 갱신분) → 없으면 git 시드 파일. 둘 다 있으면 더 최근 것 */
   function load() {
@@ -107,7 +115,7 @@ export function createGracIndex({ grac, cacheFile, seedFile = null, autoRefresh 
     const full = force || !data || t - data.fullAt > 7 * DAY;
     const games = full ? await fullBuild() : await incremental();
     data = { fullAt: full ? t : data.fullAt, updatedAt: t, games };
-    collapsed = collapse(games);
+    collapsed = collapse(merged());
     progress = null;
     lastError = null;
     save();
@@ -115,6 +123,17 @@ export function createGracIndex({ grac, cacheFile, seedFile = null, autoRefresh 
   }
 
   return {
+    /** 지금 색인의 원래 게임 목록(합치기 전, 시드·캐시) — 새 게임 수집에서 '이미 있는 것' 확인용 */
+    rawGames: () => data?.games ?? [],
+    /** 시드 이후 새 게임 덧붙이기 (바뀔 때만 다시 묶음) */
+    setExtra(games = []) {
+      const sig = `${games.length}|${games.map((g) => g.ratingNo).join(',')}`;
+      if (sig === extraSig) return;
+      extraSig = sig;
+      extra = games;
+      stamp++;
+      if (data) collapsed = collapse(merged());
+    },
     /** 바로 갱신하고 끝날 때까지 기다림 (npm run refresh:grac). full: 전체 다시 받기 */
     refresh,
     /** 오래됐거나 없으면 백그라운드 갱신 시작 (기다리지 않음) */
@@ -135,7 +154,7 @@ export function createGracIndex({ grac, cacheFile, seedFile = null, autoRefresh 
     },
     /** 'ready' | 'building' | 'error' + 제목 기준으로 합친 게임 목록 */
     snapshot() {
-      if (collapsed) return { status: 'ready', games: collapsed, updatedAt: data.updatedAt };
+      if (collapsed) return { status: 'ready', games: collapsed, updatedAt: (data?.updatedAt ?? 0) + stamp };
       if (job) return { status: 'building', progress };
       return { status: lastError ? 'error' : 'building', error: lastError?.message ?? null, progress };
     },

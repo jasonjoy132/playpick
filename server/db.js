@@ -186,6 +186,34 @@ CREATE TABLE IF NOT EXISTS oauth_pending (
   next TEXT,
   expires_at INTEGER NOT NULL
 );
+-- 게관위 새 게임(시드 이후 새로 등급분류된 것): 하루 한 번 받아 둠 (services/gracNew.js)
+CREATE TABLE IF NOT EXISTS grac_new (
+  rating_no TEXT PRIMARY KEY,
+  game_json TEXT NOT NULL,
+  rated_at TEXT NOT NULL,
+  fetched_at TEXT NOT NULL
+);
+-- 새 게임 판단: 스토어(Steam·App Store)에서 찾은 근거 + AI 추천 인원. status NULL = 못 찾음(next_check 에 다시)
+CREATE TABLE IF NOT EXISTS ai_grac (
+  key TEXT PRIMARY KEY,
+  status TEXT,
+  min INTEGER,
+  max INTEGER,
+  hours INTEGER,
+  model TEXT,
+  evidence TEXT,
+  store_url TEXT,
+  store_name TEXT,
+  tries INTEGER NOT NULL DEFAULT 0,
+  next_check INTEGER,
+  judged_at TEXT NOT NULL
+);
+-- 정기 작업 마지막 실행
+CREATE TABLE IF NOT EXISTS sync_runs (
+  name TEXT PRIMARY KEY,
+  last_at TEXT NOT NULL,
+  note TEXT
+);
 -- 업로드 사진(프로필·제보 표지·표지 사진 제보). 서버리스(Vercel)에는 디스크가 없어 DB 안에 저장
 CREATE TABLE IF NOT EXISTS images (
   name TEXT PRIMARY KEY,

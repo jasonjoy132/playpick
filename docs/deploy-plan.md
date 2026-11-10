@@ -33,6 +33,7 @@
    | `BREVO_API_KEY`, `MAIL_FROM_EMAIL` | 로컬 `.env`와 같은 값 |
    | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | 각 콘솔에서 받은 값. 돌아올 주소 `https://playpick-sooty.vercel.app/api/auth/oauth/<google|discord>/callback` 등록 |
    | `ADMIN_EMAILS` | 관리자 이메일 |
+   | `CRON_SECRET` | 아무 긴 무작위 문자열. Vercel Cron이 하루 한 번 `/api/cron/grac`(게관위 새 게임 받기)을 부를 때 이 값을 보냄. 없으면 정기 작업이 401로 막힘 |
    | `DATA_SOURCE` | `live` |
    | `APP_BASE_URL` | `https://<프로젝트 이름>.vercel.app` (첫 배포 뒤 주소 확인하고 넣고 다시 배포) |
    | `MAIL_DEV_LOG` | `false` |

@@ -229,6 +229,8 @@ export function createCatalog(config, deps = {}) {
 
   return {
     meta: { dataSource: 'live', isDemo: false, sources },
+    /** 게관위 새 게임 수집(services/gracNew.js)용: 게관위 API · 지금 색인의 게임 · 새 게임 덧붙이기 */
+    gracFeed: gracIndex && grac.fetchPage ? { grac, seedGames: () => gracIndex.rawGames(), setExtra: (games) => gracIndex.setExtra(games) } : null,
 
     /**
      * 추천 후보: IGDB 게임만 사용 (게임위 전용 게임은 정보가 부족해 결과를 어지럽혀서 제외)

@@ -39,7 +39,8 @@ export function GameTile({ game, options, search, evaluation, size = 'md', rank,
           )}
           {game.isDemo && <span className="pill pill-demo">데모</span>}
           {game.source === '사용자 제보' && <span className="pill pill-user" title="회원이 제보하고 관리자가 확인한 게임">제보</span>}
-          {game.aiUpcoming && <span className="pill pill-wait" title="아직 출시되지 않은 것으로 AI가 판단한 게임">출시 예정</span>}
+          {game.aiUpcoming && <span className="pill pill-wait" title={game.statusEvidence ? `${game.statusEvidence}에 출시 예정으로 올라온 게임` : '아직 출시되지 않은 것으로 AI가 판단한 게임'}>출시 예정</span>}
+          {game.aiRecent && <span className="pill pill-new" title="최근 국내 등급분류를 받은 게임(서비스 상태 확인 전)">새 등급분류</span>}
         </div>
         {game.rating && !game.isDemo && <span className="pill pill-rating">{game.rating}</span>}
         <WishButton game={game} />

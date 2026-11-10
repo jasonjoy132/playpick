@@ -300,7 +300,20 @@ function GameDetail({ data, options }) {
           )}
           {game.aiUpcoming && (
             <p className="notice" data-testid="ai-upcoming-notice">
-              국내 등급분류는 받았지만 <b>아직 출시되지 않은 게임</b>으로 AI(Google Gemini)가 판단했어요. ‘신작·출시 예정 → 출시 예정’에서 볼 수 있어요. AI 판단이라 틀릴 수 있어요.
+              {game.statusEvidence ? (
+                <>
+                  국내 등급분류는 받았고, {game.statusEvidence}에 <b>출시 예정</b>으로 올라와 있어요. ‘신작·출시 예정 → 출시 예정’에서 볼 수 있어요.
+                </>
+              ) : (
+                <>
+                  국내 등급분류는 받았지만 <b>아직 출시되지 않은 게임</b>으로 AI(Google Gemini)가 판단했어요. ‘신작·출시 예정 → 출시 예정’에서 볼 수 있어요. AI 판단이라 틀릴 수 있어요.
+                </>
+              )}
+            </p>
+          )}
+          {game.aiRecent && (
+            <p className="notice" data-testid="ai-recent-notice">
+              {game.ratingDate ? `${game.ratingDate}에 ` : '최근에 '}국내 등급분류를 받은 <b>새 게임</b>이에요. 아직 스토어에서 찾지 못해 <b>출시·서비스 상태는 확인 전</b>이에요(일주일마다 다시 찾아봐요).
             </p>
           )}
           {game.userEnded && (

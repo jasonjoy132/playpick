@@ -4,14 +4,37 @@
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
   "outputDirectory": "client/dist",
-  "regions": ["icn1"],
+  "regions": [
+    "icn1"
+  ],
   "functions": {
-    "api/index.js": { "includeFiles": "server/data/**", "maxDuration": 60 }
+    "api/index.js": {
+      "includeFiles": "server/data/**",
+      "maxDuration": 60
+    }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index" },
-    { "source": "/avatars/(.*)", "destination": "/api/index" },
-    { "source": "/submission-images/(.*)", "destination": "/api/index" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/avatars/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/submission-images/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/grac",
+      "schedule": "0 19 * * *"
+    }
   ]
 }

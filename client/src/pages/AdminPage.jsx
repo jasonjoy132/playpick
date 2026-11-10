@@ -21,6 +21,7 @@ const KINDS = [
   ['ended', '서비스 종료 제보'],
   ['fix', '정보 수정 제보'],
   ['reviews', '리뷰 신고'],
+  ['grac', '게관위 새 게임'],
 ];
 const REVIEW_TABS = [
   ['pending', '검토 중'],
@@ -33,6 +34,7 @@ const HELP = {
   ended: '승인하면 그 게임을 추천·검색·목록에서 숨겨요(상세 페이지는 종료 안내와 함께 열림). 근거 주소를 꼭 확인해 주세요.',
   fix: '승인하면 추천 인원·플레이 시간·구매처를 ‘사용자 제보’ 값으로 바꿔 보여 줘요. 설명에만 적힌 내용은 자동으로 반영되지 않아요.',
   reviews: '숨긴 리뷰는 작성자에게만 보이고 평점에서 빠져요. ‘문제 없음’이면 그대로 둬요.',
+  grac: '게임물관리위원회에 새로 등급분류된 게임을 하루 한 번(한국 시간 새벽 4시) 받아요. Steam·App Store에서 찾으면 서비스 중/출시 예정으로 보이고, 스토어 설명으로 AI가 추천 인원을 정해요. 못 찾은 게임은 등급분류 6개월 안이면 ‘새 등급분류’로 보이고 일주일마다 다시 찾아요.',
 };
 const loaders = {
   games: (tab) => api.adminSubmissions(tab),
@@ -40,6 +42,7 @@ const loaders = {
   ended: (tab) => api.adminReports('ended', tab),
   fix: (tab) => api.adminReports('fix', tab),
   reviews: (tab) => api.adminReviewReports(tab),
+  grac: () => Promise.resolve(null), // GracNewPanel 이 직접 불러옴
 };
 
 export function AdminPage({ options }) {
@@ -60,6 +63,18 @@ export function AdminPage({ options }) {
       </div>
     );
   }
+  if (kind === 'grac') {
+    return (
+      <div className="admin-page">
+        <section className="page-head">
+          <h1>제보 관리</h1>
+          <p className="muted">{HELP.grac}</p>
+        </section>
+        <KindChips kind={kind} onKind={(k) => (setKind(k), setTab('pending'))} />
+        <GracNewPanel />
+      </div>
+    );
+  }
   const counts = list.data?.counts ?? {};
   const tabs = kind === 'reviews' ? REVIEW_TABS : TABS;
   const card = (item) => {
@@ -76,20 +91,7 @@ export function AdminPage({ options }) {
           {HELP[kind]} {kind !== 'reviews' && '거절 사유는 제보한 회원에게 보여요.'}
         </p>
       </section>
-      <div className="admin-kinds" role="group" aria-label="제보 종류">
-        {KINDS.map(([k, name]) => (
-          <button
-            key={k} type="button" className={`chip-btn${kind === k ? ' is-on' : ''}`} aria-pressed={kind === k}
-            onClick={() => {
-              setKind(k);
-              setTab('pending');
-            }}
-            data-testid={`admin-kind-${k}`}
-          >
-            {name}
-          </button>
-        ))}
-      </div>
+      <KindChips kind={kind} onKind={(k) => (setKind(k), setTab('pending'))} />
       <div className="tabs" role="tablist" aria-label="제보 상태">
         {tabs.map(([key, name]) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? 'is-on' : ''} onClick={() => setTab(key)} data-testid={`admin-tab-${key}`}>
@@ -105,6 +107,113 @@ export function AdminPage({ options }) {
         ) : (
           <div className="admin-list">{list.data.items.map(card)}</div>
         ))}
+    </div>
+  );
+}
+
+function KindChips({ kind, onKind }) {
+  return (
+    <div className="admin-kinds" role="group" aria-label="제보 종류">
+      {KINDS.map(([k, name]) => (
+        <button key={k} type="button" className={`chip-btn${kind === k ? ' is-on' : ''}`} aria-pressed={kind === k} onClick={() => onKind(k)} data-testid={`admin-kind-${k}`}>
+          {name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const STATUS_KO = { released: '서비스 중', upcoming: '출시 예정' };
+/** 게관위 새 게임: 마지막 실행·지금 받기·최근 목록과 판단 근거 */
+function GracNewPanel() {
+  const info = useAsync(() => api.adminGracNew(), []);
+  const [run, setRun] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const data = run?.items ? run : info.data;
+  const start = async () => {
+    setBusy(true);
+    setRun(null);
+    try {
+      setRun(await api.adminGracNewRun());
+    } catch (err) {
+      setRun({ error: err.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (info.status === 'loading') return <Loading />;
+  if (info.status === 'error') return <ErrorState error={info.error} onRetry={info.retry} />;
+  if (!info.data.available) return <p className="section-empty">실제 데이터(live) 모드에서만 쓸 수 있어요.</p>;
+  const last = data?.lastRun;
+  return (
+    <div className="panel grac-new" data-testid="grac-new">
+      <div className="grac-new-head">
+        <p className="muted small" data-testid="grac-new-last">
+          {last ? `마지막 실행 ${fmt(last.last_at)} · ${last.note ?? ''}` : '아직 한 번도 받지 않았어요.'}
+        </p>
+        <button type="button" className="btn btn-primary btn-sm" onClick={start} disabled={busy} data-testid="grac-new-run">
+          {busy ? '받는 중… (최대 1분)' : '지금 받기'}
+        </button>
+      </div>
+      {run?.error && (
+        <p className="form-error" role="alert">
+          {run.error}
+        </p>
+      )}
+      {run?.ok === false && (
+        <p className="form-error" role="alert">
+          {run.error}
+        </p>
+      )}
+      {run?.ok && (
+        <p className="notice" data-testid="grac-new-result">
+          {run.note}
+          {run.judge?.waiting > 0 && ` · 남은 ${run.judge.waiting}개는 다음 실행에서`}
+        </p>
+      )}
+      {!data?.items?.length ? (
+        <p className="section-empty">받은 새 게임이 없어요.</p>
+      ) : (
+        <ul className="grac-new-list">
+          {data.items.map((g) => {
+            const j = g.judgement;
+            return (
+              <li key={g.id} data-testid="grac-new-item">
+                <div>
+                  <Link to={`/games/${encodeURIComponent(g.id)}`}>
+                    <b>{g.title}</b>
+                  </Link>
+                  <span className="muted small">
+                    {' '}
+                    · {g.publisher} · {g.platforms} · {g.ratingDate}
+                  </span>
+                </div>
+                <div className="small">
+                  {g.canceled ? (
+                    <span className="pill">등급 취소</span>
+                  ) : !j ? (
+                    <span className="muted">아직 확인 전</span>
+                  ) : j.fromFile ? (
+                    <span className="muted">기존 AI 데이터 사용</span>
+                  ) : j.status ? (
+                    <>
+                      <span className={`pill ${j.status === 'upcoming' ? 'pill-wait' : 'pill-ok'}`}>{STATUS_KO[j.status]}</span>{' '}
+                      <a href={j.storeUrl} target="_blank" rel="noopener noreferrer">
+                        {j.storeName}
+                      </a>
+                      {Number.isInteger(j.min) ? ` · AI 추정 ${j.min}~${j.max}명` : ' · 인원 모름'}
+                    </>
+                  ) : (
+                    <span className="muted">
+                      스토어에서 못 찾음({j.tries}번) {j.nextCheck && `· 다음 확인 ${fmt(j.nextCheck)}`}
+                    </span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

@@ -40,6 +40,7 @@ export const mayEnd = (g) =>
     // 게임 모드 정보가 비어 있는 PC·모바일·웹 게임도(예: 넥슨 버블파이터 — 모드가 없어 확인 대상에서 빠졌었음)
     (!(g.gameModes ?? []).length && /PC|Windows|Android|iOS|Web|Browser/i.test(g.platformsRaw ?? '')));
 const STATUSES = new Set(['released', 'upcoming', 'ended']);
+const RECENT_NEW_DAYS = 180; // 근거를 못 찾은 게관위 새 게임을 '최근 등급분류'로 보여 주는 기간 (gracNew.RECENT_DAYS 와 같음)
 
 /** 게임 목록 → 프롬프트 (id는 이번 요청 안의 순번 1..n) */
 export function buildPrompt(games, today = new Date().toISOString().slice(0, 10)) {
@@ -220,8 +221,9 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
   let thinkingIdx = /lite/i.test(model) ? THINKING.length - 1 : 0;
   let pausedUntil = 0;
   const pending = new Map(); // 지금 묻고 있는 게임 → Promise (동시에 들어온 검색이 같은 게임을 두 번 묻지 않게)
+  let overlay = new Map(); // 게관위 새 게임 판단(DB, services/gracNew.js) — 파일에 없는 게임에만 씀
   const fresh = (g) => {
-    const e = cache.get(cacheKey(g));
+    const e = cache.get(cacheKey(g)) ?? overlay.get(cacheKey(g));
     if (!e) return null;
     return !live || now() - e.at < TTL ? e : null;
   };
@@ -412,6 +414,11 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
     if (e?.ended === true) out = { ...out, aiEnded: true }; // AI가 서비스 종료로 판단 → 목록·검색에서 숨김
     if (game.source === GRAC && e?.status === 'upcoming') out = { ...out, aiUpcoming: true }; // 출시 예정 목록으로
     if (game.source === GRAC && e?.status === 'released' && e.ended !== true) out = { ...out, aiAlive: true }; // AI가 지금도 서비스 중이라고 판단
+    if (game.source === GRAC && e?.newGame) {
+      // 게관위 새 게임: 스토어에서 찾았으면 그 스토어 링크(근거), 못 찾았으면 등급분류 6개월 안일 때만 '최근 등급분류'로 보임
+      if (e.storeUrl && !(out.stores ?? []).some((s) => s.url === e.storeUrl)) out = { ...out, stores: [...(out.stores ?? []), { name: e.storeName, url: e.storeUrl, isDemo: false }], statusEvidence: e.storeName };
+      if (e.recentNew && game.ratingDate && now() - Date.parse(game.ratingDate) < RECENT_NEW_DAYS * 86_400_000) out = { ...out, aiRecent: true };
+    }
     if (!('recommendedPlayers' in game) || game.recommendedPlayers) return out;
     if (e && (e.unknown || Number.isInteger(e.min))) return e.unknown ? out : { ...out, recommendedPlayers: { min: e.min, max: e.max, source: 'ai' } };
     if (e) return out; // 서비스 종료 여부만 저장된 항목(인원은 아직 안 물음)
@@ -454,6 +461,12 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
       model = m;
       thinkingIdx = /lite/i.test(model) ? THINKING.length - 1 : 0;
     },
+    /** 게관위 새 게임 판단(DB) 덧씌우기: Map(cacheKey → 항목). 파일에 같은 게임이 있으면 파일이 우선 */
+    setOverlay(map) {
+      overlay = map instanceof Map ? map : new Map();
+    },
+    /** 파일(party-size.json)에 이 게임의 항목이 있는지 */
+    hasEntry: (g) => cache.has(cacheKey(g)),
     get size() {
       return cache.size;
     },
