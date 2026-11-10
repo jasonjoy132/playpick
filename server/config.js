@@ -106,6 +106,13 @@ export function getConfig() {
       live: env('AI_PLAYTIME_LIVE', 'on') !== 'off',
       dailyLimit: Math.max(int('AI_PLAYTIME_DAILY_LIMIT', 300), 0),
     },
+    // 상세 화면 AI 추천 인원: 추천 인원이 아무 데도 없는 게임을 로그인한 회원이 열면 그 자리에서 물어 DB에 저장 (off 로 끔)
+    aiPlayers: {
+      apiKey: env('GEMINI_API_KEY'),
+      model: env('GEMINI_MODEL', 'gemini-flash-lite-latest'),
+      live: env('AI_PLAYERS_ASK', 'on') !== 'off',
+      dailyLimit: Math.max(int('AI_PLAYERS_DAILY_LIMIT', 300), 0),
+    },
     deepl: {
       apiKey: env('DEEPL_API_KEY'),
       apiUrl: env('DEEPL_API_URL'),

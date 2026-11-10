@@ -423,17 +423,71 @@ function GameDetail({ data, options }) {
   );
 }
 
+/** 'AI 추정' 표시 */
+const AI_PILL = (
+  <span className="pill pill-ai" title="실제 데이터가 아니라 AI(Google Gemini)가 추정한 값이에요. 틀릴 수 있어요." data-testid="party-ai">
+    AI 추정
+  </span>
+);
+
+/**
+ * 추천 인원이 아무 데도 없는 게임(playersAsk): 로그인했으면 화면을 띄운 뒤 AI에게 물어 채움, 아니면 로그인 안내
+ * (플레이 시간 칸과 같은 방식, 한 게임은 한 번만 물어 저장)
+ */
+function PlayersAsk({ game }) {
+  const { user, ready } = useAuth();
+  const { pathname, search } = useLocation();
+  const [state, setState] = useState({ status: 'idle', players: null });
+  useEffect(() => {
+    if (!user) return undefined;
+    let alive = true;
+    setState({ status: 'loading', players: null });
+    api
+      .players(game.id)
+      .then((r) => alive && setState({ status: 'done', players: r.players }))
+      .catch(() => alive && setState({ status: 'done', players: null }));
+    return () => {
+      alive = false;
+    };
+  }, [user, game.id]);
+  if (!ready) return NO_INFO;
+  if (!user) {
+    return (
+      <span className="muted small" data-testid="players-login">
+        <Link to={`/login?next=${encodeURIComponent(pathname + search)}`}>로그인</Link> 후 AI 추정 추천 인원을 확인할 수 있어요.
+      </span>
+    );
+  }
+  if (state.status !== 'done') {
+    return (
+      <span className="muted small" data-testid="players-loading" aria-live="polite">
+        AI 추정 중…
+      </span>
+    );
+  }
+  return state.players ? (
+    <span data-testid="players-asked">
+      {formatPlayers(state.players)} {AI_PILL}
+    </span>
+  ) : (
+    NO_INFO
+  );
+}
+
 /** 추천 인원(출처 표시) + 최대 인원(추천과 다를 때만) */
 function partyRows(game) {
   const rec = game.recommendedPlayers;
+  if (!rec && game.playersAsk) {
+    const rows = [['추천 인원', <PlayersAsk key={game.id} game={game} />]];
+    if (game.players) rows.push(['최대 인원', <>{formatPlayers(game.players)} <span className="muted small">(출처: IGDB)</span></>]);
+    return rows;
+  }
   if (!rec) return [['플레이 인원', formatPlayers(game.players)]];
   const recCell = (
     <>
       {formatPlayers(rec)}{' '}
       {rec.source === 'ai' ? (
-        <span className="pill pill-ai" title="실제 데이터가 아니라 AI(Google Gemini)가 추정한 값이에요. 틀릴 수 있어요." data-testid="party-ai">
-          AI 추정
-        </span>
+        AI_PILL
       ) : (
         <span className="muted small">(출처: {PARTY_SOURCE[rec.source] || rec.source})</span>
       )}

@@ -23,6 +23,7 @@ import { createContributors } from './community/contributors.js';
 import { createNotifications } from './community/notifications.js';
 import { createRawgPlaytime } from './services/rawgPlaytime.js';
 import { createAiPlaytime, canAskPlaytime } from './services/aiPlaytime.js';
+import { createAiPlayers, canAskPlayers } from './services/aiPlayers.js';
 import { createPartySize } from './services/partySize.js';
 import { createAppStoreProvider } from './providers/appStoreProvider.js';
 import { createGracNew, overlayEntries } from './services/gracNew.js';
@@ -132,6 +133,7 @@ export function createApp(config, deps = {}) {
     oauth: createRateLimiter({ limit: 30, windowMs: 10 * 60e3 }),
     write: createRateLimiter({ limit: 60, windowMs: 60e3 }),
     aiPlaytime: createRateLimiter({ limit: 30, windowMs: 60 * 60e3 }), // 회원 한 명이 AI 플레이 시간을 새로 물을 수 있는 수(시간당)
+    aiPlayers: createRateLimiter({ limit: 30, windowMs: 60 * 60e3 }), // 회원 한 명이 AI 추천 인원을 새로 물을 수 있는 수(시간당)
   };
   // 게관위 새 게임: 하루 한 번 받아 DB에 두고(스토어 근거 + AI 인원), 색인·AI 판단에 덧붙임 (live 모드만)
   const feed = catalog.gracFeed ?? null;
@@ -162,6 +164,19 @@ export function createApp(config, deps = {}) {
     newGames.clear();
     return r;
   };
+  const aiPlayers = deps.aiPlayers ?? createAiPlayers(db, config.aiPlayers ?? {}, { ...deps, log: (m) => console.log(m) });
+  /** 상세에서 물어 저장한 추천 인원을 1분마다 다시 읽어 목록·추천에 씀 (다른 인스턴스가 물어도 곧 반영) */
+  const askedPlayers = cached(
+    async () => {
+      const m = await aiPlayers.all();
+      partySize.setAsked?.(m);
+      return m.size;
+    },
+    { ttl: 60_000 },
+  );
+  /** 추천 인원이 아무 데도 없어(IGDB·파일·DB 모두) AI에게 물어볼 수 있는 게임인지 */
+  const playersMissing = async (g) =>
+    canAskPlayers(g) && 'recommendedPlayers' in g && !g.recommendedPlayers && (partySize.isMissing ? partySize.isMissing(g) : true) && (await aiPlayers.cached(g)) === undefined;
   const aiPlaytime = deps.aiPlaytime ?? createAiPlaytime(db, config.aiPlaytime ?? {}, { ...deps, log: (m) => console.log(m) });
   // IGDB 이용자 기록 플레이 시간은 기록한 사람이 이만큼 이상일 때만 씀(적으면 한두 사람 값에 크게 흔들림)
   const IGDB_TTB_MIN = 3;
@@ -305,6 +320,7 @@ const SLIDES = 5;
     // 배포(Vercel)는 프록시 뒤라서 실제 접속 IP가 x-forwarded-for 첫 값에 있음 (로컬에서는 이 헤더를 믿지 않음)
     const ip = (config.vercel && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || 'unknown';
     if (gracNew) await newGames().catch((e) => console.log(`[grac-new] 읽기 실패: ${e.message}`));
+    await askedPlayers().catch((e) => console.log(`[ai-players] 읽기 실패: ${e.message}`));
     // Vercel Cron(하루 1번): 게관위 새 게임 수집·판단. Vercel 이 CRON_SECRET 을 Authorization 헤더로 보냄
     if (p === '/api/cron/grac' && method === 'GET') {
       if (!config.cronSecret || req.headers.authorization !== `Bearer ${config.cronSecret}`) throw apiError('FORBIDDEN', '허용되지 않은 요청입니다.', 401);
@@ -663,6 +679,28 @@ const SLIDES = 5;
       return sendJson(res, 200, { playtime: r.hours ? { hours: r.hours, source: 'ai' } : null, status: r.status });
     }
 
+    // 상세 화면 AI 추천 인원: 로그인한 회원이 추천 인원 없는 게임을 열면 그 자리에서 물어 저장(목록·추천에도 1분 안에 반영)
+    const plm = p.match(/^\/api\/games\/([^/]+)\/players$/);
+    if (plm && method === 'POST') {
+      const u = requireUser();
+      let id;
+      try {
+        id = decodeURIComponent(plm[1]);
+      } catch {
+        throw apiError('BAD_ID', '잘못된 게임 ID입니다.', 400);
+      }
+      const found = await findGame(id);
+      const [g] = await decorate([(await partySize.fill([found])).games[0]], u);
+      if (g.recommendedPlayers) return sendJson(res, 200, { players: g.recommendedPlayers, status: 'known' });
+      if (!canAskPlayers(g) || !('recommendedPlayers' in g) || (partySize.isMissing && !partySize.isMissing(g))) return sendJson(res, 200, { players: null, status: 'none' });
+      if ((await aiPlayers.cached(g)) !== undefined) return sendJson(res, 200, { players: null, status: 'cached' }); // AI가 모른다고 한 게임
+      if (!aiPlayers.enabled) return sendJson(res, 200, { players: null, status: 'off' });
+      if (!limits.aiPlayers.hit(`p|${u.id}`)) return sendJson(res, 200, { players: null, status: 'limit' });
+      const r = await aiPlayers.ask(g, u.id);
+      if (r.players) askedPlayers.clear();
+      return sendJson(res, 200, { players: r.players ? { ...r.players, source: 'ai' } : null, status: r.status });
+    }
+
     if (method !== 'GET') throw apiError('NOT_FOUND', '요청한 API를 찾을 수 없습니다.', 404);
 
     // ── 게임 데이터 ──
@@ -812,7 +850,9 @@ const SLIDES = 5;
       const playtime = await playtimeOf(decorated, await ttbP);
       // 플레이 시간이 아무 데도 없고 AI에게 아직 안 물어본 게임 → 화면이 따로 물어봄(로그인한 회원만, POST …/playtime)
       const playtimeAsk = !playtime && canAskPlaytime(decorated) && aiPlaytime.enabled && await aiPlaytime.cached(decorated.id) === undefined;
-      let game = { ...decorated, playtime, playtimeAsk, playtimeAvailable: rawgTimes.size > 0 };
+      // 추천 인원이 아무 데도 없고 AI에게 아직 안 물어본 게임 → 화면이 따로 물어봄(로그인한 회원만, POST …/players)
+      const playersAsk = aiPlayers.enabled && (await playersMissing(decorated));
+      let game = { ...decorated, playtime, playtimeAsk, playersAsk, playtimeAvailable: rawgTimes.size > 0 };
       // 게임위 전용 게임: App Store에서 같은 앱(제목+개발사 일치)을 찾으면 아이콘·App Store 링크 보완
       // (목록과 같은 미리 받아 둔 아이콘은 decorate 에서 이미 붙음. 확인한 적 없는 게임만 그 자리에서 찾아봄)
       if (game.source === '게임물관리위원회' && !game.imageUrl && !game.isDemo && !appArt.has(game)) {

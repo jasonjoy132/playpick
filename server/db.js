@@ -137,6 +137,17 @@ CREATE TABLE IF NOT EXISTS ai_playtime (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ai_playtime_created ON ai_playtime(created_at);
+-- 상세 화면에서 로그인한 회원이 열 때 AI에게 물은 추천 인원 (key = partySize.cacheKey, 한 게임 한 번만, min NULL = AI가 모름)
+CREATE TABLE IF NOT EXISTS ai_players (
+  key TEXT PRIMARY KEY,
+  game_id TEXT NOT NULL,
+  min INTEGER,
+  max INTEGER,
+  model TEXT,
+  requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_players_created ON ai_players(created_at);
 -- 알림 (제보 승인·거절, 리뷰 숨김, 새 칭호 등). tone: ok | no | badge | wish | warn | info
 CREATE TABLE IF NOT EXISTS notifications (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

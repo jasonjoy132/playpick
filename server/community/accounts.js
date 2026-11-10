@@ -283,6 +283,7 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
         nul('game_reports'),
         nul('review_reports', 'reporter_id'),
         nul('ai_playtime', 'requested_by'),
+        nul('ai_players', 'requested_by'),
         del('users', 'id'),
       ]);
       if (user.avatar_file) await avatars.remove(user.avatar_file);

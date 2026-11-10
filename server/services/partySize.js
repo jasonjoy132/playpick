@@ -222,6 +222,7 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
   let pausedUntil = 0;
   const pending = new Map(); // 지금 묻고 있는 게임 → Promise (동시에 들어온 검색이 같은 게임을 두 번 묻지 않게)
   let overlay = new Map(); // 게관위 새 게임 판단(DB, services/gracNew.js) — 파일에 없는 게임에만 씀
+  let asked = new Map(); // 상세에서 회원이 열 때 물은 추천 인원(DB, services/aiPlayers.js) — 인원 답이 아무 데도 없을 때만 씀
   const fresh = (g) => {
     const e = cache.get(cacheKey(g)) ?? overlay.get(cacheKey(g));
     if (!e) return null;
@@ -421,6 +422,8 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
     }
     if (!('recommendedPlayers' in game) || game.recommendedPlayers) return out;
     if (e && (e.unknown || Number.isInteger(e.min))) return e.unknown ? out : { ...out, recommendedPlayers: { min: e.min, max: e.max, source: 'ai' } };
+    const a = asked.get(cacheKey(game));
+    if (a) return { ...out, recommendedPlayers: { min: a.min, max: a.max, source: 'ai' } };
     if (e) return out; // 서비스 종료 여부만 저장된 항목(인원은 아직 안 물음)
     // AI 추정을 아예 안 쓰는 상태(정리된 데이터도 키도 없음)면 예전처럼 IGDB 최대 인원
     if (!configured && cache.size === 0) return game.players ? { ...out, recommendedPlayers: { ...game.players, source: 'igdb' } } : out;
@@ -464,6 +467,10 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
     /** 게관위 새 게임 판단(DB) 덧씌우기: Map(cacheKey → 항목). 파일에 같은 게임이 있으면 파일이 우선 */
     setOverlay(map) {
       overlay = map instanceof Map ? map : new Map();
+    },
+    /** 상세에서 물은 추천 인원(DB) 덧씌우기: Map(cacheKey → { min, max }). 파일·게관위 판단에 인원이 있으면 그쪽이 우선 */
+    setAsked(map) {
+      asked = map instanceof Map ? map : new Map();
     },
     /** 파일(party-size.json)에 이 게임의 항목이 있는지 */
     hasEntry: (g) => cache.has(cacheKey(g)),
