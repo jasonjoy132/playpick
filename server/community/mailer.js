@@ -33,7 +33,12 @@ export function createMailer(cfg = {}, { fetchImpl = globalThis.fetch, log = con
     } catch {
       throw new DataSourceError('MAIL_NETWORK', '메일 서버에 연결할 수 없습니다.');
     }
-    if (res.status !== 201 && !res.ok) throw new DataSourceError('MAIL_HTTP', `메일 발송에 실패했습니다 (HTTP ${res.status}).`);
+    if (res.status !== 201 && !res.ok) {
+      // Brevo가 알려 준 이유를 서버 로그에만 남김(키·받는 사람 주소는 남기지 않음). 예: 401 unrecognised IP address
+      const why = await Promise.resolve(res.json?.()).catch(() => null);
+      log(`[playpick:mail] Brevo HTTP ${res.status} ${why?.code ?? ''} ${String(why?.message ?? '').slice(0, 200)}`);
+      throw new DataSourceError('MAIL_HTTP', `메일 발송에 실패했습니다 (HTTP ${res.status}).`);
+    }
     return { sent: true };
   }
   return { configured, devLog: Boolean(cfg.devLog), send };
