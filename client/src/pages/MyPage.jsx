@@ -9,6 +9,7 @@ import { BadgeIcon, NameBadge, UserBadge } from '../components/Badge.jsx';
 import { BadgePicker } from '../components/BadgePicker.jsx';
 import { Cover } from '../components/Cover.jsx';
 import { EditedList } from '../components/AdminEdit.jsx';
+import { ImpactCard, ImpactLine } from '../components/Contributors.jsx';
 import { RatingBadge, StarsDisplay } from '../components/Stars.jsx';
 import { ErrorState, Loading } from '../components/Status.jsx';
 
@@ -475,6 +476,7 @@ function toSubItems([games, images, reportsList]) {
       key: `g${s.id}`,
       type: 'game',
       title: s.title,
+      gameId: s.gameId ?? null,
       link: s.gameId ? `/games/${s.gameId}` : null,
       imageUrl: s.imageUrl,
       what: [s.releaseYear && `${s.releaseYear}년`, s.publisher].filter(Boolean).join(' · ') || '새 게임 추가',
@@ -486,6 +488,7 @@ function toSubItems([games, images, reportsList]) {
       ...base(s),
       key: `p${s.id}`,
       type: 'image',
+      gameId: s.gameId,
       title: s.gameTitle,
       link: `/games/${s.gameId}`,
       imageUrl: s.imageUrl,
@@ -498,6 +501,7 @@ function toSubItems([games, images, reportsList]) {
       ...base(s),
       key: `r${s.id}`,
       type: s.kind === 'ended' ? 'ended' : 'fix',
+      gameId: s.kind === 'ended' ? null : s.gameId,
       title: s.gameTitle,
       link: `/games/${s.gameId}`,
       imageUrl: null,
@@ -540,13 +544,15 @@ function SubGuide() {
 }
 
 function SubmissionsSection() {
-  const { status, data, error, retry } = useAsync(() => Promise.all([api.mySubmissions(), api.myImageSubmissions(), api.myReports()]), []);
+  const { status, data, error, retry } = useAsync(() => Promise.all([api.mySubmissions(), api.myImageSubmissions(), api.myReports(), api.myImpact().catch(() => null)]), []);
   const [type, setType] = useState('');
   const [state, setState] = useState('');
   const [err, setErr] = useState(null);
   if (status === 'loading') return <Loading message="제보 내역을 불러오는 중이에요…" />;
   if (status === 'error') return <ErrorState error={error} onRetry={retry} />;
   const all = toSubItems(data);
+  const impact = data[3];
+  const impactOf = new Map((impact?.items ?? []).map((x) => [x.gameId, x]));
   const cancel = async (s) => {
     if (!window.confirm(`‘${s.title}’ ${TYPE_NAME[s.type]} 제보를 취소할까요?`)) return;
     try {
@@ -575,6 +581,7 @@ function SubmissionsSection() {
   };
   return (
     <>
+      <ImpactCard impact={impact} />
       <div className="sub-summary" role="group" aria-label="처리 상태로 거르기">
         {SUB_STATES.map(([st, label, tone]) => (
           <button
@@ -649,6 +656,7 @@ function SubmissionsSection() {
                     </p>
                   )}
                   {s.status === 'approved' && <p className="sub-done">{s.done}</p>}
+                  {s.status === 'approved' && <ImpactLine item={impactOf.get(s.gameId)} />}
                   {s.status === 'approved' && <EditedList edited={s.edited} title="관리자가 이렇게 고쳐서 반영했어요" />}
                 </div>
                 {s.status === 'pending' && (

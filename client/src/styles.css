@@ -1226,3 +1226,48 @@ h1, h2 { font-weight: 800; letter-spacing: -0.02em; }
 .withdraw .auth-form { margin: 0; }
 .bye-notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 16px; padding: 12px 14px; border-radius: 10px; background: var(--ok-soft); color: var(--ok); }
 .bye-notice p { margin: 0; }
+
+/* ── 기여자 순위 · 이달의 기여자 · 내 기여가 만든 변화 ── */
+.contrib { display: grid; gap: 16px; }
+.contrib > .chipbar { margin: 0; }
+.contrib-me { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--gold-soft); border: 1px solid var(--gold-line); }
+.contrib-me p { margin: 0; }
+.contrib-me b { color: var(--gold-text); }
+.contrib-empty { display: grid; justify-items: center; gap: 12px; padding: 32px 16px; border-radius: var(--radius); background: var(--surface-2); text-align: center; }
+.contrib-empty p { margin: 0; font-weight: 700; }
+.contrib-podium { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.contrib-top { display: grid; justify-items: center; gap: 6px; padding: 18px 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-card); text-align: center; min-width: 0; }
+.contrib-top p { margin: 0; }
+.contrib-top-1 { background: var(--gold-soft); border-color: var(--gold-line); padding-top: 26px; }
+.contrib-top-2 { background: var(--global-card); }
+.contrib-top-3 { background: var(--coral-soft); }
+.contrib-medal { font-size: 1.8rem; line-height: 1; }
+.contrib-name { display: flex; align-items: center; justify-content: center; gap: 4px; font-weight: 800; overflow-wrap: anywhere; }
+.contrib-score b { font-size: 1.5rem; }
+.contrib-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.contrib-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line); }
+.contrib-rank { min-width: 28px; font-weight: 800; color: var(--muted); text-align: center; }
+.contrib-row-name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-weight: 700; }
+.contrib-row-score { font-weight: 800; white-space: nowrap; }
+.contrib-guide { padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.contrib-guide summary { cursor: pointer; font-weight: 700; }
+.contrib-guide p { margin: 8px 0 0; }
+.home-contrib { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.home-contrib-item { display: grid; justify-items: center; gap: 4px; padding: 14px 8px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); text-align: center; min-width: 0; }
+.home-contrib-rank { font-weight: 800; }
+.home-contrib-name { display: flex; align-items: center; justify-content: center; gap: 4px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.impact { margin: 0 0 16px; padding: 16px; border-radius: var(--radius); background: var(--gold-soft); border: 1px solid var(--gold-line); }
+.impact p { margin: 0; }
+.impact-title { font-weight: 800; margin-bottom: 10px !important; }
+.impact-stats { list-style: none; margin: 0 0 10px; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.impact-stats li { display: grid; justify-items: center; padding: 10px 4px; border-radius: var(--radius-sm); background: var(--surface); }
+.impact-stats b { font-size: 1.3rem; }
+.impact-stats span { font-size: 0.8rem; color: var(--muted); }
+.impact-rank { margin-bottom: 6px !important; }
+.impact-rank b { color: var(--gold-text); }
+.impact-line { display: flex; gap: 12px; margin: 6px 0 0; color: var(--muted); }
+@media (max-width: 640px) {
+  .contrib-podium { grid-template-columns: 1fr; }
+  .contrib-top-1 { padding-top: 18px; }
+  .home-contrib { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 112px; overflow-x: auto; padding-bottom: 4px; }
+}

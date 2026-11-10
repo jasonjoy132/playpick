@@ -148,6 +148,22 @@ CREATE TABLE IF NOT EXISTS notifications (
   read_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, id);
+-- 게임 상세 조회 수 (한국 날짜별, 기여한 회원이 있는 게임만, 같은 사람 하루 1번) — 기여자 순위·내 기여 요약용
+CREATE TABLE IF NOT EXISTS game_views (
+  game_id TEXT NOT NULL,
+  day TEXT NOT NULL,
+  views INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (game_id, day)
+);
+-- 기여자 이정표 알림(찜 5명·조회 100회·첫 리뷰 등)을 보낸 기록: 같은 알림은 한 번만
+CREATE TABLE IF NOT EXISTS contrib_milestones (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  game_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  level INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, game_id, kind, level)
+);
 `;
 
 // 기존 DB 파일에 나중에 추가된 열 보충

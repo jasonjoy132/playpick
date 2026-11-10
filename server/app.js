@@ -18,6 +18,7 @@ import { createSubmissions } from './community/submissions.js';
 import { createBadges } from './community/badges.js';
 import { createImageSubmissions } from './community/imageSubmissions.js';
 import { createReports } from './community/reports.js';
+import { createContributors } from './community/contributors.js';
 import { createNotifications } from './community/notifications.js';
 import { createRawgPlaytime } from './services/rawgPlaytime.js';
 import { createAiPlaytime, canAskPlaytime } from './services/aiPlaytime.js';
@@ -109,7 +110,8 @@ export function createApp(config, deps = {}) {
     const mine = reports.reportedIds(viewerId, gameId);
     return { ...out, reviews: out.reviews.map((r) => (mine.has(r.id) ? { ...r, reported: true } : r)) };
   };
-  const admins = new Set(config.adminEmails ?? []);
+  const admins = new Set((config.adminEmails ?? []).map((e) => String(e).toLowerCase()));
+  const contributors = createContributors(db, { adminEmails: admins, badgeOf: (id) => badges.displayFor(id), notify: (uid, n) => notes.add(uid, n) });
   const withRole = (u) => (u ? { ...u, isAdmin: admins.has(String(u.email).toLowerCase()) } : u);
   /** 화면에 돌려주는 내 정보: 관리자 여부 + 닉네임 옆 대표 뱃지 */
   const meOut = (u) => (u ? { ...withRole(u), badge: badges.displayFor(u.id), newBadges: badges.newBadges(u.id) } : u);
@@ -378,8 +380,10 @@ const SLIDES = 5;
       const u = requireUser();
       if (!limits.write.hit(`w|${u.id}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
       const id = decodeURIComponent(wm[1]);
-      if (method === 'PUT') community.addWish(u.id, await findGame(id));
-      else community.removeWish(u.id, id);
+      if (method === 'PUT') {
+        community.addWish(u.id, await findGame(id));
+        contributors.afterReaction(id); // 내가 기여한 게임 찜 이정표
+      } else community.removeWish(u.id, id);
       return sendJson(res, 200, { gameId: id, wished: method === 'PUT' });
     }
 
@@ -399,6 +403,7 @@ const SLIDES = 5;
           const done = notes.watchBadges(u.id);
           community.saveReview(u.id, await findGame(id), body); // 존재하는 게임에만, 제목·이미지는 서버 조회값
           done(); // 리뷰로 새 칭호를 받았으면 알림
+          contributors.afterReaction(id); // 기여자에게 첫 리뷰 알림
         } else {
           community.deleteReview(u.id, id);
           badges.newBadges(u.id); // 잃은 칭호를 기록에서 지워, 다시 얻으면 다시 알리게
@@ -630,6 +635,14 @@ const SLIDES = 5;
       }
       return sendJson(res, 200, { meta: meta(), games: decorate(games, user).filter(listable), hasMore, nextOffset: offset + 24, warnings, domestic });
     }
+    if (p === '/api/contributors' && method === 'GET') {
+      const board = contributors.leaderboard({ period: url.searchParams.get('period') || 'month' });
+      return sendJson(res, 200, { ...board, me: user ? contributors.mine(user.id) : null });
+    }
+    if (p === '/api/me/impact' && method === 'GET') {
+      const u = requireUser();
+      return sendJson(res, 200, { ...contributors.impact(u.id), rank: contributors.mine(u.id) });
+    }
     if (p === '/api/ranking/members') {
       const top = community.topRated({ minCount: 1, limit: 50 });
       const extra = new Map((await catalog.getMany(top.map((g) => g.id))).map((g) => [g.id, g]));
@@ -696,6 +709,7 @@ const SLIDES = 5;
       }
       game.canSubmitImage = imageSubs.canTake(game); // 사진이 끝내 없으면 '표지 사진 제보' 버튼
       if (user) community.recordView(user.id, game); // 최근 본 게임
+      contributors.recordView(game.id, user ? `u${user.id}` : `ip${ip}`, user?.id ?? null, Boolean(user?.isAdmin)); // 기여한 게임 조회 수
       const { criteria, errors } = parseCriteria(Object.fromEntries(url.searchParams));
       const evaluation = errors.length ? null : evaluateGame(game, criteria);
       return sendJson(res, 200, { meta: meta(), game, criteria: evaluation ? criteria : null, evaluation });

@@ -71,6 +71,8 @@ export const api = {
   removeAvatar: () => request('DELETE', '/api/me/avatar'),
   changePassword: (b) => request('POST', '/api/me/password', b),
   deleteAccount: (b) => request('POST', '/api/me/delete', b),
+  myImpact: () => get('/api/me/impact'),
+  contributors: (period = 'month') => get(`/api/contributors?period=${period}`),
   myReviews: () => get('/api/me/reviews'),
   recent: () => get('/api/me/recent'),
   removeRecent: (id) => request('DELETE', `/api/me/recent/${gid(id)}`),

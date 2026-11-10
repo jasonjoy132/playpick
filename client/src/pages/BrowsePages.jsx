@@ -5,6 +5,7 @@ import { api } from '../lib/api.js';
 import { Link, navigate, useLocation } from '../lib/router.jsx';
 import { GameTile } from '../components/GameTile.jsx';
 import { AutoMore } from '../components/AutoMore.jsx';
+import { ContributorRanking } from '../components/Contributors.jsx';
 import { ErrorState, Loading, Warnings } from '../components/Status.jsx';
 
 const useParam = (name) => new URLSearchParams(useLocation().search).get(name) || '';
@@ -182,10 +183,10 @@ export function RankingPage({ options }) {
   const tab = useParam('tab') || 'global';
   return (
     <>
-      <PageHead title="평점 랭킹" desc="전 세계 평점과 플레이픽 회원 평점을 따로 보여 드려요.">
-        <Tabs name="tab" value={tab} items={[{ value: 'global', label: '글로벌 평점 TOP' }, { value: 'members', label: '회원 평점 TOP' }]} />
+      <PageHead title="평점 랭킹" desc="전 세계 평점과 플레이픽 회원 평점, 그리고 플레이픽을 채워 준 기여자 순위를 보여 드려요.">
+        <Tabs name="tab" value={tab} items={[{ value: 'global', label: '글로벌 평점 TOP' }, { value: 'members', label: '회원 평점 TOP' }, { value: 'contributors', label: '기여자 TOP' }]} />
       </PageHead>
-      {tab === 'members' ? <MemberRanking options={options} /> : <GlobalRanking options={options} />}
+      {tab === 'contributors' ? <ContributorRanking /> : tab === 'members' ? <MemberRanking options={options} /> : <GlobalRanking options={options} />}
     </>
   );
 }

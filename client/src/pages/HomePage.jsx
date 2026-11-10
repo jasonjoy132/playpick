@@ -10,6 +10,7 @@ import { GameTile } from '../components/GameTile.jsx';
 import { ErrorState, Loading, Warnings } from '../components/Status.jsx';
 import { LoginPanel, ProfilePanel } from '../components/LoginPanel.jsx';
 import { useAuth } from '../lib/auth.jsx';
+import { HomeContributors } from '../components/Contributors.jsx';
 
 const HOME_CARDS = 8; // 첫 화면 인기 게임 카드 수 (4개씩 2줄)
 
@@ -102,6 +103,7 @@ export function HomePage({ options }) {
           <Carousel games={slides} options={options} />
         </section>
       )}
+      <HomeContributors />
     </div>
   );
 }
