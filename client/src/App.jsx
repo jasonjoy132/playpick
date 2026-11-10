@@ -14,7 +14,7 @@ import { GamePage } from './pages/GamePage.jsx';
 import { DemoStorePage } from './pages/DemoStorePage.jsx';
 import { LoginPage, SignupPage, FindIdPage, FindPasswordPage, ResetPasswordPage } from './pages/AuthPages.jsx';
 import { MyPage } from './pages/MyPage.jsx';
-import { PopularPage, NewPage, RankingPage, GenrePage } from './pages/BrowsePages.jsx';
+import { PopularPage, NewPage, RankingPage, GenrePage, HallOfFamePage } from './pages/BrowsePages.jsx';
 import { SubmitPage } from './pages/SubmitPage.jsx';
 import { AdminPage } from './pages/AdminPage.jsx';
 import { PrivacyPage, TermsPage, SourcesPage } from './pages/InfoPages.jsx';
@@ -48,6 +48,7 @@ function route(pathname, options) {
   if (pathname === '/popular') return <PopularPage options={options} />;
   if (pathname === '/new') return <NewPage options={options} />;
   if (pathname === '/ranking') return <RankingPage options={options} />;
+  if (pathname === '/hall-of-fame') return <HallOfFamePage />;
   if (pathname === '/genres') return <GenrePage options={options} />;
   if (pathname === '/submit') return <SubmitPage options={options} />;
   if (pathname === '/admin') return <AdminPage options={options} />;

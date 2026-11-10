@@ -13,6 +13,7 @@ const NAV = [
   ['/popular', '인기 게임'],
   ['/new', '신작·출시 예정'],
   ['/ranking', '평점 랭킹'],
+  ['/hall-of-fame', '명예의 전당'],
   ['/genres', '장르별 게임'],
 ];
 

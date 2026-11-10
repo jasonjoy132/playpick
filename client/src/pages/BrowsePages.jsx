@@ -183,10 +183,10 @@ export function RankingPage({ options }) {
   const tab = useParam('tab') || 'global';
   return (
     <>
-      <PageHead title="평점 랭킹" desc="전 세계 평점과 플레이픽 회원 평점, 그리고 플레이픽을 채워 준 기여자 순위를 보여 드려요.">
-        <Tabs name="tab" value={tab} items={[{ value: 'global', label: '글로벌 평점 TOP' }, { value: 'members', label: '회원 평점 TOP' }, { value: 'contributors', label: '기여자 TOP' }]} />
+      <PageHead title="평점 랭킹" desc="전 세계 평점과 플레이픽 회원 평점을 따로 보여 드려요.">
+        <Tabs name="tab" value={tab} items={[{ value: 'global', label: '글로벌 평점 TOP' }, { value: 'members', label: '회원 평점 TOP' }]} />
       </PageHead>
-      {tab === 'contributors' ? <ContributorRanking /> : tab === 'members' ? <MemberRanking options={options} /> : <GlobalRanking options={options} />}
+      {tab === 'members' ? <MemberRanking options={options} /> : <GlobalRanking options={options} />}
     </>
   );
 }
@@ -219,6 +219,16 @@ function MemberRanking({ options }) {
     <>
       <p className="muted small">플레이픽 회원이 남긴 별점 평균이 높은 순서예요. 평균이 같으면 평가가 많은 게임이 먼저 나와요.</p>
       <GameGrid state={{ ...state, retry: () => setNonce((n) => n + 1) }} options={options} rankFrom={1} emptyText="아직 회원 평점이 없어요. 게임 상세 화면에서 첫 평가를 남겨 보세요!" />
+    </>
+  );
+}
+
+/** 명예의 전당: 게임·사진·정보를 제보해 플레이픽을 채워 준 회원 순위 */
+export function HallOfFamePage() {
+  return (
+    <>
+      <PageHead title="명예의 전당" desc="게임·사진·정보를 제보해 플레이픽을 채워 준 회원들이에요. 내 제보가 다른 회원에게 많이 쓰일수록 점수가 올라가요." />
+      <ContributorRanking />
     </>
   );
 }

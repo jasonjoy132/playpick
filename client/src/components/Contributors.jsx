@@ -1,4 +1,4 @@
-// 제보 보상: 기여자 순위(평점 랭킹 '기여자 TOP' 탭) · 홈 '이달의 기여자' 줄 · 내 제보 '내 기여가 만든 변화'
+// 제보 보상: 기여자 순위('명예의 전당' 메뉴 /hall-of-fame) · 홈 '이달의 기여자' 줄 · 내 제보 '내 기여가 만든 변화'
 import { useState } from 'react';
 import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
@@ -48,13 +48,12 @@ function MyRank({ me, period }) {
   );
 }
 
-/** 평점 랭킹 → 기여자 TOP */
+/** 명예의 전당: 기여자 순위 (이번 달 / 전체) */
 export function ContributorRanking() {
   const [period, setPeriod] = useState('month');
   const { status, data, error, retry } = useAsync(() => api.contributors(period), [period]);
   return (
     <div className="contrib" data-testid="contrib-ranking">
-      <p className="muted small">게임·사진·정보를 제보해 플레이픽을 채워 준 회원들이에요. 내 제보가 다른 회원에게 많이 쓰일수록 점수가 올라가요.</p>
       <div className="chipbar" role="group" aria-label="기간">
         {[
           ['month', `${monthLabel(data?.month)} 순위`],
@@ -134,7 +133,7 @@ export function HomeContributors() {
     <section className="row" aria-labelledby="row-contrib" data-testid="home-contributors">
       <header className="row-head">
         <h2 id="row-contrib">{monthLabel(data.month)}의 기여자</h2>
-        <Link to="/ranking?tab=contributors" className="row-more">
+        <Link to="/hall-of-fame" className="row-more">
           전체 보기 →
         </Link>
       </header>
@@ -190,7 +189,7 @@ export function ImpactCard({ impact }) {
             이번 달 기여자 <b>{m.rank}위</b> · {m.score}점 ·{' '}
           </>
         ) : null}
-        <Link to="/ranking?tab=contributors">기여자 순위 보기 →</Link>
+        <Link to="/hall-of-fame">명예의 전당 보기 →</Link>
       </p>
       <p className="muted small">다른 회원의 반응만 세요(내 찜·리뷰·조회 제외). 조회는 같은 사람이 하루에 여러 번 열어도 한 번이에요.</p>
     </div>

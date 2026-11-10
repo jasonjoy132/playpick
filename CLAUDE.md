@@ -90,7 +90,7 @@
   - 단계: 제보(finder~curator), 리뷰(rv1~rv5), 사진(ph1~ph3), 정보(if1~if3) + 특별 뱃지(pioneer, popular, thorough, local, early, essay, cleaner, firstword)
   - 그림 `client/public/badge-<id>.webp`(128px, 배경 투명). 그림이 없으면 `noImage: true`로 이모지 표시
   - 새 칭호 알림(토스트), 대표 칭호 고르기(`BadgePicker.jsx`: 마이페이지·홈 프로필 패널)
-- **기여자 순위·내 기여** `contributors.js`(저장 없이 계산): 영향력 점수 = 승인 점수(게임 3·사진 2·정보 1) + 승인 뒤 다른 회원 반응(찜 1·리뷰 2·조회 10회당 1) × 내 몫(게임 100%·사진 50%·정보 25%, 종료 0), 게임당 한 달 20점 상한, 관리자 제외. 화면: 평점 랭킹 '기여자 TOP' 탭(`/ranking?tab=contributors`, 이번 달/전체), 홈 'N월의 기여자' 줄, 내 제보 '내 기여가 만든 변화'(`/api/me/impact`)
+- **기여자 순위·내 기여** `contributors.js`(저장 없이 계산): 영향력 점수 = 승인 점수(게임 3·사진 2·정보 1) + 승인 뒤 다른 회원 반응(찜 1·리뷰 2·조회 10회당 1) × 내 몫(게임 100%·사진 50%·정보 25%, 종료 0), 게임당 한 달 20점 상한, 관리자 제외. 화면: 상단 메뉴 '명예의 전당'(`/hall-of-fame`, 이번 달/전체), 홈 'N월의 기여자' 줄, 내 제보 '내 기여가 만든 변화'(`/api/me/impact`)
   - 조회 수 `game_views`(한국 날짜별, 기여자가 있는 게임만, 같은 사람 하루 1번, 기여자 본인·관리자 제외). 이정표 알림(찜 5·10·50·100, 조회 50~1000, 첫 리뷰)은 `contrib_milestones`로 한 번만
 - **알림** `notifications.js`(DB `notifications`, 회원당 최근 100개): 제보 승인·거절(사유)·승인 취소, 새 칭호, 리뷰 숨김·다시 보임, 찜한 게임 서비스 종료 승인, 가입 환영. 관리자 처리 라우트(`app.js`)에서 `beforeReview`→처리→`afterReview`로 넣음(본인 제보는 알림 없음). 화면 헤더 종 `NotificationBell.jsx`(화면 이동·60초마다 숫자만 받음), 관리자는 '검토 대기 N건' 줄
 - **내 제보**(`MyPage.jsx` `SubmissionsSection`): 게임·표지 사진·종료·정보 수정 제보를 한 목록으로(상태 요약 카드·종류 칩으로 거르기)

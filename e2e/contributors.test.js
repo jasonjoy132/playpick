@@ -1,4 +1,4 @@
-// E2E: 제보 승인 → 평점 랭킹 '기여자 TOP' 1위 · 홈 '이달의 기여자' · 내 제보 '내 기여가 만든 변화'
+// E2E: 제보 승인 → 상단 메뉴 '명예의 전당' 1위 · 홈 '이달의 기여자' · 내 제보 '내 기여가 만든 변화'
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -36,7 +36,7 @@ test('기여자 순위·홈 줄·내 기여 요약', async () => {
   const fan = await signedIn({ loginId: 'e2e_fan', nickname: '찜팬', email: 'fan@example.com' });
 
   // 아직 아무도 없으면 빈 안내, 홈 줄은 숨김
-  await fan.goto(`${base}/ranking?tab=contributors`);
+  await fan.goto(`${base}/hall-of-fame`);
   await fan.getByTestId('contrib-empty').waitFor();
   await fan.goto(base);
   await fan.getByTestId('hero-finder').waitFor();
@@ -47,10 +47,11 @@ test('기여자 순위·홈 줄·내 기여 요약', async () => {
   await admin.request.post(`${base}/api/admin/submissions/${item.id}/approve`, { headers: H });
   await fan.request.put(`${base}/api/wishlist/user-${item.id}`, { headers: H });
 
-  // 평점 랭킹 → 기여자 TOP 탭
+  // 상단 메뉴 → 명예의 전당
   await maker.goto(`${base}/ranking`);
-  await maker.getByRole('tab', { name: '기여자 TOP' }).click();
-  await maker.waitForURL(/tab=contributors/);
+  assert.equal(await maker.getByRole('tab', { name: /기여자/ }).count(), 0, '평점 랭킹에는 없음');
+  await maker.getByRole('navigation', { name: '주 메뉴' }).getByRole('link', { name: '명예의 전당' }).click();
+  await maker.waitForURL(/\/hall-of-fame$/);
   const first = maker.getByTestId('contrib-item').first();
   assert.match(await first.innerText(), /발굴왕[\s\S]*4점[\s\S]*승인 3 \+ 반응 1/);
   assert.match(await maker.getByTestId('contrib-me').innerText(), /내 순위 1위/);
@@ -75,7 +76,7 @@ test('기여자 순위·홈 줄·내 기여 요약', async () => {
 
 test('모바일 폭: 기여자 순위·홈 줄에 가로 스크롤 없음', async () => {
   const page = await signedIn({ loginId: 'e2e_mobile', nickname: '모바일러', email: 'mob@example.com' }, { width: 375, height: 760 });
-  for (const path of ['/ranking?tab=contributors', '/']) {
+  for (const path of ['/hall-of-fame', '/']) {
     await page.goto(base + path);
     await page.waitForLoadState('networkidle');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `${path} 가로 스크롤 없음`);
