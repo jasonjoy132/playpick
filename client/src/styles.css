@@ -79,7 +79,7 @@
   --glow-gold: 0 6px 16px rgba(0, 0, 0, 0.18);
   --header-bg: #ffffff;
   --header-shadow: 0 1px 0 #eceef2;
-  --panel-bg: linear-gradient(150deg, #1456f0, #7a4af0 60%, #ea5ec1);
+  --panel-bg: linear-gradient(150deg, #1456f0, #6a3ee6 60%, #b8338f); /* 끝 분홍을 짙게: 흰 글자 대비 4.5:1 이상 */
   color-scheme: light;
 }
 :root[data-theme="dark"] {
@@ -459,17 +459,17 @@ img { max-width: 100%; }
 .login-panel { background: var(--panel-bg); color: #fff; border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow); border: 1px solid rgba(255, 255, 255, 0.12); }
 .login-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
 .login-head h2 { margin: 0; font-size: 1.25rem; }
-.login-brand { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; color: var(--gold); white-space: nowrap; }
+.login-brand { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; color: #fff; white-space: nowrap; }
 .login-panel form { display: grid; gap: 10px; }
 .input-icon { position: relative; display: block; }
 .input-icon svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; fill: rgba(255, 255, 255, 0.65); }
-.input-icon input { width: 100%; height: 44px; border-radius: var(--radius-sm); border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.12); color: #fff; font: inherit; padding: 0 56px 0 40px; }
-.input-icon input::placeholder { color: rgba(255, 255, 255, 0.65); }
+.input-icon input { width: 100%; height: 44px; border-radius: var(--radius-sm); border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(10, 16, 60, 0.22); color: #fff; font: inherit; padding: 0 56px 0 40px; }
+.input-icon input::placeholder { color: rgba(255, 255, 255, 0.9); }
 .input-icon input:focus { outline: 2px solid var(--gold); outline-offset: 1px; background: rgba(255, 255, 255, 0.18); }
-.eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: none; color: rgba(255, 255, 255, 0.8); font: inherit; font-size: 0.78rem; padding: 6px; cursor: pointer; }
+.eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: none; color: #fff; font: inherit; font-size: 0.8rem; font-weight: 600; padding: 6px; cursor: pointer; }
 .login-panel .btn-gold { border-radius: 999px; margin-top: 4px; }
 .login-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px 14px; margin-top: 14px; font-size: 0.85rem; }
-.login-links a { color: rgba(255, 255, 255, 0.85); text-decoration: none; }
+.login-links a { color: #fff; text-decoration: none; }
 .login-links a:hover { color: #fff; text-decoration: underline; }
 .login-panel .form-error { background: rgba(255, 240, 238, 0.95); }
 .profile { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -482,7 +482,7 @@ img { max-width: 100%; }
 
 /* ── 다른 계정으로 로그인 (Google·Discord). 버튼 색은 각 회사 안내(흰 바탕 G·보라 Discord)를 따름 ── */
 .social-login { display: grid; gap: 8px; margin-top: 14px; }
-.social-divider { display: flex; align-items: center; gap: 10px; margin: 2px 0; font-size: 0.8rem; color: inherit; opacity: 0.75; }
+.social-divider { display: flex; align-items: center; gap: 10px; margin: 2px 0; font-size: 0.8rem; color: inherit; }
 .social-divider::before, .social-divider::after { content: ''; flex: 1; height: 1px; background: currentColor; opacity: 0.35; }
 .social-btn { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; padding: 0 16px; border-radius: 999px; font-weight: 700; text-decoration: none; border: 1px solid transparent; transition: filter 0.15s, box-shadow 0.15s; }
 .social-btn:hover { filter: brightness(0.96); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); }
@@ -652,7 +652,7 @@ img { max-width: 100%; }
 
 /* ── 글로벌 평점 vs 회원 평점 ── */
 .rating-pair { display: flex; flex-wrap: wrap; gap: 4px 8px; }
-.rating-kind { font-size: 0.68rem; font-weight: 700; padding: 0 6px; border-radius: 999px; background: var(--member-soft); color: var(--member-kind); margin-right: 1px; }
+.rating-kind { font-size: 0.72rem; font-weight: 700; padding: 0 6px; border-radius: 999px; background: var(--member-soft); color: var(--member-kind); margin-right: 1px; }
 .rating-badge.is-global { color: var(--global-ink); }
 .rating-badge.is-global .rating-kind { background: var(--global-soft); color: var(--global-kind); }
 .rating-badge.is-empty .rating-kind { display: none; }
@@ -1011,9 +1011,9 @@ h1, h2 { font-weight: 800; letter-spacing: -0.02em; }
 .nav a:hover { color: var(--text); }
 .nav a.is-active { background: var(--surface-2); color: var(--text); box-shadow: 0 2px 8px rgba(20, 86, 240, 0.15); }
 .searchbox input { background: var(--nav-bg); border: 1px solid transparent; color: var(--text); }
-.searchbox input::placeholder { color: var(--faint); }
+.searchbox input::placeholder { color: var(--muted); }
 .searchbox input:focus { background: var(--surface-2); outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px var(--focus-ring); }
-.searchbox-icon { color: var(--faint); }
+.searchbox-icon { color: var(--muted); display: inline-flex; }
 .theme-toggle { border: 1px solid var(--line); background: var(--surface-2); color: var(--text); }
 .theme-toggle:hover { background: var(--nav-bg); }
 .theme-toggle:focus-visible, .avatar-btn:focus-visible { outline-color: var(--primary); }
@@ -1350,10 +1350,9 @@ a { text-underline-offset: 0.18em; }
 .hero-feature-cover { width: 56px; aspect-ratio: 3 / 4; border-radius: var(--radius-sm); overflow: hidden; }
 .hero-feature-cover .cover { width: 100%; height: 100%; object-fit: cover; display: block; }
 .hero-feature-text { display: grid; gap: 2px; min-width: 0; }
-.hero-feature-label { font-size: 0.78rem; font-weight: 700; color: var(--pink-ink); }
 .hero-feature-text b { font-size: 1.05rem; font-weight: 800; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hero-feature-players { font-size: 0.85rem; color: var(--muted); }
-.hero-feature-go { font-size: 1.2rem; color: var(--primary); transition: transform 0.2s; }
+.hero-feature-go { display: inline-flex; color: var(--primary); transition: transform 0.2s; }
 .hero-feature:hover .hero-feature-go { transform: translateX(3px); }
 
 /* 첫 화면 등장: 한 번만 (글자는 살짝 올라오고 그림은 천천히 제자리로) */

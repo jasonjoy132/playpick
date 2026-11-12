@@ -80,12 +80,13 @@ function HeroFinder({ options, feature }) {
               <Cover game={feature} />
             </span>
             <span className="hero-feature-text">
-              <span className="hero-feature-label">이번 주 주목할 게임</span>
               <b>{feature.title}</b>
               {shortPlayers(feature) && <span className="hero-feature-players">추천 {shortPlayers(feature)}</span>}
             </span>
             <span className="hero-feature-go" aria-hidden="true">
-              →
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
             </span>
           </Link>
         </figure>
@@ -105,6 +106,8 @@ export function HomePage({ options }) {
   const slides = games.slice(0, slideCount);
   const rest = games.slice(slideCount);
   const feature = pickFeature(slides);
+  // 첫 화면 큰 그림 게임은 아래 '주목할 게임'에서 빼서 같은 게임이 두 번 나오지 않게 (그것뿐이면 그대로)
+  const spotlight = slides.filter((g) => g.id !== feature?.id);
   const side = ready ? user ? <ProfilePanel /> : <LoginPanel /> : <div className="hero-side-empty" />;
 
   return (
@@ -136,7 +139,7 @@ export function HomePage({ options }) {
           <header className="row-head">
             <h2 id="row-spotlight">이번 주 주목할 게임</h2>
           </header>
-          <Carousel games={slides} options={options} />
+          <Carousel games={spotlight.length ? spotlight : slides} options={options} />
         </section>
       )}
       <HomeContributors />
