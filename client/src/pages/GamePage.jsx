@@ -399,7 +399,7 @@ function GameDetail({ data, options }) {
               <ul className="store-list">
                 {game.stores.map((s) => (
                   <li key={s.url}>
-                    <a className="btn btn-primary btn-block" href={s.url} target="_blank" rel="noopener noreferrer" data-testid="store-link">
+                    <a className="btn btn-buy btn-block" href={s.url} target="_blank" rel="noopener noreferrer" data-testid="store-link">
                       {s.appStore ? 'App Store에서 다운로드 ↗' : `${s.name}에서 보기 ↗`}
                     </a>
                     {s.isDemo && <p className="store-note">데모 구매처 안내 페이지로 이동합니다. 실제 판매처가 아닙니다.</p>}

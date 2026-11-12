@@ -60,11 +60,11 @@ test('기여자 순위·홈 줄·내 기여 요약', async () => {
   await maker.getByTestId('contrib-item').first().waitFor();
   await maker.getByText('점수는 어떻게 매기나요?').click();
 
-  // 홈 '이달의 기여자' → 전체 보기
+  // 홈 '이달의 기여자' → 회원 띠의 '명예의 전당 보기'
   await maker.goto(base);
   const row = maker.getByTestId('home-contributors');
   assert.match(await row.innerText(), /의 기여자[\s\S]*발굴왕/);
-  await row.getByRole('link', { name: /전체 보기/ }).click();
+  await maker.getByRole('link', { name: '명예의 전당 보기' }).click();
   await maker.getByTestId('contrib-ranking').waitFor();
 
   // 내 제보: 기여 요약 + 승인 카드 숫자

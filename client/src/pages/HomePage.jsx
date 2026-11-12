@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, navigate } from '../lib/router.jsx';
 import { criteriaToSearch, hasAnyCriteria } from '../lib/criteria.js';
 import { ChipGroup } from '../components/FinderModal.jsx';
@@ -6,7 +6,7 @@ import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
 import { useFinder } from '../lib/finder.jsx';
 import { Carousel } from '../components/Carousel.jsx';
-import { GameTile } from '../components/GameTile.jsx';
+import { WishButton } from '../components/WishButton.jsx';
 import { ErrorState, Loading, Warnings } from '../components/Status.jsx';
 import { LoginPanel, ProfilePanel } from '../components/LoginPanel.jsx';
 import { useAuth } from '../lib/auth.jsx';
@@ -14,7 +14,7 @@ import { HomeContributors } from '../components/Contributors.jsx';
 import { Cover } from '../components/Cover.jsx';
 import { shortPlayers } from '../lib/format.js';
 
-const HOME_CARDS = 6; // 인기 게임 카드 수 (로그인 창 옆에 3개씩 2줄)
+const POPULAR_COUNT = 6; // 인기 게임: 1위 큰 그림 + 2~6위 목록
 
 /** 첫 화면 큰 그림으로 쓸 게임: 주목할 게임 중 여럿이 할 수 있고(추천 최대 2명 이상) 실제 게임 장면(IGDB 스크린샷, 없으면 아트워크)이 있는 첫 게임 */
 function pickFeature(slides) {
@@ -22,6 +22,100 @@ function pickFeature(slides) {
   const withArt = slides.filter(artOf).map((g) => ({ ...g, heroArt: artOf(g) }));
   return withArt.find((g) => (g.recommendedPlayers?.max ?? g.players?.max ?? 0) >= 2) ?? withArt[0] ?? null;
 }
+/** 게임의 가로 그림(장면 스크린샷 먼저, 없으면 아트워크) */
+const sceneOf = (g) => g.screenshots?.[0] ?? g.bannerUrl ?? null;
+/** 카드 아래 한 줄: 추천 인원 · 장르 두 개 */
+function metaLine(game, options) {
+  const players = shortPlayers(game)?.replace(/\s*\(싱글 플레이\)/, '');
+  const genres = (game.genres ?? []).slice(0, 2).map((v) => options?.genres?.find((o) => o.value === v)?.label ?? v);
+  return [players && `추천 ${players}`, genres.join('·')].filter(Boolean).join(' · ');
+}
+
+/**
+ * 인기 게임(검은 띠, 화면 끝까지): 1위는 큰 장면 그림 위에 제목, 2~6위는 번호 목록.
+ * 같은 크기 카드 격자 대신 순위가 한눈에 보이게
+ */
+/**
+ * 화면에 처음 들어올 때 한 번만 보여 주기(data-reveal: hide → show). 처음부터 화면 안이면 그대로 둠.
+ * JS·IntersectionObserver가 없으면 아무것도 숨기지 않음
+ */
+function useRevealOnce() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    if (el.getBoundingClientRect().top < window.innerHeight * 0.85) return;
+    el.dataset.reveal = 'hide';
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          el.dataset.reveal = 'show';
+          io.disconnect();
+        }
+      },
+      { rootMargin: '0px 0px -15% 0px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return ref;
+}
+
+function PopularBand({ games, options }) {
+  const revealRef = useRevealOnce();
+  const [lead, ...list] = games;
+  if (!lead) return null;
+  const leadArt = sceneOf(lead);
+  const href = (g) => `/games/${encodeURIComponent(g.id)}`;
+  return (
+    <section className="band band-dark home-popular" aria-labelledby="row-popular" data-testid="home-popular">
+      <header className="band-head">
+        <h2 id="row-popular">인기 게임</h2>
+        <Link to="/popular" className="band-more">
+          전체 순위 보기
+        </Link>
+      </header>
+      <div className="pop-grid" ref={revealRef}>
+        <article className="pop-lead" data-testid="game-card" data-game-id={lead.id}>
+          <div className="pop-lead-art">{leadArt ? <img src={leadArt.replace('/t_screenshot_big/', '/t_screenshot_huge/')} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <Cover game={lead} />}</div>
+          <div className="pop-lead-text">
+            <span className="pop-rank" aria-label="1위">
+              1
+            </span>
+            <h3>
+              <Link to={href(lead)} className="stretched-link">
+                {lead.title}
+              </Link>
+            </h3>
+            <p>{metaLine(lead, options)}</p>
+          </div>
+          <WishButton game={lead} />
+        </article>
+        <ol className="pop-list" start={2}>
+          {list.map((g, i) => {
+            const art = sceneOf(g);
+            return (
+              <li key={g.id} className="pop-item" data-testid="game-card" data-game-id={g.id}>
+                <span className="pop-rank" aria-hidden="true">
+                  {i + 2}
+                </span>
+                <span className="pop-thumb">{art ? <img src={art} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <Cover game={g} />}</span>
+                <span className="pop-text">
+                  <Link to={href(g)} className="stretched-link">
+                    {g.title}
+                  </Link>
+                  <span className="pop-meta">{metaLine(g, options)}</span>
+                </span>
+                <WishButton game={g} />
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
 /** IGDB 그림을 큰 화면용 크기로 (같은 그림, 해상도만 1080p) */
 const bigArt = (url) => url.replace('/t_screenshot_big/', '/t_1080p/');
 
@@ -65,7 +159,10 @@ function HeroFinder({ options, feature, pending }) {
             onToggle={(v) => setPlatforms((l) => (l.includes(v) ? l.filter((x) => x !== v) : [...l, v]))}
           />
           <button type="button" className="btn btn-primary btn-lg" onClick={go} data-testid="hero-go">
-            추천 게임 찾기 →
+            추천 게임 찾기
+            <svg className="btn-arrow" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
           </button>
         </div>
         <button type="button" className="link-btn hero-more" onClick={() => openFinder(criteria)}>
@@ -122,26 +219,7 @@ export function HomePage({ options }) {
     <div className="home">
       <Warnings warnings={warnings} />
       <HeroFinder options={options} feature={feature} />
-      <section className="row home-feed" aria-labelledby="row-popular">
-        <div className="home-feed-main">
-          <header className="row-head">
-            <h2 id="row-popular">인기 게임</h2>
-            <Link to="/popular" className="row-more">
-              더 보기 →
-            </Link>
-          </header>
-          {rest.length > 0 && (
-            <div className="home-cards">
-              {rest.slice(0, HOME_CARDS).map((g) => (
-                <GameTile key={g.id} game={g} options={options} wide />
-              ))}
-            </div>
-          )}
-        </div>
-        <aside className="hero-side" aria-label="계정">
-          {side}
-        </aside>
-      </section>
+      <PopularBand games={rest.slice(0, POPULAR_COUNT)} options={options} />
       {slides.length > 0 && (
         <section className="row" aria-labelledby="row-spotlight">
           <header className="row-head">
@@ -150,7 +228,19 @@ export function HomePage({ options }) {
           <Carousel games={spotlight.length ? spotlight : slides} options={options} />
         </section>
       )}
-      <HomeContributors />
+      <section className="band band-soft home-community" aria-labelledby="row-community">
+        <div className="community-main">
+          <h2 id="row-community">게임 정보는 회원이 같이 다듬어요</h2>
+          <p className="community-lead">추천 인원·플레이 시간·구매처가 틀렸거나 비어 있으면 제보해 주세요. 관리자가 확인한 뒤 반영되고, 기여한 만큼 명예의 전당에 올라가요.</p>
+          <HomeContributors />
+          <Link to="/hall-of-fame" className="btn btn-ghost community-more">
+            명예의 전당 보기
+          </Link>
+        </div>
+        <aside className="hero-side" aria-label="계정">
+          {side}
+        </aside>
+      </section>
     </div>
   );
 }

@@ -354,7 +354,7 @@ test('상단 메뉴: 홈·인기 게임·신작·평점 랭킹·장르별 게임
   await page.getByTestId('browse-empty').waitFor();
 
   await nav.getByRole('link', { name: '홈' }).click();
-  await page.getByRole('link', { name: '더 보기 →' }).click();
+  await page.getByRole('link', { name: '전체 순위 보기' }).click();
   await page.waitForURL(/\/popular$/);
   assert.deepEqual(errors, []);
   await page.close();

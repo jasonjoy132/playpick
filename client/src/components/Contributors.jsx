@@ -132,15 +132,14 @@ export function HomeContributors() {
   return (
     <section className="row" aria-labelledby="row-contrib" data-testid="home-contributors">
       <header className="row-head">
-        <h2 id="row-contrib">{monthLabel(data.month)}의 기여자</h2>
-        <Link to="/hall-of-fame" className="row-more">
-          전체 보기 →
-        </Link>
+        <h3 id="row-contrib">{monthLabel(data.month)}의 기여자</h3>
       </header>
       <ol className="home-contrib">
         {data.items.slice(0, 5).map((c, i) => (
           <li key={c.rank} className="home-contrib-item">
-            <span className="home-contrib-rank">{MEDAL[i] ?? `${c.rank}위`}</span>
+            <span className="home-contrib-rank" aria-label={`${c.rank}위`}>
+              {c.rank}
+            </span>
             <Avatar user={c} size="md" />
             <span className="home-contrib-name">
               <NameBadge badge={c.badge} />

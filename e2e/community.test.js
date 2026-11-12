@@ -51,7 +51,7 @@ test('회원가입 → 찜 → 리뷰 → 로그아웃 → 로그인', async () 
   await heart.click();
   await page.waitForFunction(() => document.querySelector('[data-testid=game-card] [data-testid=wish-button]').getAttribute('aria-pressed') === 'true');
   await page.waitForFunction(() => document.querySelector('[data-testid=pp-wish] b')?.textContent === '1');
-  const title = await page.getByTestId('game-card').first().locator('.tile-title').textContent();
+  const title = await page.getByTestId('game-card').first().locator('.stretched-link').textContent();
   await page.getByTestId('pp-wish').click();
   await page.waitForURL(/\/mypage\/wishlist/);
   await page.getByTestId('wishlist').waitFor();
