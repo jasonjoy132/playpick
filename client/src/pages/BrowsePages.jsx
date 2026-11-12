@@ -118,9 +118,31 @@ function GameGrid({ state, options, noteFor, emptyText, rankFrom }) {
   );
 }
 
-function PageHead({ title, desc, children }) {
+/** 목록 머리 큰 사진: 그 목록 대표 게임(1위 등)의 실제 장면(IGDB 스크린샷, 없으면 아트워크). 불러오는 동안은 같은 크기로 자리만 */
+function PageScene({ state, label, rankPrefix }) {
+  if (state.status === 'loading') return <div className="page-scene is-pending" aria-hidden="true" />;
+  const withArt = (state.games ?? []).filter((g) => g.screenshots?.[0] || g.bannerUrl);
+  // 옛 게임 스크린샷은 작아서 크게 늘리면 흐림 → 앞쪽 6개 중 2008년 이후 게임을 먼저
+  const game = withArt.slice(0, 6).find((g) => Number(g.releaseDate?.slice(0, 4)) >= 2008) ?? withArt[0];
+  if (!game) return null;
+  const rank = state.games.indexOf(game) + 1;
+  const tag = rankPrefix != null ? `${rankPrefix}${rank}위` : label;
+  const art = (game.screenshots?.[0] || game.bannerUrl).replace('/t_screenshot_big/', '/t_1080p/');
+  return (
+    <Link to={`/games/${encodeURIComponent(game.id)}`} className="page-scene" data-testid="page-scene">
+      <img src={art} alt={`${game.title} 게임 화면`} referrerPolicy="no-referrer" fetchPriority="high" />
+      <span className="page-scene-tag">
+        {tag && <b>{tag}</b>}
+        {game.title}
+      </span>
+    </Link>
+  );
+}
+
+function PageHead({ title, desc, scene, children }) {
   return (
     <section className="page-head browse-head">
+      {scene}
       <h1>{title}</h1>
       {desc && <p className="muted">{desc}</p>}
       {children}
@@ -135,7 +157,7 @@ export function PopularPage({ options }) {
   const state = useBrowse('popular', { platform });
   return (
     <>
-      <PageHead title="인기 게임" desc="IGDB에서 평가를 많이 받은 순서예요.">
+      <PageHead title="인기 게임" desc="IGDB에서 평가를 많이 받은 순서예요." scene={<PageScene state={state} rankPrefix="" />}>
         <ChipBar label="플랫폼" name="platform" items={options.platforms} value={platform} />
       </PageHead>
       <GameGrid state={state} options={options} />
@@ -149,7 +171,7 @@ export function NewPage({ options }) {
   const state = useBrowse(tab === 'upcoming' ? 'upcoming' : 'recent', { platform });
   return (
     <>
-      <PageHead title="신작·출시 예정" desc={tab === 'upcoming' ? '출시 전부터 관심이 많은 기대작이에요. 출시일은 바뀔 수 있어요.' : '최근 90일 안에 출시된 게임 중 관심이 많았던 순서예요.'}>
+      <PageHead scene={<PageScene state={state} label={tab === 'upcoming' ? '기대작' : '신작'} />} title="신작·출시 예정" desc={tab === 'upcoming' ? '출시 전부터 관심이 많은 기대작이에요. 출시일은 바뀔 수 있어요.' : '최근 90일 안에 출시된 게임 중 관심이 많았던 순서예요.'}>
         <Tabs name="tab" value={tab} items={[{ value: 'recent', label: '최근 출시' }, { value: 'upcoming', label: '출시 예정' }]} />
         <ChipBar label="플랫폼" name="platform" items={options.platforms} value={platform} />
       </PageHead>
@@ -181,18 +203,18 @@ export function NewPage({ options }) {
 
 export function RankingPage({ options }) {
   const tab = useParam('tab') || 'global';
+  const top = useBrowse('top', {}); // 머리 사진(글로벌 1위)과 글로벌 순위가 같이 씀
   return (
     <>
-      <PageHead title="평점 랭킹" desc="전 세계 평점과 플레이픽 회원 평점을 따로 보여 드려요.">
+      <PageHead title="평점 랭킹" desc="전 세계 평점과 플레이픽 회원 평점을 따로 보여 드려요." scene={<PageScene state={top} rankPrefix="글로벌 " />}>
         <Tabs name="tab" value={tab} items={[{ value: 'global', label: '글로벌 평점 TOP' }, { value: 'members', label: '회원 평점 TOP' }]} />
       </PageHead>
-      {tab === 'members' ? <MemberRanking options={options} /> : <GlobalRanking options={options} />}
+      {tab === 'members' ? <MemberRanking options={options} /> : <GlobalRanking options={options} state={top} />}
     </>
   );
 }
 
-function GlobalRanking({ options }) {
-  const state = useBrowse('top', {});
+function GlobalRanking({ options, state }) {
   return (
     <>
       <p className="muted small">IGDB 종합 평점(100점 만점)을 5점 만점으로 바꾼 순위예요. 평가가 100개 이상인 게임만 포함해요.</p>
@@ -234,11 +256,22 @@ export function HallOfFamePage() {
 }
 
 export function GenrePage({ options, genre }) {
-  const platform = useParam('platform');
   const current = options.genres.find((g) => g.value === genre);
+  // 장르를 골랐을 때만 목록을 불러옴(머리 사진은 그 장르 인기 1위)
+  return current ? <GenreView key={genre} options={options} genre={genre} current={current} /> : <GenreHead options={options} genre={genre} />;
+}
+
+function GenreView({ options, genre, current }) {
+  const platform = useParam('platform');
+  const state = useBrowse('genre', { genre, platform });
+  return <GenreHead options={options} genre={genre} current={current} state={state} />;
+}
+
+function GenreHead({ options, genre, current, state }) {
+  const platform = useParam('platform');
   return (
     <>
-      <PageHead title={current ? `${current.label} 게임` : '장르별 게임'} desc="장르를 고르면 그 장르의 인기 게임을 보여 드려요.">
+      <PageHead title={current ? `${current.label} 게임` : '장르별 게임'} desc="장르를 고르면 그 장르의 인기 게임을 보여 드려요." scene={state && <PageScene state={state} rankPrefix={`${current.label} 인기 `} />}>
         <nav className="chipbar" aria-label="장르">
           {options.genres.map((g) => (
             <Link key={g.value} to={`/genres/${g.value}${platform ? `?platform=${platform}` : ''}`} className={`chipbar-item${g.value === genre ? ' is-on' : ''}`} aria-current={g.value === genre ? 'page' : undefined}>
@@ -248,12 +281,7 @@ export function GenrePage({ options, genre }) {
         </nav>
         {current && <ChipBar label="플랫폼" name="platform" items={options.platforms} value={platform} />}
       </PageHead>
-      {current ? <GenreGrid genre={genre} platform={platform} options={options} /> : <p className="muted">위에서 장르를 골라 주세요.</p>}
+      {state ? <GameGrid state={state} options={options} /> : <p className="muted">위에서 장르를 골라 주세요.</p>}
     </>
   );
-}
-
-function GenreGrid({ genre, platform, options }) {
-  const state = useBrowse('genre', { genre, platform });
-  return <GameGrid state={state} options={options} />;
 }

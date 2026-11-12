@@ -54,12 +54,12 @@ export function ContributorRanking() {
   const { status, data, error, retry } = useAsync(() => api.contributors(period), [period]);
   return (
     <div className="contrib" data-testid="contrib-ranking">
-      <div className="chipbar" role="group" aria-label="기간">
+      <div className="tabs" role="group" aria-label="기간">
         {[
           ['month', `${monthLabel(data?.month)} 순위`],
           ['all', '전체 순위'],
         ].map(([v, label]) => (
-          <button key={v} type="button" className={`chipbar-item${period === v ? ' is-on' : ''}`} aria-pressed={period === v} onClick={() => setPeriod(v)} data-testid={`contrib-${v}`}>
+          <button key={v} type="button" className={period === v ? 'is-on' : ''} aria-pressed={period === v} onClick={() => setPeriod(v)} data-testid={`contrib-${v}`}>
             {label}
           </button>
         ))}

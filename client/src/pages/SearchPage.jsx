@@ -40,7 +40,7 @@ export function SearchPage({ options }) {
               </p>
               <div className="card-grid">
                 {data.games.slice(0, shown).map((g) => (
-                  <GameTile key={g.id} game={g} options={options} />
+                  <GameTile key={g.id} game={g} options={options} showOriginal />
                 ))}
               </div>
               {data.games.length > shown && (

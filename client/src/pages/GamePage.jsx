@@ -232,11 +232,16 @@ function GameDetail({ data, options }) {
       : []),
     ['데이터 출처', fromIgdb && hasGrac ? 'IGDB (국내 등급: 게임물관리위원회)' : game.source === '사용자 제보' ? '사용자 제보 · 관리자 확인' : game.source],
   ];
+  // 상단 큰 그림: 글자 없는 실제 게임 장면(IGDB 스크린샷)을 먼저, 없으면 아트워크
+  const scene = game.screenshotSource === 'IGDB' && game.screenshots?.[0] ? game.screenshots[0].replace('/t_screenshot_big/', '/t_1080p/') : game.bannerUrl?.replace('/t_screenshot_big/', '/t_1080p/');
   return (
     <article className="detail" data-testid="game-detail">
-      <header className="detail-hero">
-        {game.bannerUrl && <img className="detail-hero-bg" src={game.bannerUrl} alt="" referrerPolicy="no-referrer" />}
-        <div className="detail-hero-shade" />
+      <header className={`detail-hero${scene ? ' has-scene' : ''}`}>
+        {scene && (
+          <div className="detail-scene">
+            <img src={scene} alt={`${game.title} 게임 화면`} referrerPolicy="no-referrer" fetchPriority="high" />
+          </div>
+        )}
         <div className="detail-hero-content">
           <div className="detail-cover-wrap">
             <div className={`detail-cover${game.iconUrl ? ' is-icon' : ''}`}>
@@ -397,10 +402,14 @@ function GameDetail({ data, options }) {
               </p>
             ) : (
               <ul className="store-list">
-                {game.stores.map((s) => (
+                {/* 주황은 첫 구매처 하나만, 나머지는 테두리 목록 */}
+                {game.stores.map((s, i) => (
                   <li key={s.url}>
-                    <a className="btn btn-buy btn-block" href={s.url} target="_blank" rel="noopener noreferrer" data-testid="store-link">
-                      {s.appStore ? 'App Store에서 다운로드 ↗' : `${s.name}에서 보기 ↗`}
+                    <a className={i === 0 ? 'btn btn-buy btn-block' : 'store-alt'} href={s.url} target="_blank" rel="noopener noreferrer" data-testid="store-link">
+                      <span>{s.appStore ? 'App Store에서 다운로드' : `${s.name}에서 보기`}</span>
+                      <svg className="store-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M7 17L17 7M9 7h8v8" />
+                      </svg>
                     </a>
                     {s.isDemo && <p className="store-note">데모 구매처 안내 페이지로 이동합니다. 실제 판매처가 아닙니다.</p>}
                   </li>

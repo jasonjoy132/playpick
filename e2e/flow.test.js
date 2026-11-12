@@ -52,7 +52,7 @@ for (const vp of [
     await finder.getByLabel('롤플레잉').check();
     await shot(page, `${vp.name}-1-criteria`);
     await submit.click();
-    assert.equal(await page.getByTestId('finder').count(), 0, '제출하면 창 닫힘');
+    await page.getByTestId('finder').waitFor({ state: 'detached' }); // 제출하면 창 닫힘(짧게 사라지는 움직임 뒤)
 
     // 2~3. 매칭 → 추천 목록
     await page.waitForURL(/\/results\?players=2&platforms=pc&genres=rpg/);
@@ -70,7 +70,7 @@ for (const vp of [
     await page.getByTestId('edit-criteria').click();
     assert.equal(await page.getByTestId('finder').getByLabel('롤플레잉').isChecked(), true);
     await page.keyboard.press('Escape');
-    assert.equal(await page.getByTestId('finder').count(), 0, 'Esc로 닫힘');
+    await page.getByTestId('finder').waitFor({ state: 'detached' }); // Esc로 닫힘
     await full.filter({ hasText: '던전 동맹' }).getByRole('link').click();
     await page.waitForURL(/\/games\/demo-02\?/);
     const detail = page.getByTestId('game-detail');

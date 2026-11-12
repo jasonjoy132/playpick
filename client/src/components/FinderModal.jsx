@@ -29,6 +29,22 @@ export function FinderModal({ options }) {
   const [criteria, setCriteria] = useState(EMPTY);
   const dialogRef = useRef(null);
   const lastFocus = useRef(null);
+  // 닫을 때 180ms 동안 사라지는 움직임을 보여 준 뒤 지움
+  const [leaving, setLeaving] = useState(false);
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    const closed = wasOpen.current && !open;
+    wasOpen.current = open;
+    if (!closed) {
+      setLeaving(false);
+      return undefined;
+    }
+    const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) return undefined;
+    setLeaving(true);
+    const t = setTimeout(() => setLeaving(false), 180);
+    return () => clearTimeout(t);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -60,7 +76,7 @@ export function FinderModal({ options }) {
     };
   }, [open, initial, closeFinder]);
 
-  if (!open || !options) return null;
+  if ((!open && !leaving) || !options) return null;
   const ready = hasAnyCriteria(criteria);
   const toggleIn = (key) => (v) =>
     setCriteria((c) => ({ ...c, [key]: c[key].includes(v) ? c[key].filter((x) => x !== v) : [...c[key], v] }));
@@ -72,7 +88,7 @@ export function FinderModal({ options }) {
   };
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && closeFinder()}>
+    <div className="modal-backdrop" data-state={open ? 'open' : 'closing'} onMouseDown={(e) => e.target === e.currentTarget && closeFinder()}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="finder-title" ref={dialogRef} data-testid="finder">
         <header className="modal-head">
           <div>

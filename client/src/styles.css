@@ -1561,3 +1561,191 @@ input[type='text'], input[type='search'], input[type='email'], input[type='passw
   [data-reveal='hide'] .pop-lead, [data-reveal='hide'] .pop-item { transform: none; }
   .pop-lead-art img, .pop-thumb img { transition: none; }
 }
+
+/* ── 게임 카드 단순하게 (콘솔 스토어형): 상자 없음, 표지는 카드 너비 그대로, 글은 세 줄 ── */
+.tile, .tile:nth-child(4n + 2), .tile:nth-child(4n + 3), .tile:nth-child(4n + 4) { background: none; border: 0; border-radius: 0; box-shadow: none; overflow: visible; }
+.tile:hover { border: 0; box-shadow: none; transform: none; }
+.tile:focus-within { outline: none; }
+.tile:has(.stretched-link:focus-visible) .tile-cover { outline: 3px solid var(--focus); outline-offset: 3px; }
+.tile-cover { margin: 0; border-radius: var(--radius); overflow: hidden; background: var(--surface-2); }
+.tile-cover .cover { transition: transform 300ms var(--ease-out, ease-out); }
+.tile-badges { left: 8px; top: 8px; right: 48px; }
+.tile-body, .tile-sm .tile-body, .tile-wide .tile-body { padding: 12px 2px 0; gap: 4px; }
+.tile-title, .tile-wide .tile-title { font-size: 1rem; font-weight: 600; line-height: 1.35; }
+.tile-sm .tile-title { font-size: 0.92rem; }
+.tile-meta { font-size: 0.86rem; color: var(--muted); margin: 0; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-meta .tile-players { display: inline; padding: 0; background: none; border-radius: 0; color: var(--text); font-size: inherit; font-weight: 600; }
+.tile-meta .tile-players.is-empty { color: var(--faint); font-weight: 400; }
+.tile-foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: 0; font-size: 0.8rem; color: var(--faint); min-width: 0; }
+.tile-score { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tile-score span[aria-hidden] { color: var(--star); }
+.tile-facts { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-note { font-weight: 600; }
+.tile .match-summary { margin-bottom: 2px; }
+.tile .match-badges.is-compact { margin-top: 6px; }
+.rank, .rank.is-top { left: 8px; bottom: 8px; min-width: 0; padding: 2px 10px; border-radius: 999px; background: rgba(0, 0, 0, 0.72); color: #fff; font-size: 0.95rem; font-weight: 700; }
+.rank.is-top { background: var(--primary); color: #fff; }
+:root[data-theme="dark"] .rank.is-top { color: var(--primary-ink); }
+/* 카드 누름·hover: 홈 인기 게임과 같은 움직임 */
+.tile { transition: transform 160ms var(--ease-out, ease-out); }
+.tile:active:has(.stretched-link:active) { transform: scale(0.98); }
+@media (hover: hover) and (pointer: fine) {
+  .tile:hover .tile-cover .cover { transform: scale(1.03); }
+  .tile:hover .tile-title a { text-decoration: underline; text-underline-offset: 4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tile:active:has(.stretched-link:active) { transform: none; }
+  .tile-cover .cover { transition: none; }
+}
+.card-grid { gap: 36px 20px; }
+@media (max-width: 640px) { .card-grid { gap: 28px 12px; } }
+
+/* ── 헤더 가볍게: 메뉴는 회색 캡슐 없이 글자 + 지금 화면 밑줄, 좁은 화면은 한 줄(검색은 단추로 펼침) + 내리면 숨김 ── */
+.site-header { transition: transform 240ms var(--ease-out, ease-out); }
+.header-inner { padding-top: 10px; padding-bottom: 0; row-gap: 4px; }
+.nav, .nav a.is-active { background: none; box-shadow: none; }
+.nav { padding: 0; gap: 24px; border-radius: 0; margin-left: -2px; }
+.nav a { position: relative; padding: 10px 2px 12px; border-radius: 0; color: var(--muted); font-weight: 500; font-size: 0.94rem; }
+.nav a::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--text); transform: scaleX(0); transition: transform 200ms var(--ease-out, ease-out); }
+.nav a:hover { color: var(--text); }
+.nav a.is-active { color: var(--text); font-weight: 600; }
+.nav a.is-active::after { transform: scaleX(1); }
+.searchbox input { height: 42px; }
+.search-toggle { display: none; }
+@media (max-width: 1040px) {
+  .nav { gap: 20px; }
+  .nav a { padding: 8px 2px 10px; border-bottom: 0; }
+}
+@media (max-width: 860px) {
+  .header-inner { padding-top: 8px; column-gap: 6px; }
+  .brand { margin-right: auto; }
+  .searchbox { display: none; }
+  .searchbox.is-open { display: block; order: 8; flex-basis: 100%; margin: 2px 0 4px; }
+  .search-toggle { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 0; border-radius: 50%; background: none; color: var(--text); cursor: pointer; flex-shrink: 0; transition: background-color 160ms ease, transform 160ms var(--ease-out, ease-out); }
+  .search-toggle[aria-expanded='true'] { background: var(--nav-bg); }
+  .search-toggle:active { transform: scale(0.94); }
+  .search-toggle:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .header-cta { min-height: 38px; padding: 0 14px; font-size: 0.88rem; }
+  .nav { gap: 18px; margin: 0 -16px; padding: 0 16px; }
+  .nav a { font-size: 0.9rem; padding: 8px 0 10px; }
+  .site-header.is-tucked { transform: translateY(-100%); }
+}
+@media (max-width: 420px) {
+  .search-toggle { width: 34px; height: 34px; }
+  .header-cta { padding: 0 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-header, .nav a::after { transition: none; }
+}
+.tile-foot { flex-wrap: nowrap; }
+
+/* ── 상세: 위에 글자 없는 게임 장면 한 장, 아래 바탕 위에 표지·제목. 상자 대신 가는 선과 여백 ── */
+.detail-hero, .detail-hero.has-scene { background: none; color: var(--text); border-radius: 0; overflow: visible; margin-bottom: 40px; }
+.detail-scene { aspect-ratio: 21 / 8; border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-2); }
+.detail-scene img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.detail-hero-content { padding: 0; gap: 28px; align-items: flex-end; }
+.detail-hero.has-scene .detail-hero-content { margin-top: -96px; padding: 0 32px; }
+.detail-cover { box-shadow: none; border: 4px solid var(--bg); border-radius: 12px; }
+.detail-hero h1 { font-size: clamp(1.8rem, 1.2rem + 2vw, 2.8rem); font-weight: 300; letter-spacing: -0.01em; margin: 4px 0 4px; }
+.detail-original, .detail-publisher { color: var(--muted); }
+.detail-hero .pill-light { background: var(--surface); color: var(--text); }
+.detail-hero .image-credit { color: var(--faint); }
+.detail-hero .photo-btn { background: none; color: var(--text); }
+.detail-hero .appstore-link { background: var(--text); color: var(--bg); }
+.detail-actions .rating-badge, .detail-actions .rating-badge.is-global { background: var(--surface); color: var(--text); }
+.detail-grid { gap: 56px; }
+.detail .panel, .detail-side .panel { background: none; border: 0; border-top: 1px solid var(--line); border-radius: 0; padding: 28px 0 32px; box-shadow: none; }
+.detail-main > .panel:first-child, .detail-main > :first-child { margin-top: 0; }
+.detail .panel + .panel { margin-top: 0; }
+.detail .panel h2 { font-size: 1.25rem; font-weight: 400; }
+.detail-side { top: 120px; }
+.store-list { gap: 0; margin-bottom: 16px; }
+.store-list li:first-child { margin-bottom: 10px; }
+.store-list .btn-buy { gap: 8px; }
+.store-alt { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 2px; border-top: 1px solid var(--line); color: var(--text); font-weight: 600; text-decoration: none; transition: color 160ms ease; }
+.store-list li:last-child .store-alt { border-bottom: 1px solid var(--line); }
+.store-alt:hover { color: var(--primary); }
+.store-alt:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.store-arrow { flex-shrink: 0; transition: transform 160ms var(--ease-out, ease-out); }
+@media (hover: hover) and (pointer: fine) { .store-alt:hover .store-arrow, .btn-buy:hover .store-arrow { transform: translate(2px, -2px); } }
+@media (max-width: 900px) {
+  .detail-grid { gap: 8px; }
+  .detail-scene { aspect-ratio: 16 / 9; border-radius: var(--radius); }
+  .detail-hero.has-scene .detail-hero-content { margin-top: -56px; padding: 0 16px; }
+  .detail-hero-content { flex-direction: row; align-items: flex-end; gap: 16px; }
+  .detail-hero-content > div:last-child { padding-bottom: 2px; }
+}
+@media (max-width: 560px) {
+  .detail-hero-content, .detail-hero.has-scene .detail-hero-content { flex-direction: column; align-items: flex-start; }
+  .detail-hero.has-scene .detail-hero-content { padding: 0 12px; }
+}
+/* 표지만 장면 위로 걸치고, 제목은 장면 아래 바탕 위에 */
+.detail-hero.has-scene .detail-hero-content { margin-top: 0; align-items: flex-start; }
+.detail-hero.has-scene .detail-cover-wrap { margin-top: -96px; position: relative; }
+.detail-hero.has-scene .detail-hero-content > div:last-child { padding-top: 20px; }
+@media (max-width: 900px) {
+  .detail-hero.has-scene .detail-hero-content { margin-top: 0; }
+  .detail-hero.has-scene .detail-cover-wrap { margin-top: -56px; }
+  .detail-hero.has-scene .detail-hero-content > div:last-child { padding-top: 12px; }
+  .detail-cover-wrap .detail-cover { width: 104px; }
+}
+@media (max-width: 560px) { .detail-hero.has-scene .detail-hero-content > div:last-child { padding-top: 0; } }
+
+/* ── 탭 모양 하나로: 화면 바꾸기(평점 랭킹·신작·명예의 전당 기간·관리자)는 헤더 메뉴처럼 글자 + 밑줄,
+   거르기(플랫폼 등)는 테두리 알약, 고르면 파랑 ── */
+.tabs { display: flex; gap: 28px; padding: 0; background: none; border-radius: 0; border-bottom: 1px solid var(--line); justify-self: stretch; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button { position: relative; padding: 10px 0 12px; border-radius: 0; background: none; color: var(--muted); font-weight: 500; font-size: 1rem; box-shadow: none; transition: color 160ms ease; }
+.tabs button::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--text); transform: scaleX(0); transition: transform 200ms var(--ease-out, ease-out); }
+.tabs button:hover { color: var(--text); }
+.tabs button.is-on { background: none; color: var(--text); font-weight: 600; box-shadow: none; }
+.tabs button.is-on::after { transform: scaleX(1); }
+.chipbar-item { border-width: 1px; font-weight: 500; transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms var(--ease-out, ease-out); }
+.chipbar-item.is-on { box-shadow: none; font-weight: 600; }
+.chipbar-item:active { transform: scale(0.97); }
+@media (max-width: 640px) { .tabs { gap: 22px; } }
+@media (prefers-reduced-motion: reduce) { .tabs button::after { transition: none; } .chipbar-item:active { transform: none; } }
+
+/* ── 짧은 화면: 푸터는 항상 화면 맨 아래(아래 흰 틈 없음) ── */
+.app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+.app > .main { flex: 1 0 auto; }
+.app > .site-footer { flex-shrink: 0; }
+/* 빈 상태·오류: 상자 없이 여백과 글자만 */
+.state { background: none; border: 0; border-radius: 0; padding: 72px 20px; }
+.state-empty .state-icon, .state:not(.state-error):not(.state-loading) .state-icon { display: none; }
+.state h2 { font-size: 1.5rem; font-weight: 300; }
+.contrib-empty { background: none; border-radius: 0; padding: 72px 16px; }
+.contrib-empty p { font-size: 1.5rem; font-weight: 300; }
+.contrib-guide, .contrib-guide[open] { background: none; border: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0; padding: 0; }
+.contrib-guide > summary { padding: 16px 0; }
+.contrib-guide[open] { padding-bottom: 16px; }
+
+/* ── 목록 머리 큰 사진(인기 1위·랭킹 1위·장르 대표 게임 장면) ── */
+.page-scene { position: relative; display: block; aspect-ratio: 21 / 7; margin: 4px 0 28px; border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-2); color: #fff; text-decoration: none; }
+.page-scene.is-pending { background: var(--surface-2); }
+.page-scene img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 400ms var(--ease-out, ease-out); }
+.page-scene-tag { position: absolute; left: 16px; bottom: 16px; display: inline-flex; align-items: center; gap: 10px; max-width: calc(100% - 32px); padding: 8px 16px; border-radius: 999px; background: rgba(0, 0, 0, 0.72); color: #fff; font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.page-scene-tag b { color: #9fd0ff; font-weight: 700; }
+.page-scene:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.page-scene:active { transform: scale(0.995); }
+@media (hover: hover) and (pointer: fine) { .page-scene:hover img { transform: scale(1.02); } }
+@media (max-width: 640px) {
+  .page-scene { aspect-ratio: 16 / 9; border-radius: var(--radius); margin-bottom: 20px; }
+  .page-scene-tag { left: 10px; bottom: 10px; padding: 6px 12px; font-size: 0.85rem; }
+}
+@media (prefers-reduced-motion: reduce) { .page-scene img { transition: none; } .page-scene:active { transform: none; } }
+
+/* ── 조건 창: 열 때 200ms 떠오르고, 닫을 때 180ms 가라앉음(가운데 기준) ── */
+@keyframes pp-backdrop-in { from { opacity: 0; } }
+@keyframes pp-backdrop-out { to { opacity: 0; } }
+@keyframes pp-modal-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+@keyframes pp-modal-out { to { opacity: 0; transform: translateY(4px) scale(0.98); } }
+.modal-backdrop { animation: pp-backdrop-in 200ms var(--ease-out, ease-out); }
+.modal-backdrop .modal { animation: pp-modal-in 200ms var(--ease-out, ease-out); }
+.modal-backdrop[data-state='closing'] { animation: pp-backdrop-out 180ms var(--ease-out, ease-out) forwards; pointer-events: none; }
+.modal-backdrop[data-state='closing'] .modal { animation: pp-modal-out 180ms var(--ease-out, ease-out) forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop .modal { animation: pp-backdrop-in 150ms ease-out; }
+  .modal-backdrop[data-state='closing'], .modal-backdrop[data-state='closing'] .modal { animation: none; }
+}
+@media (min-width: 641px) { .page-scene { aspect-ratio: 21 / 6; } }

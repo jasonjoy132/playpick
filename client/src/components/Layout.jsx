@@ -18,7 +18,35 @@ const NAV = [
   ['/genres', '장르별 게임'],
 ];
 
-function SearchBox() {
+/** 좁은 화면: 아래로 내리면 헤더를 숨기고, 위로 올리면 다시 보여 줌 */
+function useTuckOnScroll(enabled) {
+  const [tucked, setTucked] = useState(false);
+  useEffect(() => {
+    if (!enabled) {
+      setTucked(false);
+      return undefined;
+    }
+    let last = window.scrollY;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = window.scrollY;
+        if (y < 120) setTucked(false);
+        else if (y > last + 6) setTucked(true);
+        else if (y < last - 6) setTucked(false);
+        last = y;
+        ticking = false;
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [enabled]);
+  return tucked;
+}
+
+function SearchBox({ open: visible = true, onClose }) {
   const { pathname, search } = useLocation();
   const current = pathname === '/search' ? new URLSearchParams(search).get('q') || '' : '';
   const [q, setQ] = useState(current);
@@ -51,6 +79,7 @@ function SearchBox() {
   const onKeyDown = (e) => {
     if (e.key === 'Escape') {
       if (isOpen) e.preventDefault(); // 검색창 기본 동작(입력 지우기) 대신 목록만 닫기
+      else onClose?.();
       setOpen(false);
       setActive(-1);
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -69,7 +98,8 @@ function SearchBox() {
   };
   return (
     <form
-      className="searchbox"
+      className={`searchbox${visible ? ' is-open' : ''}`}
+      id="site-search"
       role="search"
       onSubmit={submit}
       onBlur={(e) => {
@@ -174,12 +204,31 @@ function ByeNotice() {
 export function Layout({ meta, children }) {
   const { openFinder } = useFinder();
   const { pathname } = useLocation();
+  const [searchOpen, setSearchOpen] = useState(pathname === '/search');
+  const [narrow, setNarrow] = useState(() => typeof matchMedia !== 'undefined' && matchMedia('(max-width: 860px)').matches);
+  useEffect(() => {
+    if (typeof matchMedia === 'undefined') return undefined;
+    const mq = matchMedia('(max-width: 860px)');
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  useEffect(() => setSearchOpen(pathname === '/search'), [pathname]);
+  const tucked = useTuckOnScroll(narrow && !searchOpen);
+  // 좁은 화면에서 메뉴가 옆으로 넘치면 지금 화면 메뉴가 보이게 가로로만 옮김
+  useEffect(() => {
+    const nav = document.querySelector('.site-header .nav');
+    const on = nav?.querySelector('a.is-active');
+    if (!nav || !on || nav.scrollWidth <= nav.clientWidth) return;
+    const left = on.getBoundingClientRect().left - nav.getBoundingClientRect().left + nav.scrollLeft;
+    nav.scrollLeft = left - (nav.clientWidth - on.offsetWidth) / 2;
+  }, [pathname, narrow]);
   return (
     <div className="app">
       <a className="skip-link" href="#main">
         본문으로 건너뛰기
       </a>
-      <header className="site-header">
+      <header className={`site-header${tucked ? ' is-tucked' : ''}`}>
         <div className="container header-inner">
           <Link to="/" className="brand" aria-label="플레이픽 홈">
             <Logo />
@@ -194,7 +243,23 @@ export function Layout({ meta, children }) {
               );
             })}
           </nav>
-          <SearchBox />
+          <SearchBox open={!narrow || searchOpen} onClose={narrow ? () => setSearchOpen(false) : undefined} />
+          <button
+            type="button"
+            className="search-toggle"
+            aria-label={searchOpen ? '검색 닫기' : '게임 검색'}
+            aria-expanded={searchOpen}
+            aria-controls="site-search"
+            onClick={() => {
+              const next = !searchOpen;
+              setSearchOpen(next);
+              if (next) requestAnimationFrame(() => document.querySelector('#site-search input')?.focus());
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+              {searchOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" /></>}
+            </svg>
+          </button>
           <button type="button" className="btn btn-gold header-cta" onClick={() => openFinder()} data-testid="open-finder">
             <span className="cta-long">나만의 </span>게임 찾기
           </button>
