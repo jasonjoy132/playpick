@@ -29,7 +29,7 @@ const bigArt = (url) => url.replace('/t_screenshot_big/', '/t_1080p/');
  * 첫 화면(매거진형): 왼쪽에 큰 제목과 인원·플랫폼 고르기, 오른쪽에 화면 높이만큼 큰 실제 게임 그림 + 그 게임으로 가는 카드 하나.
  * 장르까지는 '나만의 게임 찾기' 창
  */
-function HeroFinder({ options, feature }) {
+function HeroFinder({ options, feature, pending }) {
   const { openFinder } = useFinder();
   const [players, setPlayers] = useState(null);
   const [platforms, setPlatforms] = useState([]);
@@ -37,7 +37,7 @@ function HeroFinder({ options, feature }) {
   const go = () => (hasAnyCriteria(criteria) ? navigate(`/results?${criteriaToSearch(criteria)}`) : openFinder());
   const short = (o) => ({ ...o, label: o.value === 1 ? '혼자' : o.label });
   return (
-    <section className={`hero-finder hero-mag${feature ? '' : ' no-art'}`} data-testid="hero-finder" aria-labelledby="hero-title" data-enter>
+    <section className={`hero-finder hero-mag${feature || pending ? '' : ' no-art'}`} data-testid="hero-finder" aria-labelledby="hero-title" data-enter>
       <div className="hero-main">
         <h1 id="hero-title">
           친구들과
@@ -72,6 +72,7 @@ function HeroFinder({ options, feature }) {
           장르까지 고르기
         </button>
       </div>
+      {!feature && pending && <div className="hero-art is-pending" aria-hidden="true" />}
       {feature && (
         <figure className="hero-art">
           <img src={bigArt(feature.heroArt)} alt={`${feature.title} 게임 화면`} referrerPolicy="no-referrer" fetchPriority="high" />
@@ -99,8 +100,15 @@ export function HomePage({ options }) {
   const { status, data, error, retry } = useAsync(() => api.featured(), [], 'featured');
   const { user, ready } = useAuth();
 
-  if (status === 'loading') return <Loading message="추천 게임을 불러오는 중이에요…" />;
-  if (status === 'error') return <ErrorState error={error} onRetry={retry} />;
+  // 첫 화면 제목·고르기는 목록 없이도 바로 쓸 수 있게 먼저 보여 줌 (그림 자리만 비워 둠)
+  if (status !== 'success') {
+    return (
+      <div className="home">
+        <HeroFinder options={options} pending={status === 'loading'} />
+        {status === 'loading' ? <Loading message="추천 게임을 불러오는 중이에요…" /> : <ErrorState error={error} onRetry={retry} />}
+      </div>
+    );
+  }
 
   const { games, slideCount, warnings } = data;
   const slides = games.slice(0, slideCount);

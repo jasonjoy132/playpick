@@ -1401,3 +1401,8 @@ a { text-underline-offset: 0.18em; }
   .hero-feature { left: 12px; right: 12px; bottom: 12px; max-width: none; grid-template-columns: 44px minmax(0, 1fr) auto; padding: 10px 14px 10px 10px; }
   .hero-feature-cover { width: 44px; }
 }
+
+/* 목록을 불러오는 동안 그림 자리: 같은 크기의 빈 면이 천천히 숨 쉼 (그림이 오면 그대로 바뀌어 자리가 밀리지 않음) */
+@keyframes hero-wait { 50% { opacity: 0.6; } }
+.hero-art.is-pending { box-shadow: none; animation: hero-wait 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .hero-art.is-pending { animation: none; } }
