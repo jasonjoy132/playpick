@@ -13,7 +13,7 @@ import { useAuth } from '../lib/auth.jsx';
 import { HomeContributors } from '../components/Contributors.jsx';
 import { Cover } from '../components/Cover.jsx';
 import { shortPlayers } from '../lib/format.js';
-import { TrailerPeekProvider, usePeek } from '../components/TrailerPeek.jsx';
+import { BackdropTrailer, TrailerPeekProvider, usePeek } from '../components/TrailerPeek.jsx';
 
 const POPULAR_COUNT = 6; // 인기 게임: 1위 큰 그림 + 2~6위 목록
 
@@ -78,8 +78,11 @@ function PopularBand({ games, options }) {
         </Link>
       </header>
       <div className="pop-grid" ref={revealRef}>
-        <article className="pop-lead" data-testid="game-card" data-game-id={lead.id} {...peek(lead)}>
-          <div className="pop-lead-art">{leadArt ? <img src={leadArt.replace('/t_screenshot_big/', '/t_screenshot_huge/')} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <Cover game={lead} />}</div>
+        <article className="pop-lead" data-testid="game-card" data-game-id={lead.id}>
+          <div className="pop-lead-art">
+            {leadArt ? <img src={leadArt.replace('/t_screenshot_big/', '/t_screenshot_huge/')} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <Cover game={lead} />}
+          </div>
+          <BackdropTrailer game={lead} />
           <div className="pop-lead-text">
             <span className="pop-rank" aria-label="1위">
               1

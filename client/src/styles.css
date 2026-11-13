@@ -1925,3 +1925,37 @@ h3 { letter-spacing: -0.01em; }
   .peek { animation-name: pp-peek-fade; }
   @keyframes pp-peek-fade { from { opacity: 0; } to { opacity: 1; } }
 }
+
+/* ── 인기 1위 배경 트레일러 (BackdropTrailer): 사진 위에 영상을 꽉 채워(16:9를 잘라) 소리 없이 반복 ── */
+.backdrop-video { position: absolute; inset: 0; overflow: hidden; container-type: size; pointer-events: none; }
+.backdrop-video iframe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100cqw, 177.78cqh);
+  height: max(100cqh, 56.25cqw);
+  transform: translate(-50%, -50%) scale(1.04); /* 가장자리 검은 줄 가리기 */
+  border: 0;
+  opacity: 0;
+  transition: opacity 600ms ease;
+}
+.backdrop-video iframe.is-ready { opacity: 1; }
+.backdrop-sound {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.35);
+  background: rgb(0 0 0 / 0.45);
+  color: #fff;
+  cursor: pointer;
+  transition: transform 160ms var(--ease-out), background-color 160ms ease;
+}
+.backdrop-sound:hover { background: rgb(0 0 0 / 0.65); }
+.backdrop-sound:active { transform: scale(0.97); }
+.backdrop-sound:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }

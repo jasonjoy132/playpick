@@ -259,6 +259,59 @@ test('live + IGDB 화면: 게임위에 없는 게임은 IGDB로 표시(국내 �
   }
 });
 
+test('홈 인기 1위: 사진 대신 트레일러가 소리 없이 바로 재생(동작 줄이기면 사진만)', async () => {
+  const { GUIDE_SAMPLE } = await import('../test/fixtures.js');
+  const games = [201, 202, 203, 204, 205, 206, 207].map((id, i) => ({
+    id, name: `Party Game ${id}`, total_rating_count: 100 - i,
+    genres: [{ id: 10, name: 'Puzzle' }], platforms: [{ id: 6, name: 'PC (Microsoft Windows)' }],
+    game_modes: [{ name: 'Multiplayer' }], multiplayer_modes: [{ offlinemax: 4 }],
+    cover: { url: '//images.igdb.com/igdb/image/upload/t_thumb/c.jpg' },
+    screenshots: [{ url: '//images.igdb.com/igdb/image/upload/t_thumb/s.jpg' }],
+    videos: [{ video_id: `vid${id}abcdef`.slice(0, 11), name: 'Trailer' }],
+  }));
+  const reply = (body) => ({ ok: true, status: 200, json: async () => body, text: async () => body });
+  const fetchImpl = async (url) => {
+    const u = String(url);
+    if (u.includes('grac.or.kr')) return reply(u.includes('gametitle') ? '<result><tcount>0</tcount><pageno>1</pageno></result>' : GUIDE_SAMPLE);
+    if (u.includes('oauth2/token')) return reply({ access_token: 't', expires_in: 3600 });
+    if (u.endsWith('/genres')) return reply([{ id: 10, name: 'Puzzle' }]);
+    if (u.endsWith('/platforms')) return reply([{ id: 6, name: 'PC (Microsoft Windows)' }]);
+    if (u.endsWith('/games')) return reply(games);
+    throw new Error(u);
+  };
+  const live = createApp({ ...getConfig(), dataSource: 'live', dbFile: ':memory:', igdb: { clientId: 'id', clientSecret: 'secret' } }, { fetchImpl });
+  await new Promise((r) => live.listen(0, r));
+  const b = `http://127.0.0.1:${live.address().port}`;
+  const ctx = await browser.newContext();
+  const calm = await browser.newContext({ reducedMotion: 'reduce' });
+  try {
+    const page = await ctx.newPage();
+    await page.route(/youtube|ytimg|images\.igdb/, (r) => r.abort());
+    await page.goto(`${b}/`);
+    const lead = page.locator('.pop-lead');
+    await lead.scrollIntoViewIfNeeded();
+    const video = lead.getByTestId('lead-trailer');
+    await video.waitFor({ state: 'attached' });
+    const src = await video.getAttribute('src');
+    assert.match(src, /^https:\/\/www\.youtube-nocookie\.com\/embed\/vid\w+\?/);
+    assert.match(src, /autoplay=1/);
+    assert.match(src, /mute=1/);
+    assert.match(src, /loop=1/);
+    // 동작 줄이기 설정이면 영상 없이 사진만
+    const still = await calm.newPage();
+    await still.route(/youtube|ytimg|images\.igdb/, (r) => r.abort());
+    await still.goto(`${b}/`);
+    const lead2 = still.locator('.pop-lead');
+    await lead2.scrollIntoViewIfNeeded();
+    await still.waitForTimeout(500);
+    assert.equal(await lead2.getByTestId('lead-trailer').count(), 0);
+  } finally {
+    await ctx.close();
+    await calm.close();
+    live.close();
+  }
+});
+
 test('결과가 많으면 24개씩 더 보기', async () => {
   const page = await browser.newPage();
   const many = Array.from({ length: 30 }, (_, i) => ({

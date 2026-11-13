@@ -145,3 +145,95 @@ function PeekWindow({ game, pos, onEnter, onLeave }) {
     </div>
   );
 }
+
+const YT_ORIGIN = 'https://www.youtube-nocookie.com';
+const REVEAL_AFTER = 2500; // 재생 시작 뒤 YouTube 제목 줄이 사라질 때까지 기다림
+
+/** 자동 재생해도 되는 환경인지: 동작 줄이기·데이터 절약이면 영상 대신 사진 */
+const motionOk = () =>
+  typeof matchMedia !== 'undefined' && !matchMedia('(prefers-reduced-motion: reduce)').matches && !(typeof navigator !== 'undefined' && navigator.connection?.saveData);
+
+/**
+ * 배경 트레일러 (홈 인기 1위): 화면에 보이는 동안만 소리 없이 반복 재생, 벗어나면 멈춤(iframe 지움).
+ * 실제로 재생이 시작되고(YouTube가 알려 주는 상태 1) 제목 줄이 사라질 즈음에야 사진 위로 영상이 나타남
+ * → 자동 재생이 막히거나(일부 휴대폰) 재생 못 하는 영상이면 YouTube 제목·로고 화면 대신 사진이 그대로 보임
+ */
+export function BackdropTrailer({ game }) {
+  const box = useRef(null);
+  const frame = useRef(null);
+  const [inView, setInView] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [muted, setMuted] = useState(true);
+  const yt = game?.trailer?.youtubeId;
+  useEffect(() => {
+    const el = box.current;
+    if (!el || !yt || !motionOk() || typeof IntersectionObserver === 'undefined') return undefined;
+    const io = new IntersectionObserver(([e]) => {
+      setInView(e.isIntersecting);
+      if (!e.isIntersecting) {
+        setReady(false);
+        setMuted(true);
+      }
+    }, { threshold: 0.25 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [yt]);
+  useEffect(() => {
+    if (!inView) return undefined;
+    let timer = 0;
+    // 플레이어가 준비될 때까지 '듣고 있어요'를 거듭 보냄(처음 한 번은 놓치는 일이 많음) → 답이 오면 멈춤
+    const hello = setInterval(() => frame.current?.contentWindow?.postMessage(JSON.stringify({ event: 'listening', id: 'lead' }), YT_ORIGIN), 500);
+    const onMsg = (e) => {
+      if (e.origin !== YT_ORIGIN || e.source !== frame.current?.contentWindow) return;
+      clearInterval(hello);
+      let d;
+      try {
+        d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+      } catch {
+        return;
+      }
+      if (d?.info?.playerState === 1 && !timer) timer = setTimeout(() => setReady(true), REVEAL_AFTER);
+    };
+    window.addEventListener('message', onMsg);
+    return () => {
+      window.removeEventListener('message', onMsg);
+      clearInterval(hello);
+      clearTimeout(timer);
+    };
+  }, [inView]);
+  if (!yt) return null;
+  const id = encodeURIComponent(yt);
+  const origin = typeof location !== 'undefined' ? encodeURIComponent(location.origin) : '';
+  const src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&controls=0&rel=0&playsinline=1&loop=1&playlist=${id}&disablekb=1&iv_load_policy=3&enablejsapi=1&origin=${origin}`;
+  const toggleSound = () => {
+    const next = !muted;
+    frame.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: next ? 'mute' : 'unMute', args: [] }), 'https://www.youtube-nocookie.com');
+    setMuted(next);
+  };
+  return (
+    <>
+      <div className="backdrop-video" ref={box} aria-hidden="true">
+        {inView && (
+          <iframe
+            ref={frame}
+            src={src}
+            title={`${game.title} 트레일러`}
+            allow="autoplay; encrypted-media"
+            referrerPolicy="strict-origin-when-cross-origin"
+            tabIndex={-1}
+            className={ready ? 'is-ready' : ''}
+            data-testid="lead-trailer"
+          />
+        )}
+      </div>
+      {inView && ready && (
+        <button type="button" className="backdrop-sound" onClick={toggleSound} aria-pressed={!muted} aria-label={muted ? '트레일러 소리 켜기' : '트레일러 소리 끄기'}>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z" />
+            {muted ? <path d="M16 9.5l5 5M21 9.5l-5 5" /> : <path d="M16 9a4.5 4.5 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" />}
+          </svg>
+        </button>
+      )}
+    </>
+  );
+}
