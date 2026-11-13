@@ -199,6 +199,7 @@ test('live + IGDB 화면: 게임위에 없는 게임은 IGDB로 표시(국내 �
     game_modes: [{ name: 'Single player' }, { name: 'Multiplayer' }], multiplayer_modes: [{ offlinemax: 4 }],
     websites: [{ url: 'https://store.steampowered.com/app/1/' }],
     videos: [{ video_id: 'abcDEF12345', name: 'Launch Trailer' }],
+    screenshots: [{ url: '//images.igdb.com/igdb/image/upload/t_thumb/shot1.jpg' }],
   };
   const reply = (body) => ({ ok: true, status: 200, json: async () => body, text: async () => body });
   const fetchImpl = async (url) => {
@@ -214,7 +215,7 @@ test('live + IGDB 화면: 게임위에 없는 게임은 IGDB로 표시(국내 �
   await new Promise((r) => live.listen(0, r));
   const b = `http://127.0.0.1:${live.address().port}`;
   const page = await browser.newPage();
-  await page.route(/youtube|ytimg/, (r) => r.abort()); // 테스트에서는 밖으로 나가지 않음
+  await page.route(/youtube|ytimg|images.igdb/, (r) => r.abort()); // 테스트에서는 밖으로 나가지 않음
   try {
     await page.goto(`${b}/results?players=2&platforms=pc&genres=puzzle`);
     const full = page.getByTestId('section-full').getByTestId('game-card');
@@ -237,6 +238,21 @@ test('live + IGDB 화면: 게임위에 없는 게임은 IGDB로 표시(국내 �
     await trailer.getByTestId('trailer-play').click();
     assert.match(await trailer.getByTestId('trailer-iframe').getAttribute('src'), /^https:\/\/www\.youtube-nocookie\.com\/embed\/abcDEF12345\?/);
     await shot(page, 'igdb-detail');
+    // 홈: 게임 위에 마우스를 잠깐 올려 두면 트레일러 팝업(소리 없이 자동 재생), 벗어나면 닫힘
+    await page.goto(`${b}/`);
+    const target = page.locator('.hero-art:not(.is-pending), .pop-lead, .pop-item').first();
+    await target.waitFor();
+    await target.hover();
+    assert.equal(await page.getByTestId('trailer-peek').count(), 0, '바로 뜨지 않음');
+    const peek = page.getByTestId('trailer-peek');
+    await peek.waitFor({ timeout: 4000 });
+    const src = await peek.getByTestId('trailer-peek-iframe').getAttribute('src');
+    assert.match(src, /^https:\/\/www\.youtube-nocookie\.com\/embed\/abcDEF12345\?/);
+    assert.match(src, /autoplay=1/);
+    assert.match(src, /mute=1/);
+    await shot(page, 'home-peek');
+    await page.mouse.move(2, 2);
+    await peek.waitFor({ state: 'detached', timeout: 2000 });
   } finally {
     await page.close();
     live.close();

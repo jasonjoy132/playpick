@@ -13,6 +13,7 @@ import { useAuth } from '../lib/auth.jsx';
 import { HomeContributors } from '../components/Contributors.jsx';
 import { Cover } from '../components/Cover.jsx';
 import { shortPlayers } from '../lib/format.js';
+import { TrailerPeekProvider, usePeek } from '../components/TrailerPeek.jsx';
 
 const POPULAR_COUNT = 6; // 인기 게임: 1위 큰 그림 + 2~6위 목록
 
@@ -63,6 +64,7 @@ function useRevealOnce() {
 
 function PopularBand({ games, options }) {
   const revealRef = useRevealOnce();
+  const peek = usePeek();
   const [lead, ...list] = games;
   if (!lead) return null;
   const leadArt = sceneOf(lead);
@@ -76,7 +78,7 @@ function PopularBand({ games, options }) {
         </Link>
       </header>
       <div className="pop-grid" ref={revealRef}>
-        <article className="pop-lead" data-testid="game-card" data-game-id={lead.id}>
+        <article className="pop-lead" data-testid="game-card" data-game-id={lead.id} {...peek(lead)}>
           <div className="pop-lead-art">{leadArt ? <img src={leadArt.replace('/t_screenshot_big/', '/t_screenshot_huge/')} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <Cover game={lead} />}</div>
           <div className="pop-lead-text">
             <span className="pop-rank" aria-label="1위">
@@ -95,7 +97,7 @@ function PopularBand({ games, options }) {
           {list.map((g, i) => {
             const art = sceneOf(g);
             return (
-              <li key={g.id} className="pop-item" data-testid="game-card" data-game-id={g.id}>
+              <li key={g.id} className="pop-item" data-testid="game-card" data-game-id={g.id} {...peek(g)}>
                 <span className="pop-rank" aria-hidden="true">
                   {i + 2}
                 </span>
@@ -125,6 +127,7 @@ const bigArt = (url) => url.replace('/t_screenshot_big/', '/t_1080p/');
  */
 function HeroFinder({ options, feature, pending }) {
   const { openFinder } = useFinder();
+  const peek = usePeek();
   const [players, setPlayers] = useState(null);
   const [platforms, setPlatforms] = useState([]);
   const criteria = { players, platforms, genres: [] };
@@ -171,7 +174,7 @@ function HeroFinder({ options, feature, pending }) {
       </div>
       {!feature && pending && <div className="hero-art is-pending" aria-hidden="true" />}
       {feature && (
-        <figure className="hero-art">
+        <figure className="hero-art" {...peek(feature)}>
           <img src={bigArt(feature.heroArt)} alt={`${feature.title} 게임 화면`} referrerPolicy="no-referrer" fetchPriority="high" />
           <Link to={`/games/${encodeURIComponent(feature.id)}`} className="hero-feature" data-testid="hero-feature">
             <span className="hero-feature-cover">
@@ -216,6 +219,7 @@ export function HomePage({ options }) {
   const side = ready ? user ? <ProfilePanel /> : <LoginPanel /> : <div className="hero-side-empty" />;
 
   return (
+    <TrailerPeekProvider>
     <div className="home">
       <Warnings warnings={warnings} />
       <HeroFinder options={options} feature={feature} />
@@ -242,5 +246,6 @@ export function HomePage({ options }) {
         </aside>
       </section>
     </div>
+    </TrailerPeekProvider>
   );
 }
