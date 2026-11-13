@@ -1749,3 +1749,92 @@ input[type='text'], input[type='search'], input[type='email'], input[type='passw
   .modal-backdrop[data-state='closing'], .modal-backdrop[data-state='closing'] .modal { animation: none; }
 }
 @media (min-width: 641px) { .page-scene { aspect-ratio: 21 / 6; } }
+
+/* ════ 고급스럽게 (2026-11-13) — 단색 바탕 + 파랑은 주요 버튼 하나, 선택은 먹색, 큰 파란 면은 먹색, 글씨 한 단계 가볍게 ════
+   되돌리기: 태그 design-backup-2026-11-13 / 폴더 backup/design-2026-11-13 */
+:root {
+  --ink-panel: #111214;        /* 로그인 창·푸터 같은 큰 면 */
+  --ink-panel-line: rgba(255, 255, 255, 0.12);
+  --sel-bg: var(--text);       /* 고른 칩·알약 */
+  --sel-ink: var(--bg);
+  --hairline: rgba(0, 0, 0, 0.08); /* 사진 테두리 */
+}
+:root[data-theme="dark"] { --ink-panel: #141517; --ink-panel-line: rgba(255, 255, 255, 0.1); --hairline: rgba(255, 255, 255, 0.08); }
+body { text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+h1, h2, .detail-hero h1, .hero-finder h1 { letter-spacing: -0.025em; }
+h3 { letter-spacing: -0.01em; }
+.tile-score, .rating-badge, .pop-rank, .rank, .count { font-variant-numeric: tabular-nums; }
+
+/* 글씨 무게: 굵은 700~800 → 500~600 */
+.btn, .band-more, .header-cta { font-weight: 600; letter-spacing: -0.005em; }
+.chip span, .hero-finder .chip span, .chipbar-item, .pill, .match-summary, .match-badge, .rating-badge { font-weight: 500; }
+.tile-title, .pop-text a, .hero-feature-text b { font-weight: 500; }
+.tile-meta .tile-players { font-weight: 500; }
+.login-brand { font-weight: 600; }
+
+/* 헤더: 반투명 + 흐림, 아이콘은 모두 같은 조용한 모양 */
+.site-header { background: color-mix(in srgb, var(--bg) 84%, transparent); -webkit-backdrop-filter: saturate(180%) blur(18px); backdrop-filter: saturate(180%) blur(18px); }
+.theme-toggle, .site-header .avatar-ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+.theme-toggle:hover, .site-header .avatar-ghost:hover { background: var(--surface); }
+.header-cta { min-height: 40px; padding: 0 20px; font-size: 0.92rem; }
+.searchbox input { background: var(--surface); }
+
+/* 고르기: 파랑 대신 먹색 (파랑은 주요 버튼·링크에만) */
+.chip span, .hero-finder .chip span { border: 1px solid var(--line-strong); background: transparent; }
+.chip input:checked + span, .hero-finder .chip input:checked + span, .chipbar-item.is-on { background: var(--sel-bg); border-color: var(--sel-bg); color: var(--sel-ink); box-shadow: none; }
+.chip:hover span, .chipbar-item:hover { border-color: var(--text); }
+.chipbar-item { border-color: var(--line-strong); background: transparent; }
+
+/* 사진: 아주 옅은 안쪽 선으로 경계를 또렷하게 */
+.tile-cover::after, .pop-thumb::after, .pop-lead-art::after, .page-scene::after, .detail-scene::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px var(--hairline); pointer-events: none; }
+.pop-thumb, .detail-scene { position: relative; }
+
+/* 하트: 표지 위엔 마우스를 올릴 때만(터치 기기·찜한 게임·키보드 포커스는 항상) */
+.wish-overlay { background: rgba(10, 10, 12, 0.42); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+@media (hover: hover) and (pointer: fine) {
+  .tile .wish-overlay:not(.is-on) { opacity: 0; transition: opacity 160ms ease, transform 160ms var(--ease-out, ease-out); }
+  .tile:hover .wish-overlay, .tile:focus-within .wish-overlay, .tile .wish-overlay:focus-visible { opacity: 1; }
+}
+.pop-item .wish-overlay { background: transparent; border: 1px solid rgba(255, 255, 255, 0.18); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.pop-item .wish-overlay:hover { background: rgba(255, 255, 255, 0.08); }
+
+/* 첫 화면 큰 그림 위 카드: 흰 상자 → 어두운 유리 */
+.hero-feature { background: rgba(12, 12, 14, 0.55); color: #fff; border: 1px solid rgba(255, 255, 255, 0.14); box-shadow: none; -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); }
+.hero-feature-players { color: rgba(255, 255, 255, 0.72); }
+.hero-feature-go { color: #fff; }
+
+/* 슬라이드: 선명한 장면 + 고른 어둠막, 유리 화살표 */
+.carousel { box-shadow: none; }
+.slide-bg img { filter: none; }
+.slide-shade { background: rgba(8, 8, 10, 0.55); }
+.slide-cover { box-shadow: none; outline: 1px solid rgba(255, 255, 255, 0.14); }
+.slide-text h2 { font-weight: 300; }
+.slide-summary { color: rgba(255, 255, 255, 0.82); }
+.carousel-nav { display: inline-grid; place-items: center; width: 44px; height: 44px; background: rgba(10, 10, 12, 0.42); color: #fff; border: 1px solid rgba(255, 255, 255, 0.18); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); transition: background-color 160ms ease, transform 160ms var(--ease-out, ease-out); }
+.carousel-nav:hover { background: rgba(10, 10, 12, 0.62); }
+.carousel-nav:active { transform: translateY(-50%) scale(0.95); }
+.dots button { background: rgba(255, 255, 255, 0.4); }
+.dots button.is-active { background: #fff; }
+
+/* 로그인 창: 파란 면 → 먹색 면 */
+.login-panel { background: var(--ink-panel); border: 1px solid var(--ink-panel-line); }
+.input-icon input { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.14); }
+.input-icon input::placeholder { color: rgba(255, 255, 255, 0.6); }
+.input-icon input:focus { outline: 2px solid #fff; outline-offset: 1px; background: rgba(255, 255, 255, 0.1); }
+.login-panel .btn-gold, .login-panel .btn-gold:hover:not(:disabled) { background: #fff; color: #111214; }
+.login-panel .btn-gold:hover:not(:disabled) { background: #e9e9ea; }
+.login-panel .login-brand .logo-pick { color: #fff; }
+
+/* 푸터: 파란 면 → 먹색 면, 글자는 흐린 흰색 */
+.site-footer { background: var(--ink-panel); border-top: 1px solid var(--ink-panel-line); padding: 40px 0; }
+.site-footer p, .site-footer .muted { color: rgba(255, 255, 255, 0.62); }
+.site-footer a { color: rgba(255, 255, 255, 0.86); }
+.site-footer a:hover { color: #fff; }
+.site-footer .logo-pick { color: #fff; }
+.site-header { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; }
+/* 로고: 금색 그라데이션 P → 글자색 한 색(삼각형은 바탕색으로 뚫림), 'Pick'만 파랑 */
+.logo-mark path:first-of-type { fill: var(--text); }
+.logo-mark path:last-of-type { fill: var(--bg); }
+.site-footer .logo, .login-panel .logo, .login-brand { color: #fff; }
+.site-footer .logo-mark path:first-of-type, .login-brand .logo-mark path:first-of-type { fill: #fff; }
+.site-footer .logo-mark path:last-of-type, .login-brand .logo-mark path:last-of-type { fill: var(--ink-panel); }
