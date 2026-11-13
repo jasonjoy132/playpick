@@ -1838,3 +1838,20 @@ h3 { letter-spacing: -0.01em; }
 .site-footer .logo, .login-panel .logo, .login-brand { color: #fff; }
 .site-footer .logo-mark path:first-of-type, .login-brand .logo-mark path:first-of-type { fill: #fff; }
 .site-footer .logo-mark path:last-of-type, .login-brand .logo-mark path:last-of-type { fill: var(--ink-panel); }
+
+/* ── 상세 트레일러: 누르기 전엔 미리보기 그림 + 재생 단추, 누르면 그 자리에서 YouTube 재생 ── */
+.trailer-frame { position: relative; aspect-ratio: 16 / 9; border-radius: var(--radius); overflow: hidden; background: #000; }
+.trailer-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.trailer-poster { position: absolute; inset: 0; display: block; width: 100%; height: 100%; padding: 0; border: 0; background: #000; cursor: pointer; }
+.trailer-poster img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 400ms var(--ease-out, ease-out), opacity 200ms ease; opacity: 0.88; }
+.trailer-play { position: absolute; left: 50%; top: 50%; display: grid; place-items: center; width: 72px; height: 72px; margin: -36px 0 0 -36px; border-radius: 50%; background: rgba(10, 10, 12, 0.55); color: #fff; border: 1px solid rgba(255, 255, 255, 0.28); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); transition: transform 160ms var(--ease-out, ease-out), background-color 160ms ease; }
+.trailer-play svg { margin-left: 3px; }
+.trailer-poster:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.trailer-poster:active .trailer-play { transform: scale(0.95); }
+@media (hover: hover) and (pointer: fine) {
+  .trailer-poster:hover img { transform: scale(1.02); opacity: 1; }
+  .trailer-poster:hover .trailer-play { background: rgba(10, 10, 12, 0.72); transform: scale(1.04); }
+}
+.trailer-foot { margin: 10px 0 0; }
+@media (max-width: 640px) { .trailer-play { width: 60px; height: 60px; margin: -30px 0 0 -30px; } }
+@media (prefers-reduced-motion: reduce) { .trailer-poster img, .trailer-play { transition: none; } }

@@ -65,6 +65,7 @@ const GAME_FIELDS = [
   'multiplayer_modes.onlinemax', 'multiplayer_modes.offlinemax',
   'multiplayer_modes.onlinecoopmax', 'multiplayer_modes.offlinecoopmax',
   'cover.url', 'artworks.url', 'screenshots.url', 'websites.url', 'websites.trusted',
+  'videos.video_id', 'videos.name', // 트레일러(YouTube 영상 ID)
   'alternative_names.name', 'alternative_names.comment',
   'game_localizations.name', 'game_localizations.region.name',
   'involved_companies.company.name', 'involved_companies.publisher',
@@ -303,6 +304,19 @@ function shotsOf(g) {
   return list.length ? { screenshots: list, screenshotSource: 'IGDB' } : {};
 }
 
+const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
+/**
+ * IGDB 영상(YouTube) 중 트레일러 하나 고르기: 출시 → 공식 → 이름에 trailer → 첫 영상.
+ * 영상 ID 모양이 아니면 버림(확인 안 된 주소는 만들지 않음). 없으면 null
+ */
+export function trailerOf(g) {
+  const list = (g.videos || []).filter((v) => YOUTUBE_ID.test(v?.video_id || ''));
+  if (!list.length) return null;
+  const by = (re) => list.find((v) => re.test(v.name || ''));
+  const v = by(/launch\s*trailer/i) ?? by(/official\s*trailer|^trailer$/i) ?? by(/trailer/i) ?? list[0];
+  return { youtubeId: v.video_id, name: v.name || null, source: 'IGDB' };
+}
+
 /** IGDB game → 플레이픽 게임 모델 */
 export function igdbToGame(g, maps) {
   const toValues = (items, nameMap) => {
@@ -359,6 +373,7 @@ export function igdbToGame(g, maps) {
     bannerUrl,
     // 상세 '스크린샷' 칸용 (이미 받아 온 응답에서 주소만, 최대 6장. 없으면 아트워크)
     ...shotsOf(g),
+    trailer: trailerOf(g), // 상세 '트레일러' 칸 (IGDB에 영상이 있을 때만)
     globalRating: globalRatingFromIgdb(g),
     gameStatus: g.game_status?.status ?? null, // 예: Released, Offline(서비스 종료), Delisted, Cancelled
     stores,

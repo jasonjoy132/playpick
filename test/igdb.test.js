@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createIgdbProvider, playersWhere, derivePlayers, storeFromUrl, igdbToGame, gracRatingFromIgdb, globalRatingFromIgdb, IGDB_TOKEN_URL } from '../server/providers/igdbProvider.js';
+import { createIgdbProvider, playersWhere, derivePlayers, storeFromUrl, igdbToGame, trailerOf, gracRatingFromIgdb, globalRatingFromIgdb, IGDB_TOKEN_URL } from '../server/providers/igdbProvider.js';
 import { createCatalog, mergeGames } from '../server/services/catalog.js';
 import { parseGracXml } from '../server/providers/gracProvider.js';
 import { GUIDE_SAMPLE } from './fixtures.js';
@@ -70,6 +70,20 @@ test('IGDB 게임 → 플레이픽 모델', () => {
   assert.equal(g.domesticRating, false);
   assert.equal(g.publisher, 'Test Pub');
   assert.equal(g.releaseDate, '2023-11-14');
+});
+
+test('트레일러: 출시 트레일러 → 공식 → trailer → 첫 영상, 영상 ID 모양이 아니면 버림', () => {
+  assert.equal(trailerOf({}), null);
+  assert.equal(trailerOf({ videos: [{ video_id: 'bad id!', name: 'Trailer' }] }), null);
+  const vids = [
+    { video_id: 'gameplay001', name: 'Gameplay video' },
+    { video_id: 'teaser00001', name: 'Announcement Trailer' },
+    { video_id: 'launch00001', name: 'Launch Trailer' },
+  ];
+  assert.deepEqual(trailerOf({ videos: vids }), { youtubeId: 'launch00001', name: 'Launch Trailer', source: 'IGDB' });
+  assert.equal(trailerOf({ videos: vids.slice(0, 2) }).youtubeId, 'teaser00001');
+  assert.equal(trailerOf({ videos: vids.slice(0, 1) }).youtubeId, 'gameplay001');
+  assert.equal(igdbToGame(IGDB_GAME).trailer, null, '영상이 없으면 null');
 });
 
 test('인증: 토큰 요청 형식, 헤더, 토큰 재사용, 401 시 1회 재발급', async () => {

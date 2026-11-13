@@ -198,6 +198,7 @@ test('live + IGDB 화면: 게임위에 없는 게임은 IGDB로 표시(국내 �
     genres: [{ id: 10, name: 'Puzzle' }], platforms: [{ id: 6, name: 'PC (Microsoft Windows)' }],
     game_modes: [{ name: 'Single player' }, { name: 'Multiplayer' }], multiplayer_modes: [{ offlinemax: 4 }],
     websites: [{ url: 'https://store.steampowered.com/app/1/' }],
+    videos: [{ video_id: 'abcDEF12345', name: 'Launch Trailer' }],
   };
   const reply = (body) => ({ ok: true, status: 200, json: async () => body, text: async () => body });
   const fetchImpl = async (url) => {
@@ -213,6 +214,7 @@ test('live + IGDB 화면: 게임위에 없는 게임은 IGDB로 표시(국내 �
   await new Promise((r) => live.listen(0, r));
   const b = `http://127.0.0.1:${live.address().port}`;
   const page = await browser.newPage();
+  await page.route(/youtube|ytimg/, (r) => r.abort()); // 테스트에서는 밖으로 나가지 않음
   try {
     await page.goto(`${b}/results?players=2&platforms=pc&genres=puzzle`);
     const full = page.getByTestId('section-full').getByTestId('game-card');
@@ -228,6 +230,12 @@ test('live + IGDB 화면: 게임위에 없는 게임은 IGDB로 표시(국내 �
     const detailText = await page.getByTestId('game-detail').textContent();
     assert.match(detailText, /국내 등급분류 정보 없음/);
     assert.match(detailText, /같은 제목의 게임을 찾지 못했습니다/);
+    // 트레일러: 처음엔 미리보기만, 누르면 쿠키 없는 YouTube 주소로 재생
+    const trailer = page.getByTestId('trailer');
+    assert.match(await trailer.innerText(), /트레일러[\s\S]*Launch Trailer/);
+    assert.equal(await trailer.locator('iframe').count(), 0);
+    await trailer.getByTestId('trailer-play').click();
+    assert.match(await trailer.getByTestId('trailer-iframe').getAttribute('src'), /^https:\/\/www\.youtube-nocookie\.com\/embed\/abcDEF12345\?/);
     await shot(page, 'igdb-detail');
   } finally {
     await page.close();

@@ -195,6 +195,60 @@ function Playtime({ game }) {
   return state.playtime ? <PlaytimeValue playtime={state.playtime} /> : NO_INFO;
 }
 
+/**
+ * 트레일러 (IGDB에 있는 YouTube 영상). 처음엔 YouTube 미리보기 그림만 보이고, 누르면 그 자리에서 재생.
+ * 누르기 전에는 YouTube를 부르지 않음(빠르고, 쿠키 없는 youtube-nocookie 주소)
+ */
+function Trailer({ game }) {
+  const t = game.trailer;
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => setPlaying(false), [t?.youtubeId]);
+  if (!t?.youtubeId) return null;
+  const id = encodeURIComponent(t.youtubeId);
+  return (
+    <section className="panel trailer" aria-labelledby="trailer-title" data-testid="trailer">
+      <h2 id="trailer-title">
+        트레일러 <span className="muted small">출처: IGDB · YouTube</span>
+      </h2>
+      <div className="trailer-frame">
+        {playing ? (
+          <iframe
+            src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&playsinline=1`}
+            title={`${game.title} 트레일러`}
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+            data-testid="trailer-iframe"
+          />
+        ) : (
+          <button type="button" className="trailer-poster" onClick={() => setPlaying(true)} aria-label={`${game.title} 트레일러 재생`} data-testid="trailer-play">
+            {/* 고화질(1280px) 그림이 없는 영상은 YouTube가 120px 빈 그림을 주므로 그때는 기본(480px)으로 */}
+            <img
+              src={`https://i.ytimg.com/vi/${id}/maxresdefault.jpg`}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onLoad={(e) => e.currentTarget.naturalWidth <= 120 && !e.currentTarget.src.includes('hqdefault') && (e.currentTarget.src = `https://i.ytimg.com/vi/${id}/hqdefault.jpg`)}
+              onError={(e) => !e.currentTarget.src.includes('hqdefault') && (e.currentTarget.src = `https://i.ytimg.com/vi/${id}/hqdefault.jpg`)}
+            />
+            <span className="trailer-play" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="28" height="28">
+                <path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" fill="currentColor" />
+              </svg>
+            </span>
+          </button>
+        )}
+      </div>
+      <p className="muted small trailer-foot">
+        {t.name && <span>{t.name} · </span>}
+        <a href={`https://www.youtube.com/watch?v=${id}`} target="_blank" rel="noopener noreferrer">
+          YouTube에서 보기 ↗
+        </a>
+      </p>
+    </section>
+  );
+}
+
 function GameDetail({ data, options }) {
   const { game, evaluation } = data;
   const [rating, setRating] = useState(game.userRating);
@@ -339,6 +393,7 @@ function GameDetail({ data, options }) {
               AI(Google Gemini)가 <b>서비스가 종료된 게임</b>으로 판단해 추천·검색 목록에는 나오지 않습니다. AI 판단이라 틀릴 수 있어요.
             </p>
           )}
+          <Trailer game={game} />
           {game.screenshots?.length > 0 && (
             <section className="panel" aria-labelledby="shots-title" data-testid="screenshots">
               <h2 id="shots-title">
