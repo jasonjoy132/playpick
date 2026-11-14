@@ -147,17 +147,22 @@ function PeekWindow({ game, pos, onEnter, onLeave }) {
 }
 
 const YT_ORIGIN = 'https://www.youtube-nocookie.com';
-const REVEAL_AFTER = 2500; // 재생 시작 뒤 YouTube 제목 줄이 사라질 때까지 기다림
+// YouTube는 controls=0이어도 재생 시작 뒤 약 3.5초 동안 가운데 멈춤·이전·다음 단추와 제목을 보여 줌(2025 새 플레이어, 끄는 설정 없음)
+// → 그동안은 사진 아래에서 몰래 재생하고, 단추가 사라진 뒤에 영상을 보여 줌
+const REVEAL_AFTER = 3800;
+// 화면에 들어오기 전(위아래 두 화면 거리)부터 미리 불러와 재생 → 스크롤해 도착하면 이미 단추 없이 재생 중
+const PRELOAD_MARGIN = '200% 0px';
 
 /** 자동 재생해도 되는 환경인지: 동작 줄이기·데이터 절약이면 영상 대신 사진 */
 const motionOk = () =>
   typeof matchMedia !== 'undefined' && !matchMedia('(prefers-reduced-motion: reduce)').matches && !(typeof navigator !== 'undefined' && navigator.connection?.saveData);
 
 /**
- * 배경 트레일러 (홈 첫 화면 큰 그림·인기 1위): 화면에 보이는 동안만 소리 없이 반복 재생, 벗어나면 멈춤(iframe 지움).
+ * 배경 트레일러 (홈 첫 화면 큰 그림·인기 1위): 화면 가까이 있는 동안만 소리 없이 반복 재생, 멀어지면 멈춤(iframe 지움).
  * 조작(멈춤·소리) 없이 사진 자리에서 그냥 움직이는 그림처럼 보임
- * 실제로 재생이 시작되고(YouTube가 알려 주는 상태 1) 제목 줄이 사라질 즈음에야 사진 위로 영상이 나타남
- * → 자동 재생이 막히거나(일부 휴대폰) 재생 못 하는 영상이면 YouTube 제목·로고 화면 대신 사진이 그대로 보임
+ * 실제로 재생이 시작되고(YouTube가 알려 주는 상태 1) YouTube 단추가 사라진 뒤(REVEAL_AFTER) 사진 위로 영상이 나타남.
+ * 화면 가까이 오면 미리 불러 둠(PRELOAD_MARGIN). 제목 줄·로고는 영상을 크게 키워 위아래를 잘라 가림(styles.css .backdrop-video)
+ * → 자동 재생이 막히거나(일부 휴대폰) 재생 못 하는 영상이면 YouTube 화면 대신 사진이 그대로 보임
  */
 export function BackdropTrailer({ game, testId = 'lead-trailer' }) {
   const box = useRef(null);
@@ -171,15 +176,16 @@ export function BackdropTrailer({ game, testId = 'lead-trailer' }) {
     const io = new IntersectionObserver(([e]) => {
       setInView(e.isIntersecting);
       if (!e.isIntersecting) setReady(false);
-    }, { threshold: 0.25 });
+    }, { rootMargin: PRELOAD_MARGIN });
     io.observe(el);
     return () => io.disconnect();
   }, [yt]);
   useEffect(() => {
     if (!inView) return undefined;
-    let timer = 0;
     // 플레이어가 준비될 때까지 '듣고 있어요'를 거듭 보냄(처음 한 번은 놓치는 일이 많음) → 답이 오면 멈춤
-    const hello = setInterval(() => frame.current?.contentWindow?.postMessage(JSON.stringify({ event: 'listening', id: 'lead' }), YT_ORIGIN), 500);
+    const say = () => frame.current?.contentWindow?.postMessage(JSON.stringify({ event: 'listening', id: 'lead' }), YT_ORIGIN);
+    const hello = setInterval(say, 200);
+    let timer = 0;
     const onMsg = (e) => {
       if (e.origin !== YT_ORIGIN || e.source !== frame.current?.contentWindow) return;
       clearInterval(hello);

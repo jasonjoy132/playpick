@@ -1932,12 +1932,13 @@ h3 { letter-spacing: -0.01em; }
   position: absolute;
   top: 50%;
   left: 50%;
-  width: max(100cqw, 177.78cqh);
-  height: max(100cqh, 56.25cqw);
+  /* 16:9를 지키면서 위아래로 90px씩 더 크게 → 재생 시작 때 뜨는 YouTube 제목 줄·재생바·로고가 잘려 안 보임 */
+  width: max(100cqw, calc(177.78cqh + 320px));
+  height: max(calc(100cqh + 180px), 56.25cqw);
   transform: translate(-50%, -50%) scale(1.34); /* 영화 비율(2.39:1) 트레일러의 위아래 검은 띠까지 가리기 — 배경 장면이라 가장자리는 잘려도 됨 */
   border: 0;
   opacity: 0;
-  transition: opacity 600ms ease;
+  transition: opacity 250ms ease-out;
 }
 .backdrop-video iframe.is-ready { opacity: 1; }
 
