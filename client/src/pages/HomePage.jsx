@@ -125,7 +125,8 @@ function PopularBand({ games, options }) {
 const bigArt = (url) => url.replace('/t_screenshot_big/', '/t_1080p/');
 
 /**
- * 첫 화면(매거진형): 왼쪽에 큰 제목과 인원·플랫폼 고르기, 오른쪽에 화면 높이만큼 큰 실제 게임 그림 + 그 게임으로 가는 카드 하나.
+ * 첫 화면: 화면 끝까지 깔린 게임 장면(트레일러가 있으면 소리 없이 재생) 위에 왼쪽 큰 제목과 인원·플랫폼 고르기, 오른쪽 아래 그 게임으로 가는 카드 하나.
+ * 그림이 없으면 예전처럼 흰 바탕(no-art).
  * 장르까지는 '나만의 게임 찾기' 창
  */
 function HeroFinder({ options, feature, pending }) {
@@ -136,7 +137,7 @@ function HeroFinder({ options, feature, pending }) {
   const go = () => (hasAnyCriteria(criteria) ? navigate(`/results?${criteriaToSearch(criteria)}`) : openFinder());
   const short = (o) => ({ ...o, label: o.value === 1 ? '혼자' : o.label });
   return (
-    <section className={`hero-finder hero-mag${feature || pending ? '' : ' no-art'}`} data-testid="hero-finder" aria-labelledby="hero-title" data-enter>
+    <section className={`hero-finder hero-mag${feature || pending ? '' : ' no-art'}${feature || pending ? ' hero-full' : ''}`} data-testid="hero-finder" aria-labelledby="hero-title" data-enter>
       <div className="hero-main">
         <h1 id="hero-title">
           친구들과

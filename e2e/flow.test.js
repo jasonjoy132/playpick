@@ -277,6 +277,7 @@ test('홈: 첫 화면 큰 그림·인기 1위는 트레일러가 소리 없이 �
     const heroSrc = await page.getByTestId('hero-trailer').getAttribute('src');
     assert.match(heroSrc, /autoplay=1/);
     assert.match(heroSrc, /mute=1/);
+    assert.match(await page.getByTestId('hero-finder').getAttribute('class'), /hero-full/, '영상이 첫 화면 전체 배경');
     const lead = page.locator('.pop-lead');
     await lead.scrollIntoViewIfNeeded();
     const video = lead.getByTestId('lead-trailer');

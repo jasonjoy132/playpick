@@ -1945,3 +1945,28 @@ h3 { letter-spacing: -0.01em; }
 .hero-mag h1 { font-weight: 700; letter-spacing: -0.03em; }
 /* 첫 화면 큰 그림도 트레일러가 소리 없이 재생(BackdropTrailer) — 게임 카드는 영상 위에 */
 .hero-art .hero-feature { z-index: 1; }
+
+/* ── 첫 화면 전체 배경(2026-11-14): 게임 장면·트레일러를 화면 끝까지 + 왼쪽을 어둡게 깔고 흰 글씨 (라이트·다크 같음) ── */
+.hero-finder.hero-mag.hero-full { position: relative; isolation: isolate; color: #fff; padding: 56px 0 40px; }
+.home > .hero-full:first-child { margin-top: -20px; } /* 헤더 바로 아래에 붙게(.main 위 여백만큼) */
+.hero-full .hero-art.is-pending { background: #111214; animation: none; } /* 불러오는 동안도 같은 어두운 면 — 흰 화면에서 바뀌며 번쩍이지 않게 */
+.hero-full .hero-art {
+  position: absolute; z-index: -1; top: 0; bottom: 0; left: calc(50% - 50vw); right: calc(50% - 50vw);
+  grid-column: auto; min-height: 0; aspect-ratio: auto; border-radius: 0; margin: 0;
+}
+.hero-full .hero-art::before {
+  content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(90deg, rgb(0 0 0 / 0.82) 0%, rgb(0 0 0 / 0.6) 45%, rgb(0 0 0 / 0.25) 100%), linear-gradient(0deg, rgb(0 0 0 / 0.5), transparent 40%);
+}
+.hero-full .hero-art::after { display: none; }
+.hero-full .hero-feature { z-index: 2; left: auto; right: max(24px, calc(50vw - 50% + 24px)); bottom: 32px; }
+.hero-full h1 { color: #fff; }
+.hero-full .hero-lead { color: rgb(255 255 255 / 0.82); }
+.hero-full .chips legend, .hero-full .chip-legend, .hero-full legend { color: rgb(255 255 255 / 0.8); }
+.hero-full .chip span { background: rgb(255 255 255 / 0.08); border-color: rgb(255 255 255 / 0.35); color: #fff; }
+.hero-full .chip input:checked + span { background: #fff; border-color: #fff; color: #111214; }
+.hero-full .hero-more { color: rgb(255 255 255 / 0.8); }
+@media (max-width: 860px) {
+  .hero-full .hero-feature { left: 16px; right: 16px; bottom: 16px; }
+  .hero-finder.hero-mag.hero-full { padding-bottom: 120px; }
+}
