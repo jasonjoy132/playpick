@@ -367,6 +367,39 @@ test('홈: Steam 공식 트레일러가 있으면 YouTube 대신 <video>로 바�
   }
 });
 
+test('추천 목록 정렬: 추천순(기본) · 평가 많은/적은 순 · 평점 높은/낮은 순 — 주소에 남고 요청에 붙음', async () => {
+  const page = await browser.newPage();
+  const seen = [];
+  page.on('request', (r) => r.url().includes('/api/recommendations') && seen.push(r.url()));
+  await page.goto(`${base}/results?platforms=pc`);
+  await page.getByTestId('result-count').waitFor();
+  const tabs = page.getByRole('tablist', { name: '정렬' });
+  assert.equal(await tabs.getByRole('tab', { name: '추천순' }).getAttribute('aria-selected'), 'true');
+  await tabs.getByRole('tab', { name: '평점 높은 순' }).click();
+  await page.waitForURL(/order=rating/);
+  await page.waitForFunction(() => !document.querySelector('.state-loading, [data-testid=loading]'));
+  await page.getByTestId('result-count').waitFor();
+  assert.ok(seen.some((u) => /order=rating/.test(u)), '서버에 정렬을 보냄');
+  assert.equal(await tabs.getByRole('tab', { name: '평점 높은 순' }).getAttribute('aria-selected'), 'true');
+  // 버튼 3개: 평점·평가 수는 고른 버튼을 다시 누르면 낮은/적은 순
+  assert.equal(await tabs.getByRole('tab').count(), 3);
+  await tabs.getByRole('tab', { name: '평점 높은 순' }).click();
+  await page.waitForURL(/order=rating_asc/);
+  assert.equal(await tabs.getByRole('tab', { name: '평점 낮은 순' }).getAttribute('aria-selected'), 'true');
+  await tabs.getByRole('tab', { name: '평점 낮은 순' }).click();
+  await page.waitForURL(/order=rating(?!_asc)/);
+  await tabs.getByRole('tab', { name: '평가 많은 순' }).click();
+  await page.waitForURL(/order=count(?!_asc)/);
+  await tabs.getByRole('tab', { name: '평가 많은 순' }).click();
+  await page.waitForURL(/order=count_asc/);
+  assert.equal(await tabs.getByRole('tab', { name: '평가 적은 순' }).getAttribute('aria-selected'), 'true');
+  await page.getByTestId('result-count').waitFor();
+  assert.ok(seen.some((u) => /order=count_asc/.test(u)));
+  await tabs.getByRole('tab', { name: '추천순' }).click();
+  await page.waitForURL((u) => !/order=/.test(u.search));
+  await page.close();
+});
+
 test('결과가 많으면 24개씩 더 보기', async () => {
   const page = await browser.newPage();
   const many = Array.from({ length: 30 }, (_, i) => ({

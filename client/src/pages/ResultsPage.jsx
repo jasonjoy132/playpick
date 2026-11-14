@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
 import { recall, remember, usePageState } from '../lib/pageMemory.js';
-import { useLocation } from '../lib/router.jsx';
+import { navigate, useLocation } from '../lib/router.jsx';
 import { useFinder } from '../lib/finder.jsx';
 import { criteriaFromSearch, criteriaToSearch, hasAnyCriteria } from '../lib/criteria.js';
 import { criteriaLabels } from '../lib/format.js';
@@ -10,11 +10,33 @@ import { GameTile } from '../components/GameTile.jsx';
 import { AutoMore } from '../components/AutoMore.jsx';
 import { EmptyState, ErrorState, Loading, Warnings } from '../components/Status.jsx';
 
+// 정렬: 추천순(기본, 인기순 + 국내 게임을 사이사이에) · 평가 수 · 평점 (서버가 조건에 맞는 IGDB 게임 전체를 그 순서로 찾음)
+// 평가·평점은 버튼 하나로 — 처음 누르면 많은/높은 순(↑), 고른 버튼을 다시 누르면 적은/낮은 순(↓). 고른 버튼은 전체 이름(평점 낮은 순 등), 안 고른 버튼은 짧게
+const SORTS = [
+  { key: 'match', label: '추천순' },
+  { key: 'count', label: '평가 순', desc: '평가 많은 순', asc: '평가 적은 순' },
+  { key: 'rating', label: '평점 순', desc: '평점 높은 순', asc: '평점 낮은 순' },
+];
+const ORDERS = ['match', 'count', 'count_asc', 'rating', 'rating_asc'];
+
+function SortArrow({ up }) {
+  return (
+    <svg className={`sort-arrow${up ? ' is-up' : ''}`} width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M8 3v10M4 9l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function ResultsPage({ options }) {
   const { search } = useLocation();
   const { openFinder } = useFinder();
   const criteria = criteriaFromSearch(search);
-  const qs = criteriaToSearch(criteria);
+  const order = ORDERS.find((o) => o === new URLSearchParams(search).get('order')) ?? 'match';
+  const asc = order.endsWith('_asc');
+  const sortKey = order.replace('_asc', '');
+  const goOrder = (o) => navigate(`/results?${o === 'match' ? criteriaToSearch(criteria) : `${criteriaToSearch(criteria)}&order=${o}`}`, { replace: true });
+  // 정렬도 주소에 남겨 뒤로 가기·상세에서 돌아올 때 그대로
+  const qs = order === 'match' ? criteriaToSearch(criteria) : `${criteriaToSearch(criteria)}&order=${order}`;
   const { status, data, error, retry } = useAsync(
     () => (hasAnyCriteria(criteria) ? api.recommendations(qs) : Promise.resolve(null)),
     [qs],
@@ -38,6 +60,27 @@ export function ResultsPage({ options }) {
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => openFinder(criteria)} data-testid="edit-criteria">
             조건 변경
           </button>
+        </div>
+        <div className="tabs tabs-sub" role="tablist" aria-label="정렬">
+          {SORTS.map((o) => {
+            const on = sortKey === o.key;
+            const down = on && asc; // 지금 낮은/적은 순
+            return (
+              <button
+                key={o.key}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                className={on ? 'is-on' : ''}
+                aria-label={o.asc ? (down ? o.asc : o.desc) : undefined}
+                title={o.asc ? (on ? `${down ? o.asc : o.desc} · 다시 누르면 ${down ? o.desc : o.asc}` : o.desc) : undefined}
+                onClick={() => goOrder(o.asc && on ? (asc ? o.key : `${o.key}_asc`) : o.key)}
+              >
+                {on && o.asc ? (down ? o.asc : o.desc) : o.label}
+                {on && o.asc && <SortArrow up={!down} />}
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -125,7 +168,7 @@ function Results({ data, options, qs, criteria }) {
           </>
         ) : data.paged ? (
           <>
-            IGDB와 게임물관리위원회 전체에서 찾았어요. 모든 조건에 맞는 게임 <b>{n != null ? `약 ${n.toLocaleString('ko-KR')}개 이상` : '여러 개'}</b>(인기순).
+            IGDB와 게임물관리위원회 전체에서 찾았어요. 모든 조건에 맞는 게임 <b>{n != null ? `약 ${n.toLocaleString('ko-KR')}개 이상` : '여러 개'}</b>({ORDER_NOTE[data.order] ?? '인기순'}).
           </>
         ) : (
           <>
@@ -153,6 +196,12 @@ function Results({ data, options, qs, criteria }) {
 }
 
 const PAGE = 24;
+const ORDER_NOTE = {
+  count: '평가 많은 순',
+  count_asc: '평가 적은 순 — 평가 없는 게임은 맨 뒤',
+  rating: '평점 높은 순 — 평가 50개 이상 먼저',
+  rating_asc: '평점 낮은 순 — 평가 50개 이상 먼저',
+};
 
 function ResultSection({ id, title, desc, items, total, totalPlus, options, qs, emptyText, remote, maxAuto = Infinity, shown: shownProp, setShown: setShownProp, memo }) {
   const [ownShown, setOwnShown] = usePageState(memo ?? 'results:shown', PAGE);

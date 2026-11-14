@@ -25,3 +25,46 @@ export function rankGames(games, by, sort) {
     .filter((g) => g.totalRating && g.totalRating.count >= RATING_MIN_TOTAL)
     .sort((a, b) => b.totalRating.exact - a.totalRating.exact || b.totalRating.count - a.totalRating.count);
 }
+
+// ── 추천 목록(나만의 게임 찾기) 정렬: 추천순(match, 기본)·평가 많은/적은 순(count/count_asc)·평점 높은/낮은 순(rating/rating_asc) ──
+export const RESULT_ORDERS = ['match', 'count', 'count_asc', 'rating', 'rating_asc'];
+const RATED_MIN = 50; // igdbProvider.RATED_MIN과 같게 — 평가가 이보다 적으면 평점 순에서 뒤로
+
+/** 평가 수 합계(글로벌 + PlayPick) */
+export const reviewCount = (g) => (g.globalRating?.count ?? 0) + (g.userRating?.count ?? 0);
+
+/** 평점 합계(두 평균을 평가 수만큼 가중) — 없으면 null */
+export function combinedRating(g) {
+  const gn = g.globalRating?.avg != null ? g.globalRating.count ?? 0 : 0;
+  const pn = g.userRating?.avg != null ? g.userRating.count ?? 0 : 0;
+  if (!gn && !pn) return null;
+  return ((gn ? (g.globalRating.exact ?? g.globalRating.avg) * gn : 0) + (pn ? g.userRating.avg * pn : 0)) / (gn + pn);
+}
+
+/**
+ * 두 게임 비교 (음수면 a가 앞)
+ * - count / count_asc: 평가 많은·적은 순 (적은 순은 평가 없는 게임을 맨 뒤)
+ * - rating / rating_asc: 평가 RATED_MIN개 이상을 평점 높은·낮은 순으로 먼저, 나머지는 평가 많은 순(평점 없는 게임 맨 뒤)
+ */
+export function compareByOrder(a, b, order) {
+  const ca = reviewCount(a);
+  const cb = reviewCount(b);
+  if (order === 'count') return cb - ca;
+  if (order === 'count_asc') return (ca === 0) - (cb === 0) || ca - cb;
+  if (order === 'rating' || order === 'rating_asc') {
+    const dir = order === 'rating' ? 1 : -1;
+    const ra = combinedRating(a);
+    const rb = combinedRating(b);
+    const rated = (cb >= RATED_MIN) - (ca >= RATED_MIN);
+    if (rated) return rated;
+    if (ca >= RATED_MIN) return dir * ((rb ?? 0) - (ra ?? 0)) || cb - ca;
+    return (rb != null) - (ra != null) || cb - ca;
+  }
+  return 0;
+}
+
+/** 추천 결과({ game, evaluation }) 정렬. 비슷한 게임은 맞는 조건 수를 먼저 보고 그다음 정렬 기준 */
+export function sortResults(items, order, { byMatch = false } = {}) {
+  if (order === 'match') return items;
+  return [...items].sort((x, y) => (byMatch ? y.evaluation.matchedCount - x.evaluation.matchedCount || x.evaluation.mismatchCount - y.evaluation.mismatchCount : 0) || compareByOrder(x.game, y.game, order));
+}

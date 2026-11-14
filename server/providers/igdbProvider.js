@@ -91,6 +91,8 @@ export function globalRatingFromIgdb(g) {
 
 // 본편만: 다른 판(에디션·이식판, version_parent)과 본편에 딸린 항목(시즌·DLC·확장팩·에피소드, parent_game) 제외
 export const MAIN_ONLY = ['version_parent = null', 'parent_game = null'];
+// 추천 목록 '평점 높은 순'에서 평점으로 먼저 줄 세우는 최소 평가 수 (평가 몇 개로 만점인 게임이 맨 위로 오지 않게)
+export const RATED_MIN = 50;
 
 /** IGDB game_modes id 1 = 'Single player' */
 export const SINGLE_PLAYER_MODE = 1;
@@ -423,6 +425,45 @@ export function createIgdbProvider(cfg, { fetchImpl = globalThis.fetch, now = ()
     if (!Array.isArray(json)) throw new DataSourceError('IGDB_INVALID', 'IGDB API가 예상하지 못한 형식의 응답을 반환했습니다.');
     return json;
   }
+  /**
+   * findMatches 정렬(추천 목록): 구간을 차례로 이어 붙여 페이지 단위로 조회 (offset은 구간을 이어 붙인 위치)
+   * - rating / rating_asc: 평가 RATED_MIN개 이상을 평점 높은·낮은 순 → 나머지는 평가 많은 순
+   * - count_asc: 평가가 있는 게임을 평가 적은 순 → 평가 없는 게임(최근 출시 순)
+   */
+  const ORDER_PHASES = {
+    rating: [[`total_rating_count >= ${RATED_MIN}`, 'total_rating desc'], [`(total_rating_count < ${RATED_MIN} | total_rating_count = null)`, 'total_rating_count desc']],
+    rating_asc: [[`total_rating_count >= ${RATED_MIN}`, 'total_rating asc'], [`(total_rating_count < ${RATED_MIN} | total_rating_count = null)`, 'total_rating_count desc']],
+    count_asc: [['total_rating_count > 0', 'total_rating_count asc'], ['(total_rating_count = 0 | total_rating_count = null)', 'first_release_date desc']],
+  };
+  async function findOrdered(w, order, offset, limit) {
+    const phases = ORDER_PHASES[order];
+    const key = JSON.stringify(['findOrdered', order, w, offset, limit]);
+    const hit = cache.get(key);
+    if (hit && now() - hit.at < cacheTtlSec * 1000) return hit.value;
+    // 구간별 개수(마지막 구간은 필요 없음) + 전체 개수
+    const nKey = JSON.stringify(['findOrderedCount', order, w]);
+    let counts = cache.get(nKey);
+    if (!counts || now() - counts.at >= cacheTtlSec * 1000) {
+      const [all, ...sizes] = await Promise.all([count('games', `where ${w};`), ...phases.slice(0, -1).map(([pw]) => count('games', `where ${w} & ${pw};`))]);
+      counts = { at: now(), total: all, sizes: sizes.map((n) => n ?? 0) };
+      cache.set(nKey, counts);
+    }
+    const rows = [];
+    let start = 0; // 이 구간이 시작하는 위치
+    for (let i = 0; i < phases.length && rows.length < limit; i++) {
+      const size = i < phases.length - 1 ? counts.sizes[i] : Infinity;
+      const from = offset + rows.length - start; // 이 구간 안에서 읽을 위치
+      if (from < size) {
+        const [pw, sort] = phases[i];
+        rows.push(...await query('games', `fields ${GAME_FIELDS}; where ${w} & ${pw}; sort ${sort}; limit ${limit - rows.length}; offset ${Math.max(0, from)};`));
+      }
+      start += size;
+    }
+    const games = rows.filter(isMainGame).map((r) => mark(igdbToGame(r)));
+    const value = { games, total: offset === 0 ? counts.total : null, hasMore: counts.total == null ? rows.length === limit : offset + limit < counts.total };
+    cache.set(key, { at: now(), value });
+    return value;
+  }
   /** /games/count 등: { count } */
   async function count(endpoint, body) {
     const json = await request(`${endpoint}/count`, body);
@@ -521,10 +562,11 @@ export function createIgdbProvider(cfg, { fetchImpl = globalThis.fetch, now = ()
       return games;
     },
     /**
-     * IGDB 전체에서 조건(장르·플랫폼·인원)을 모두 만족하는 게임을 인기순으로 페이지 단위 조회
+     * IGDB 전체에서 조건(장르·플랫폼·인원)을 모두 만족하는 게임을 인기순(평가 많은 순)으로 페이지 단위 조회
      * 후보를 미리 받아 두지 않고, 필터를 IGDB 쪽에서 적용해 전체 DB를 대상으로 찾음
+     * order: 없음·'match'·'count' = 평가 많은 순, 'rating'·'rating_asc'·'count_asc' = findOrdered(구간을 이어 붙임 — 경계에 걸친 페이지는 두 구간을 합침)
      */
-    async findMatches(criteria, { offset = 0, limit = 24 } = {}) {
+    async findMatches(criteria, { offset = 0, limit = 24, order } = {}) {
       const maps = await getIdMaps();
       const ids = (values, map) => [...new Set(values.flatMap((v) => map[v] || []))];
       const where = [...MAIN_ONLY];
@@ -537,6 +579,7 @@ export function createIgdbProvider(cfg, { fetchImpl = globalThis.fetch, now = ()
       const pw = playersWhere(criteria.players);
       if (pw) where.push(pw);
       const w = where.join(' & ');
+      if (ORDER_PHASES[order]) return findOrdered(w, order, offset, limit);
       const key = JSON.stringify(['find', w, offset, limit]);
       const hit = cache.get(key);
       if (hit && now() - hit.at < cacheTtlSec * 1000) return hit.value;

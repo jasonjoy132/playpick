@@ -1980,3 +1980,9 @@ h3 { letter-spacing: -0.01em; }
 .tabs.tabs-sub button { padding: 6px 16px; border-radius: 999px; font-size: 0.9rem; }
 .tabs.tabs-sub button::after { display: none; }
 .tabs.tabs-sub button.is-on { background: var(--bg); box-shadow: 0 1px 3px rgb(0 0 0 / 0.16); }
+.page-head > .tabs.tabs-sub { margin-top: 4px; } /* 추천 목록 정렬 */
+/* 추천 목록 정렬: 고른 버튼의 방향 화살표 (다시 누르면 반대로) */
+.tabs.tabs-sub button { display: inline-flex; align-items: center; gap: 4px; }
+.sort-arrow { flex-shrink: 0; transition: transform 200ms var(--ease-out, ease-out); }
+.sort-arrow.is-up { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .sort-arrow { transition: none; } }

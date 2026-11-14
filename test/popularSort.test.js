@@ -72,3 +72,34 @@ test('인기 게임: 평점 높은 순 — PlayPick(회원 평균)·합계(평�
   assert.equal((await fetch(`${base}/api/browse/popular?by=zzz`)).status, 400);
   assert.equal((await fetch(`${base}/api/browse/recent?by=rating`)).status, 400);
 });
+
+test('추천 목록 정렬: 추천순 그대로 · 평가 많은/적은 순 · 평점 높은/낮은 순(평가 50개 이상 먼저, 평점 없으면 맨 뒤)', async () => {
+  const { sortResults, compareByOrder, combinedRating } = await import('../server/services/ranking.js');
+  const r = (id, global, mine, matched = 3) => ({
+    game: { id, globalRating: global && { avg: global[0], count: global[1] }, userRating: { avg: mine?.[0] ?? null, count: mine?.[1] ?? 0 } },
+    evaluation: { matchedCount: matched, mismatchCount: 3 - matched },
+  });
+  const items = [r('few', [4.9, 30]), r('none', null), r('big', [4.2, 5000]), r('best', [4.6, 200], [5, 2]), r('mid', [4.4, 80])];
+  assert.deepEqual(sortResults(items, 'match'), items, '추천순은 그대로');
+  assert.deepEqual(sortResults(items, 'count').map((x) => x.game.id), ['big', 'best', 'mid', 'few', 'none']);
+  assert.deepEqual(sortResults(items, 'rating').map((x) => x.game.id), ['best', 'mid', 'big', 'few', 'none']);
+  // 낮은 순·적은 순: 평점은 평가 50개 이상을 낮은 순으로 먼저(나머지는 평가 많은 순), 평가 적은 순은 평가 없는 게임 맨 뒤
+  assert.deepEqual(sortResults(items, 'rating_asc').map((x) => x.game.id), ['big', 'mid', 'best', 'few', 'none']);
+  assert.deepEqual(sortResults(items, 'count_asc').map((x) => x.game.id), ['few', 'mid', 'best', 'big', 'none']);
+  assert.equal(Math.round(combinedRating(items[3].game) * 1000) / 1000, Math.round(((4.6 * 200 + 5 * 2) / 202) * 1000) / 1000);
+  assert.equal(compareByOrder(items[0].game, items[1].game, 'match'), 0);
+  // 비슷한 게임: 맞는 조건 수가 먼저
+  const partial = [r('a', [4.9, 900], null, 1), r('b', [3.0, 60], null, 2)];
+  assert.deepEqual(sortResults(partial, 'rating', { byMatch: true }).map((x) => x.game.id), ['b', 'a']);
+
+  // API: 잘못된 정렬은 400, 정렬하면 응답에 order (데모 = 후보 목록 방식)
+  assert.equal((await fetch(`${base}/api/recommendations?platforms=pc&order=zzz`)).status, 400);
+  const body = await (await fetch(`${base}/api/recommendations?platforms=pc&order=count`)).json();
+  assert.equal(body.order, 'count');
+  const counts = body.fullMatches.map((x) => (x.game.globalRating?.count ?? 0) + (x.game.userRating?.count ?? 0));
+  assert.deepEqual(counts, [...counts].sort((p, q) => q - p));
+  const asc = await (await fetch(`${base}/api/recommendations?platforms=pc&order=count_asc`)).json();
+  assert.equal(asc.order, 'count_asc');
+  const ascCounts = asc.fullMatches.map((x) => (x.game.globalRating?.count ?? 0) + (x.game.userRating?.count ?? 0)).filter((n) => n > 0);
+  assert.deepEqual(ascCounts, [...ascCounts].sort((p, q) => p - q));
+});

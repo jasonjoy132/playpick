@@ -406,6 +406,52 @@ test('전체 검색(findMatches): 필터를 IGDB에 보내고 개수·페이지 
   assert.deepEqual(none, { games: [], total: 0, hasMore: false });
 });
 
+test('전체 검색 평점 높은 순: 평가 50개 이상을 평점 순으로 먼저, 경계 페이지는 나머지(평가 많은 순)를 이어 붙임', async () => {
+  const RATED = 30; // 평가 50개 이상인 게임 수
+  const rows = (n, from) => Array.from({ length: n }, (_, i) => ({ ...IGDB_GAME, id: from + i }));
+  const fetchImpl = mockFetch([
+    [IGDB_TOKEN_URL, tokenOk],
+    ['/v4/platforms', () => json([{ id: 6, name: 'PC (Microsoft Windows)' }])],
+    ['/v4/genres', () => json([])],
+    ['/v4/games/count', (url, init) => json({ count: /total_rating_count >= 50/.test(init.body) ? RATED : 100 })],
+    ['/v4/games', (url, init) => {
+      const offset = Number(init.body.match(/offset (\d+);/)[1]);
+      const limit = Number(init.body.match(/limit (\d+);/)[1]);
+      return /total_rating_count >= 50/.test(init.body) ? json(rows(Math.min(limit, RATED - offset), 1000 + offset)) : json(rows(limit, 5000 + offset));
+    }],
+  ]);
+  const p = createIgdbProvider(cfg, { fetchImpl });
+  const first = await p.findMatches({ players: null, platforms: ['pc'], genres: [] }, { offset: 0, limit: 24, order: 'rating' });
+  assert.equal(first.total, 100);
+  assert.equal(first.games.length, 24);
+  const bodies = () => fetchImpl.calls.filter((c) => c.url.endsWith('/v4/games')).map((c) => c.init.body);
+  assert.match(bodies()[0], /total_rating_count >= 50; sort total_rating desc; limit 24; offset 0;/);
+  const edge = await p.findMatches({ players: null, platforms: ['pc'], genres: [] }, { offset: 24, limit: 24, order: 'rating' });
+  assert.deepEqual(edge.games.map((g) => g.id).slice(5, 8), ['igdb-1029', 'igdb-5000', 'igdb-5001'], '평점 구간 6개 뒤에 나머지 구간 처음부터');
+  assert.match(bodies().at(-1), /\(total_rating_count < 50 \| total_rating_count = null\); sort total_rating_count desc; limit 18; offset 0;/);
+  assert.equal(edge.hasMore, true);
+  await p.findMatches({ players: null, platforms: ['pc'], genres: [] }, { offset: 48, limit: 24, order: 'rating' });
+  assert.match(bodies().at(-1), /limit 24; offset 18;/, '다음 페이지는 나머지 구간 18번째부터');
+});
+
+test('전체 검색 평점 낮은 순·평가 적은 순: 구간별 정렬 방향', async () => {
+  const fetchImpl = mockFetch([
+    [IGDB_TOKEN_URL, tokenOk],
+    ['/v4/platforms', () => json([{ id: 6, name: 'PC (Microsoft Windows)' }])],
+    ['/v4/genres', () => json([])],
+    ['/v4/games/count', (url, init) => json({ count: /total_rating_count (>= 50|> 0)/.test(init.body) ? 5 : 100 })],
+    ['/v4/games', () => json([IGDB_GAME])],
+  ]);
+  const p = createIgdbProvider(cfg, { fetchImpl });
+  const bodies = () => fetchImpl.calls.filter((c) => c.url.endsWith('/v4/games')).map((c) => c.init.body);
+  await p.findMatches({ players: null, platforms: ['pc'], genres: [] }, { offset: 0, limit: 24, order: 'rating_asc' });
+  assert.match(bodies().at(-2), /total_rating_count >= 50; sort total_rating asc; limit 24; offset 0;/);
+  assert.match(bodies().at(-1), /sort total_rating_count desc; limit 23; offset 0;/, '나머지는 평가 많은 순');
+  await p.findMatches({ players: null, platforms: ['pc'], genres: [] }, { offset: 0, limit: 24, order: 'count_asc' });
+  assert.match(bodies().at(-2), /total_rating_count > 0; sort total_rating_count asc; limit 24; offset 0;/);
+  assert.match(bodies().at(-1), /\(total_rating_count = 0 \| total_rating_count = null\); sort first_release_date desc;/, '평가 없는 게임은 맨 뒤');
+});
+
 test('전체 검색 실패 → 기존 후보 목록 방식으로 대체 (catalog)', async () => {
   const grac = { label: 'GRAC', listGames: async () => [], searchByTitle: async () => [] };
   const igdb = { label: 'IGDB', configured: true, findMatches: async () => { throw new Error('400'); }, searchByCriteria: async () => [igdbToGame(IGDB_GAME)] };

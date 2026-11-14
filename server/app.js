@@ -28,7 +28,7 @@ import { createPartySize } from './services/partySize.js';
 import { createAppStoreProvider } from './providers/appStoreProvider.js';
 import { createGracNew, overlayEntries } from './services/gracNew.js';
 import { createSteamTrailers } from './services/steamTrailer.js';
-import { rankGames } from './services/ranking.js';
+import { rankGames, RESULT_ORDERS, sortResults } from './services/ranking.js';
 import { cached } from './community/cached.js';
 import { createAppArt, pickArt } from './services/appArt.js';
 
@@ -288,13 +288,13 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     }
   }
 
-  async function igdbRounds(criteria, offset) {
+  async function igdbRounds(criteria, offset, order) {
     let total = null;
     let pos = offset;
     let games = [];
     let warning = null;
     for (let round = 0; round < 2; round++) {
-      const r = await catalog.findMatches(criteria, { offset: pos, limit: IGDB_SCAN });
+      const r = await catalog.findMatches(criteria, { offset: pos, limit: IGDB_SCAN, order });
       if (!r || r.failed) return round ? { games, total, hasMore: true, nextOffset: pos, warning } : r;
       if (round === 0) total = r.total;
       const f = await partySize.fill(r.games, round ? { waitMs: 3000 } : undefined);
@@ -724,6 +724,9 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     if (p === '/api/recommendations') {
       const { criteria, errors } = parseCriteria(Object.fromEntries(url.searchParams));
       if (errors.length) return sendJson(res, 400, { error: { code: 'INVALID_CRITERIA', message: errors.join(' ') } });
+      // 정렬: 추천순(match, 기본 — IGDB 인기순 + 게임위 게임을 사이사이에) · 평가 많은 순(count) · 평점 높은 순(rating)
+      const order = url.searchParams.get('order') || 'match';
+      if (!RESULT_ORDERS.includes(order)) throw apiError('BAD_REQUEST', '알 수 없는 정렬입니다.', 400);
       const num = (k) => Math.min(Math.max(0, Math.floor(Number(url.searchParams.get(k)) || 0)), 50_000);
       const offset = Math.min(num('offset'), 5000); // IGDB 위치
       const goffset = num('goffset'); // 게임위(IGDB에 없는 게임) 위치
@@ -733,11 +736,13 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       // 골랐으면 AI 추천 인원을 모르는 게임이 많아 '일부 조건 일치' 쪽. 받은 뒤에는 실제 판정 결과대로 두 섹션에 나눔
       const gracTo = criteria.players == null ? 'full' : 'partial';
       const wantIgdb = !more || more === 'full';
-      const wantGrac = !more || more === gracTo;
+      // 평가 많은 순·평점 높은 순이면 평가 정보가 없는 게임위 게임은 IGDB를 끝까지 본 뒤에 이어서
+      const gracLate = order !== 'match' && gracTo === 'full';
+      const wantGrac = (!more || more === gracTo) && !(gracLate && url.searchParams.get('igdbDone') !== '1');
       const gracLimit = gracTo === 'full' ? (more === 'full' && url.searchParams.get('igdbDone') === '1' ? RESULT_PAGE : 6) : RESULT_PAGE;
       // 1) 모든 조건 일치: IGDB 전체에서 필터 검색  2) 일부 일치: 인기 후보에서 판정(첫 요청만)  3) IGDB에 없는 게임위 게임
       const [paged, pool, grac] = await Promise.all([
-        wantIgdb && url.searchParams.get('igdbDone') !== '1' ? timed('IGDB+AI', () => igdbRounds(criteria, offset)) : Promise.resolve({ games: [], total: null, hasMore: false, skipped: true }),
+        wantIgdb && url.searchParams.get('igdbDone') !== '1' ? timed('IGDB+AI', () => igdbRounds(criteria, offset, order)) : Promise.resolve({ games: [], total: null, hasMore: false, skipped: true }),
         !more ? timed('인기 후보', () => catalog.listGames(criteria)) : Promise.resolve(null),
         // 게임위 게임 AI 추천 인원도 IGDB 쪽과 동시에 물음 (기다리는 시간이 겹치게)
         wantGrac
@@ -769,25 +774,27 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
         const gPartial = gResults.filter((x) => !x.evaluation.isFullMatch);
         const igdbFull = recommend((await decorate(paged.games, user)).filter(listable), criteria).fullMatches;
         const poolPartial = pool ? recommend((await decorate(pool.games, user)).filter(listable), criteria).partialMatches : [];
-        const fullMatches = interleave(igdbFull, gFull);
-        const partialMatches = more ? gPartial : [...poolPartial, ...gPartial].sort(compareResults);
+        const fullMatches = order === 'match' ? interleave(igdbFull, gFull) : [...sortResults(igdbFull, order), ...sortResults(gFull, order)];
+        const partialMatches = sortResults(more ? gPartial : [...poolPartial, ...gPartial].sort(compareResults), order, { byMatch: true });
         const igdbHasMore = paged.skipped ? false : paged.hasMore;
         const gracHasMore = !!grac?.hasMore;
         return sendJson(res, 200, {
-          meta: meta(), warnings, criteria, paged: true, gracTo,
+          meta: meta(), warnings, criteria, order, paged: true, gracTo,
           fullMatches, partialMatches,
           totalFull: paged.total, // IGDB 기준 개수(첫 요청만)
           igdbDone: !igdbHasMore,
-          hasMoreFull: igdbHasMore || (gracTo === 'full' && gracHasMore),
+          hasMoreFull: igdbHasMore || (gracTo === 'full' && (gracHasMore || (gracLate && !grac))),
           hasMorePartial: gracTo === 'partial' && gracHasMore,
           next: { offset: paged.skipped ? offset : paged.nextOffset, goffset: grac?.nextOffset ?? goffset },
         });
       }
       const { games: listed, warnings } = pool ?? (await catalog.listGames(criteria));
       const games = [...await submissions.approvedGames(), ...listed];
-      const { fullMatches, partialMatches } = recommend((await decorate(games, user)).filter(listable), criteria);
+      const found = recommend((await decorate(games, user)).filter(listable), criteria);
+      const fullMatches = sortResults(found.fullMatches, order);
+      const partialMatches = sortResults(found.partialMatches, order, { byMatch: true });
       if (paged?.failed) warnings.unshift(`IGDB 전체 검색에 실패해 (${paged.failed.message}) 인기 게임 후보 안에서만 찾았어요.`);
-      return sendJson(res, 200, { meta: meta(), warnings, criteria, paged: false, totalGames: games.length, fullMatches: more ? [] : fullMatches, partialMatches: more ? [] : partialMatches });
+      return sendJson(res, 200, { meta: meta(), warnings, criteria, order, paged: false, totalGames: games.length, fullMatches: more ? [] : fullMatches, partialMatches: more ? [] : partialMatches });
     }
 
     if (p === '/api/featured') {
