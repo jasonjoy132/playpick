@@ -548,6 +548,11 @@ export function createIgdbProvider(cfg, { fetchImpl = globalThis.fetch, now = ()
       cache.set(key, { at: now(), value });
       return value;
     },
+    /** 스크립트용: 이름에 이 낱말이 들어간 본편 게임(최근 출시 순, 최대 500개) — 해마다 나오는 스포츠 게임 찾기 */
+    async listNamed(word, limit = 500) {
+      const rows = await query('games', `fields ${GAME_FIELDS}; where name ~ *${quote(word)}* & ${MAIN_ONLY.join(' & ')}; sort first_release_date desc; limit ${limit};`, { timeoutMs: 45_000 });
+      return rows.filter(isMainGame).map((r) => mark(igdbToGame(r)));
+    },
     /** 추천 인원 미리 정리용: 평가 수가 많은 순으로 본편 게임 목록 */
     async listPopular({ offset = 0, limit = 500, minRatings = 1 } = {}) {
       const w = `${MAIN_ONLY.join(' & ')} & total_rating_count >= ${Math.max(0, Number(minRatings) || 0)}`;

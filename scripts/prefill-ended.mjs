@@ -16,6 +16,8 @@
 //      (--limit N 으로 앞에서부터 N개만 — 게임위 등급 게임 → 인기순)
 //   npm run prefill:ended -- --model gemini-flash-latest   더 큰 모델로(느리지만 더 많이 앎)
 //   npm run prefill:ended -- --only grac           ①만 (grac | popular | online)
+//   npm run prefill:ended -- --sports              해마다 나오는 스포츠 게임(피파·PES·NBA 2K·매든·NHL·MLB·F1·WWE 등)의 옛 판:
+//      공식 온라인 서비스가 끝났는지 따로 묻기 → 끝났으면 오프라인이 돼도 서비스 종료로 숨김(partySize.isAnnualSports)
 //
 // - 이미 같은 모델로 물어본 게임은 건너뛰므로 중간에 꺼도(Ctrl+C) 다시 실행하면 이어서 합니다.
 // - ⚠ npm run prefill:players 와 동시에 돌리지 마세요(같은 파일을 써서 한쪽 결과가 덮일 수 있음).
@@ -23,7 +25,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getConfig } from '../server/config.js';
 import { createIgdbProvider, titleVariants } from '../server/providers/igdbProvider.js';
-import { createPartySize, mayEnd } from '../server/services/partySize.js';
+import { createPartySize, isAnnualSports, mayEnd } from '../server/services/partySize.js';
 
 const args = process.argv.slice(2);
 const opt = (name, d) => {
@@ -50,6 +52,9 @@ const PARALLEL = Math.min(Math.max(Number(opt('parallel', BIG ? 2 : 3)), 1), 10)
 const RPM = Math.max(Number(opt('rpm', BIG ? 5 : 15)), 1);
 const TIMEOUT_MS = Math.max(Number(opt('timeout', BIG ? 180 : 90)), 10) * 1000;
 const want = (k) => !ONLY || ONLY === k;
+const SPORTS = opt('sports', false) === true;
+// 스포츠 시리즈 이름(IGDB에서 이 낱말이 들어간 게임을 찾은 뒤 isAnnualSports 로 한 해 판만 고름)
+const SPORTS_WORDS = ['FIFA', 'EA Sports FC', 'Pro Evolution Soccer', 'PES', 'Winning Eleven', 'NBA 2K', 'NBA Live', 'Madden NFL', 'NHL', 'MLB', 'F1 ', 'WWE', 'NCAA Football', 'PGA Tour'];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const config = getConfig();
@@ -63,6 +68,52 @@ if (!igdb.configured) {
 if (!ps.configured && !DRY && !EXPORT) {
   console.log('❌ .env 에 GEMINI_API_KEY 가 없습니다. (--dry 로 개수만 볼 수는 있어요)');
   process.exit(1);
+}
+
+if (SPORTS) {
+  const list = new Map();
+  for (const w of SPORTS_WORDS) {
+    try {
+      for (const g of await igdb.listNamed(w)) if (isAnnualSports(g) && !list.has(g.id)) list.set(g.id, g);
+    } catch (e) {
+      console.log(`⚠ IGDB 조회 실패(${w}): ${e.message}`);
+    }
+  }
+  // 게관위 카드(IGDB에 없는 'XBOX 360_FIFA 16 (피파 16)' 같은 항목)도 같은 기준으로
+  const { createGracIndex } = await import('../server/providers/gracIndex.js');
+  const { createGracProvider } = await import('../server/providers/gracProvider.js');
+  const index = createGracIndex({ grac: createGracProvider(config.grac), cacheFile: config.grac.indexFile, seedFile: config.grac.indexSeed, log: () => {} });
+  if (index.snapshot().status !== 'ready') await index.ensure();
+  const gracGames = (index.snapshot().games ?? []).filter((g) => isAnnualSports(g) && !ps.applyCached([g])[0].aiEnded);
+  const games = [...list.values(), ...gracGames];
+  const todo = games.filter((g) => ps.needsSportsCheck(g)).slice(0, LIMIT);
+  console.log(`해마다 나오는 스포츠 게임 ${games.length}개 중 물어볼 게임 ${todo.length}개`);
+  if (DRY || !todo.length) process.exit(0);
+  const sum = { ended: 0, alive: 0, unknown: 0 };
+  for (let i = 0; i < todo.length; i += 40) {
+    const batch = todo.slice(i, i + 40);
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const r = await ps.askSportsBatch(batch);
+        sum.ended += r.ended;
+        sum.alive += r.alive;
+        sum.unknown += r.unknown;
+        break;
+      } catch (e) {
+        if (attempt >= 4) {
+          console.log(`⚠ ${e.message} — 이 묶음은 건너뜀(다시 실행하면 이어서)`);
+          break;
+        }
+        console.log(`⏳ ${e.message} — 20초 쉬었다 다시`);
+        await sleep(20_000);
+      }
+    }
+    console.log(`[${Math.min(i + 40, todo.length)}/${todo.length}] 온라인 서비스 종료 ${sum.ended}개(숨김) · 서비스 중 ${sum.alive}개 · 모름 ${sum.unknown}개`);
+    await sleep(4000);
+  }
+  console.log(`
+✅ 끝 → ${config.gemini.dataFile} (서버가 켜져 있으면 30초 안에 다시 읽음)`);
+  process.exit(0);
 }
 
 // 훑은 후보는 파일에 저장해 두고, 같은 옵션으로 24시간 안에 다시 실행하면 IGDB를 다시 훑지 않음 (--rescan 이면 다시 훑기)

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createPartySize, sanitize, buildPrompt, cacheKey } from '../server/services/partySize.js';
+import { createPartySize, sanitize, buildPrompt, cacheKey, isAnnualSports } from '../server/services/partySize.js';
 import { gracItemToGame } from '../server/providers/gracProvider.js';
 import { recommendFromIgdb } from '../server/providers/igdbProvider.js';
 import { evaluateGame } from '../server/services/recommend.js';
@@ -442,4 +442,27 @@ test('서비스 종료 확인 대상: 모드 정보 없는 PC·모바일 IGDB �
   assert.equal(ps.needsExternalEndedCheck(online(11)), false, '이미 종료로 숨김');
   assert.equal(ps.needsExternalEndedCheck(online(12)), false, '외부 AI가 이미 확인');
   assert.equal(ps.needsExternalEndedCheck(online(13)), true, '아직 안 물어본 게임');
+});
+
+test('해마다 나오는 스포츠 게임: 온라인 서비스가 끝난 옛 판은 오프라인이 돼도 서비스 종료로 숨김', async () => {
+  for (const t of ['FIFA 14', 'FIFA Soccer 13', 'EA Sports FC 24', 'Pro Evolution Soccer 2019', 'NBA 2K16', 'Madden NFL 20', 'F1 2019', 'WWE 2K18', 'XBOX 360_FIFA 16 (피파 16)', '[PC] EA SPORTS™ FIFA 20 (이에이 스포츠 피파 20)', '피파 매니저11']) assert.equal(isAnnualSports({ title: t }), true, t);
+  for (const t of ['FIFA Online 4', 'FIFA Mobile', '피파온라인4(FIFA ONLINE4)', '피파 모바일', 'Mario Kart Wii', 'Football Manager 2014', 'Rocket League']) assert.equal(isAnnualSports({ title: t }), false, t);
+  const old = big(1, 'FIFA 14');
+  const now = big(2, 'EA Sports FC 26');
+  const unsure = big(3, 'NHL 19');
+  const other = big(4, 'Mario Kart Wii');
+  const calls = [];
+  const ps = createPartySize({ apiKey: 'K' }, { fetchImpl: gemini(() => [{ id: 1, ended: true }, { id: 2, ended: false }, { id: 3, ended: null }], calls) });
+  assert.equal(ps.needsSportsCheck(other), false, '스포츠 시리즈가 아니면 묻지 않음');
+  const todo = [old, now, unsure].filter((g) => ps.needsSportsCheck(g));
+  assert.equal(todo.length, 3);
+  const r = await ps.askSportsBatch(todo);
+  assert.deepEqual([r.ended, r.alive, r.unknown], [1, 1, 1]);
+  assert.match(JSON.parse(calls[0].init.body).contents[0].parts[0].text, /online services/);
+  const [a, b, c] = ps.applyCached([old, now, unsure]);
+  assert.equal(a.aiEnded, true, '서버 닫힌 옛 판은 숨김');
+  assert.equal(b.aiEnded, undefined);
+  assert.equal(c.aiEnded, undefined, '모르면 숨기지 않음');
+  assert.equal(ps.needsSportsCheck(old), false, '답을 받았으면 다시 묻지 않음');
+  assert.equal(ps.needsSportsCheck(unsure), false, '같은 모델로 모름을 다시 묻지 않음');
 });

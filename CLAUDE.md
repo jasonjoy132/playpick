@@ -45,6 +45,7 @@
 | `npm run prefill:players -- [--igdb N] [--grac N] [--recheck] [--recheck-unknown] [--model M]` | AI 추천 인원·플레이 시간·게관위 서비스 상태 미리 저장 |
 | `npm run prefill:players -- --grac-players [N]` | 화면에 보이는 게관위 게임에 **추천 인원만** 물어 채움(상태·플레이 시간 그대로). AI가 그 게임을 안다고(`known: true`) 할 때만 저장, 아니면 '모름' |
 | `npm run prefill:ended -- [--igdb N] [--online N] [--only grac\|popular\|online] [--export] [--rescan]` | IGDB 게임 서비스 종료 여부 AI 확인(후보는 `.cache/ended-candidates.json`에 24시간 저장) |
+| `npm run prefill:ended -- --sports [--dry]` | 해마다 나오는 스포츠 게임 옛 판의 **공식 온라인 서비스 종료** 여부 AI 확인(IGDB+게관위) → `sportsEnded`, 종료면 숨김 |
 | `npm run prefill:ended -- --export --recheck-alive [--limit N]` | **서버가 필요한 온라인 게임**(MMO·배틀로얄·멀티 전용, 모드·플랫폼 정보 없는 PC·모바일) 중 외부 AI로 아직 확인 안 한 게임을 다시 내보냄(Gemini가 '서비스 중'이라 한 것 포함 — 최근 종료는 Gemini가 모름). 웹 검색 AI → `import:status` |
 | `npm run prefill:images` | 게관위 모바일 게임 App Store 아이콘·스크린샷 저장 |
 | `npm run prefill:playtime -- [--limit N] [--pages N] [--dry] [--retry]` | RAWG 평균 플레이 시간 저장(인기·랭킹·신작·장르별 IGDB 게임, 기본 500개). RAWG 월 2만 건·게임당 최대 2건 |
@@ -73,6 +74,7 @@
 
 ### 목록에서 숨기는 규칙 (`server/app.js`의 `listable`)
 - AI가 서비스 종료로 판단(`aiEnded`) 또는 회원 서비스 종료 제보 승인(`userEnded`) → 숨김
+- **해마다 나오는 스포츠 게임(피파·PES·NBA 2K·매든·NHL·MLB·F1·WWE 등)의 옛 판**은 공식 온라인 서비스가 끝났으면 오프라인이 돼도 서비스 종료로 숨김(사용자 요청 2026-11-14, 피파 12·13·14 등). 제목으로 고르고(`partySize.isAnnualSports`, 게관위식 `XBOX 360_FIFA 16 (피파 16)`도) AI 판단은 `party-size.json`의 `sportsEnded` — `npm run prefill:ended -- --sports`(IGDB+게관위, 새 판이 나오면 다시 돌리기). 피파 온라인·모바일처럼 계속 서비스하는 게임은 해당 없음
 - 게관위 게임: '출시 예정'은 출시 예정 목록에만. 기본으로 **AI가 '서비스 중'이라 했거나 App Store에 있을 때만** 보임(`HIDE_UNKNOWN_GRAC=off`면 '모름'도 보임). AI 데이터 파일이 없으면 숨기지 않음
 - **아케이드 전용 게임(오락실·인형뽑기 기계) 숨김** — 사이트 목적(친구와 같이 할 게임)과 안 맞음. 플랫폼이 아케이드뿐일 때만(`taxonomy.isArcadeOnly`). 단 IGDB 본편이 오락실판인 고전 게임(철권 3·팩맨 등)은 가정용판(이식판·확장판·리마스터) 플랫폼을 `homePlatforms`로 붙여 보여 줌(`igdbToGame`, 평가 있는 아케이드 전용 181개 중 110개). 아케이드는 플랫폼 선택지·제보에서도 뺌(`hidden: true`), 예전 링크의 `platforms=arcade`는 조용히 무시
 - **교육용 앱(게관위 장르 '교육용')·체험판(제목에 체험판·(Demo) 등)도 숨김** — `taxonomy.isOffTopic`(아케이드 전용 포함)으로 한 번에 판단

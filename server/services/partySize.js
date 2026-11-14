@@ -135,6 +135,64 @@ export function buildEndedPrompt(games, today = new Date().toISOString().slice(0
 }
 
 /**
+ * 해마다 새 판이 나오는 스포츠 게임(피파·PES·NBA 2K·매든·NHL·MLB·F1·WWE 등)의 한 해 판인지 — 제목으로 판단
+ * 이런 게임은 옛 판의 온라인 서버를 닫고 새 판으로 옮기므로, 서버가 닫힌 옛 판은 '서비스 종료'로 봄(사용자 요청 2026-11-14)
+ * 피파 온라인·모바일처럼 계속 서비스하는 게임은 해당 없음(일반 종료 확인으로)
+ */
+const ANNUAL_SPORTS = [
+  /^FIFA(\s+(Soccer|Football))?\s+(\d{2}|\d{4})\b/i,
+  /^EA\s+Sports\s+FC\s+\d{2}\b/i,
+  /^(Pro\s+Evolution\s+Soccer|PES|(World\s+Soccer\s+)?Winning\s+Eleven)\s+\d{1,4}\b/i,
+  /^eFootball\s+PES\s+20\d\d\b/i,
+  /^NBA\s+(2K\d{1,2}|Live\s+\d{2,4})\b/i,
+  /^Madden\s+NFL\s+\d{2,4}\b/i,
+  /^NHL\s+\d{2,4}\b/i,
+  /^MLB\s+(The\s+Show\s+)?\d{2}\b/i,
+  /^F1\s+(20\d\d|\d{2})\b/i,
+  /^WWE\s+(2K\d{2}|SmackDown\s+vs\.?\s+Raw\s+20\d\d)\b/i,
+  /^NCAA\s+Football\s+\d{2}\b/i,
+  /^(Tiger\s+Woods\s+)?PGA\s+Tour\s+\d{2,4}\b/i,
+  /^FIFA\s*:?\s*Road\s+to\s+World\s+Cup\b/i,
+  /^FIFA\s+(Manager\s*\d{2}|Street\b)/i,
+  /^피파\s*(\d{2}|매니저\s*\d{2}|스트리트)/,
+];
+/**
+ * 비교할 이름들: 원래 이름 + 게관위식 표기 정리('[PC] EA SPORTS™ FIFA 20 (이에이 스포츠 피파 20)', 'XBOX 360_FIFA 16 (피파 16)')
+ * → 'FIFA 20', '피파 20', 'FIFA 16' 처럼 플랫폼 머리말·EA SPORTS 표기를 떼고 괄호 안팎을 따로
+ */
+function sportsNames(g) {
+  const out = [];
+  for (const raw of [g?.originalTitle, g?.title].filter(Boolean)) {
+    const t = String(raw).trim();
+    out.push(t);
+    const base = t
+      .replace(/^\[[^\]]*\]\s*/, '') // [PC]
+      .replace(/^[A-Za-z0-9 ]{2,20}_/, ''); // XBOX 360_
+    const inside = [...base.matchAll(/\(([^)]*)\)/g)].map((m) => m[1]);
+    for (const part of [base.replace(/\s*\([^)]*\)\s*/g, ' '), ...inside]) out.push(part.replace(/^(EA\s*SPORTS™?|이에이\s*스포츠)\s*/i, '').trim());
+  }
+  return out.filter(Boolean);
+}
+export function isAnnualSports(g) {
+  return sportsNames(g).some((n) => ANNUAL_SPORTS.some((re) => re.test(n)));
+}
+
+/** 해마다 나오는 스포츠 게임: 공식 온라인 서비스(서버)가 끝났는지 묻는 프롬프트 */
+export function buildSportsEndedPrompt(games, today = new Date().toISOString().slice(0, 10)) {
+  const lines = games.map((g, i) => JSON.stringify({ id: i + 1, name: g.originalTitle || g.title, year: g.firstYear ?? null, platforms: g.platformsRaw ?? null, publisher: g.publisher ?? null }));
+  return [
+    `Today is ${today}. Each video game below is one yearly edition of an annual sports series (e.g. FIFA, PES, NBA 2K, Madden NFL).`,
+    'For each, tell whether the publisher has officially shut down its online services / servers (e.g. an EA or 2K "server shutdown" / "online service retirement" announcement that has already taken effect).',
+    '- ended: true ONLY if you know the official online services for THIS edition (on all its platforms) have already been shut down, even if offline modes still work.',
+    '- ended: false if you know its online services are still running today.',
+    '- ended: null if you are not sure. When in doubt, return null. Do not guess from the year alone.',
+    'Return a JSON array with one object {id, ended} per game, using the same id.',
+    '',
+    ...lines,
+  ].join('\n');
+}
+
+/**
  * 추천 인원만 묻는 프롬프트 (이미 상태·플레이 시간은 받아 둔 게임위 게임에 인원만 채울 때)
  * 작은 국내 게임은 AI가 모르는 경우가 많으므로 '모르면 null'을 강하게 지시
  */
@@ -246,7 +304,8 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
   async function ask(games, { pauseOnQuota = true, mode = 'full' } = {}) {
     const useModel = model; // 묻는 도중 모델이 바뀌어도 이 요청은 같은 모델로 기록
     const statusOnly = mode === 'status';
-    const endedOnly = mode === 'ended';
+    const sportsOnly = mode === 'sports';
+    const endedOnly = mode === 'ended' || sportsOnly;
     const playersOnly = mode === 'players';
     const schemaItem = playersOnly
       ? { type: 'OBJECT', properties: { id: { type: 'INTEGER' }, known: { type: 'BOOLEAN' }, min: { type: 'INTEGER', nullable: true }, max: { type: 'INTEGER', nullable: true } }, required: ['id', 'known', 'min', 'max'] }
@@ -277,7 +336,7 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': cfg.apiKey },
           body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: playersOnly ? buildPlayersPrompt(games) : statusOnly ? buildStatusPrompt(games) : endedOnly ? buildEndedPrompt(games) : buildPrompt(games) }] }],
+            contents: [{ role: 'user', parts: [{ text: playersOnly ? buildPlayersPrompt(games) : statusOnly ? buildStatusPrompt(games) : sportsOnly ? buildSportsEndedPrompt(games) : endedOnly ? buildEndedPrompt(games) : buildPrompt(games) }] }],
             generationConfig: {
               temperature: 0,
               ...(thinkingConfig ? { thinkingConfig } : {}),
@@ -338,6 +397,21 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
       }
       save();
       return { known, unknown: games.length - known };
+    }
+    if (sportsOnly) {
+      // 해마다 나오는 스포츠 게임: 온라인 서버 종료 여부만(따로 저장 — 일반 종료 판단과 섞지 않음)
+      const count = { ended: 0, alive: 0, unknown: 0 };
+      for (const [i, g] of games.entries()) {
+        const v = byId.get(i + 1)?.ended;
+        const ended = v === true ? true : v === false ? false : null;
+        count[ended === true ? 'ended' : ended === false ? 'alive' : 'unknown']++;
+        const k = cacheKey(g);
+        const prev = cache.get(k) ?? {};
+        cache.set(k, { ...prev, sportsEnded: ended, sportsModels: [...new Set([...(prev.sportsModels ?? []), useModel])], sportsDate: day, ...(prev.at ? {} : { at: now() }) });
+        dirty = true;
+      }
+      save();
+      return { ...count, endedCount: count.ended };
     }
     if (endedOnly) {
       // IGDB 게임 서비스 종료 여부만: 기존 항목(인원·플레이 시간)은 그대로
@@ -413,6 +487,8 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
     let out = game;
     if (e?.hours) out = { ...out, aiPlaytime: e.hours };
     if (e?.ended === true) out = { ...out, aiEnded: true }; // AI가 서비스 종료로 판단 → 목록·검색에서 숨김
+    // 해마다 나오는 스포츠 게임의 옛 판: 공식 온라인 서비스가 끝났으면 오프라인이 돼도 서비스 종료로 봄(피파 14 등)
+    if (e?.sportsEnded === true && isAnnualSports(game)) out = { ...out, aiEnded: true };
     if (game.source === GRAC && e?.status === 'upcoming') out = { ...out, aiUpcoming: true }; // 출시 예정 목록으로
     if (game.source === GRAC && e?.status === 'released' && e.ended !== true) out = { ...out, aiAlive: true }; // AI가 지금도 서비스 중이라고 판단
     if (game.source === GRAC && e?.newGame) {
@@ -537,6 +613,15 @@ export function createPartySize(cfg = {}, { fetchImpl = globalThis.fetch, now = 
       if (tried.includes(model) || tried.includes('external')) return false; // 이 모델·외부 AI로 이미 확인
       return e.ended == null; // 다른 모델이 이미 종료/서비스 중으로 판단했으면 다시 묻지 않음(모름만 다시)
     },
+    /** 해마다 나오는 스포츠 게임 온라인 서비스 종료 확인 대상: 이 모델로 아직 안 물었고, 아직 답(종료/서비스 중)이 없는 게임 */
+    needsSportsCheck: (g) => {
+      if ((g.source !== 'IGDB' && g.source !== GRAC) || g.hidden || !isAnnualSports(g)) return false;
+      const e = cache.get(cacheKey(g));
+      if (e?.sportsEnded === true || e?.sportsEnded === false) return false;
+      return !(e?.sportsModels ?? []).includes(model);
+    },
+    /** 스포츠 게임 온라인 서비스 종료만 묻기(스크립트용) */
+    askSportsBatch: (games) => ask(games, { pauseOnQuota: false, mode: 'sports' }),
     /** 서비스 종료 여부만 묻기(스크립트용) */
     askEndedBatch: (games) => ask(games, { pauseOnQuota: false, mode: 'ended' }),
     /** 상태만 다시 묻기(스크립트용) */
