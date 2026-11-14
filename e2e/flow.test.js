@@ -317,6 +317,56 @@ test('홈: 첫 화면 큰 그림·인기 1위는 트레일러가 소리 없이 �
   }
 });
 
+test('홈: Steam 공식 트레일러가 있으면 YouTube 대신 <video>로 바로 재생, 못 틀면 YouTube로', async () => {
+  const { GUIDE_SAMPLE } = await import('../test/fixtures.js');
+  const games = [301, 302, 303, 304, 305, 306, 307].map((id, i) => ({
+    id, name: `Steam Game ${id}`, total_rating_count: 100 - i,
+    genres: [{ id: 10, name: 'Puzzle' }], platforms: [{ id: 6, name: 'PC (Microsoft Windows)' }],
+    game_modes: [{ name: 'Multiplayer' }], multiplayer_modes: [{ offlinemax: 4 }],
+    cover: { url: '//images.igdb.com/igdb/image/upload/t_thumb/c.jpg' },
+    screenshots: [{ url: '//images.igdb.com/igdb/image/upload/t_thumb/s.jpg' }],
+    videos: [{ video_id: `yt${id}abcdefg`.slice(0, 11), name: 'Trailer' }],
+    websites: [{ url: `https://store.steampowered.com/app/${id}/`, trusted: true }],
+  }));
+  const reply = (body) => ({ ok: true, status: 200, json: async () => body, text: async () => body });
+  const fetchImpl = async (url) => {
+    const u = String(url);
+    if (u.includes('grac.or.kr')) return reply(u.includes('gametitle') ? '<result><tcount>0</tcount><pageno>1</pageno></result>' : GUIDE_SAMPLE);
+    if (u.includes('oauth2/token')) return reply({ access_token: 't', expires_in: 3600 });
+    if (u.endsWith('/genres')) return reply([{ id: 10, name: 'Puzzle' }]);
+    if (u.endsWith('/platforms')) return reply([{ id: 6, name: 'PC (Microsoft Windows)' }]);
+    if (u.endsWith('/games')) return reply(games);
+    if (u.includes('store.steampowered.com/api/appdetails')) {
+      const app = new URL(u).searchParams.get('appids');
+      return reply({ [app]: { success: true, data: { movies: [{ name: 'Launch Trailer', hls_h264: `https://video.akamai.steamstatic.com/store_trailers/${app}/1/a/1/hls_264_master.m3u8` }] } } });
+    }
+    throw new Error(u);
+  };
+  const live = createApp({ ...getConfig(), dataSource: 'live', dbFile: ':memory:', igdb: { clientId: 'id', clientSecret: 'secret' } }, { fetchImpl });
+  await new Promise((r) => live.listen(0, r));
+  const page = await browser.newPage();
+  try {
+    await page.route(/youtube|ytimg|images\.igdb/, (r) => r.abort());
+    // Steam 영상은 잠깐 뒤 실패 → 그 사이엔 <video>, 실패하면 YouTube로 바뀜
+    await page.route(/steamstatic/, async (r) => {
+      await new Promise((res) => setTimeout(res, 1500));
+      await r.abort();
+    });
+    await page.goto(`http://127.0.0.1:${live.address().port}/`);
+    const hero = page.locator('.hero-full');
+    const video = hero.locator('video[data-testid="hero-trailer"]');
+    await video.waitFor({ state: 'attached' });
+    assert.equal(await video.getAttribute('data-source'), 'steam');
+    assert.match(await video.getAttribute('src'), /^https:\/\/video\.akamai\.steamstatic\.com\/store_trailers\/30\d\/.+\.m3u8$/);
+    assert.equal(await video.evaluate((v) => v.muted && v.autoplay && v.playsInline), true, '소리 없이 자동 재생');
+    await hero.locator('iframe[data-testid="hero-trailer"]').waitFor({ state: 'attached', timeout: 8000 });
+    assert.equal(await video.count(), 0, '못 틀면 YouTube로');
+  } finally {
+    await page.close();
+    live.close();
+  }
+});
+
 test('결과가 많으면 24개씩 더 보기', async () => {
   const page = await browser.newPage();
   const many = Array.from({ length: 30 }, (_, i) => ({

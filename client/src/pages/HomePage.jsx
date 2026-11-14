@@ -13,7 +13,7 @@ import { useAuth } from '../lib/auth.jsx';
 import { HomeContributors } from '../components/Contributors.jsx';
 import { Cover } from '../components/Cover.jsx';
 import { shortPlayers } from '../lib/format.js';
-import { BackdropTrailer, TrailerPeekProvider, usePeek } from '../components/TrailerPeek.jsx';
+import { BackdropTrailer, TrailerPeekProvider, canHls, usePeek } from '../components/TrailerPeek.jsx';
 
 const POPULAR_COUNT = 6; // 인기 게임: 1위 큰 그림 + 2~6위 목록
 
@@ -22,13 +22,15 @@ const VISIT_SEED = Math.random();
 
 /**
  * 첫 화면 큰 그림으로 쓸 게임: 인기 게임 30개 중 실제 게임 장면(IGDB 스크린샷, 없으면 아트워크)이 있는 게임 가운데
- * 접속할 때마다 무작위로 하나(트레일러 있는 게임 먼저). 아래 인기 순위 띠와 겹쳐도 됨(사용자 요청 2026-11-14)
+ * 접속할 때마다 무작위로 하나. 바로 재생되는 Steam 공식 트레일러가 있는 게임 먼저(브라우저가 재생할 수 있을 때), 다음은 YouTube 트레일러.
+ * 아래 인기 순위 띠와 겹쳐도 됨(사용자 요청 2026-11-14)
  */
 function pickFeature(games) {
   const artOf = (g) => g.screenshots?.[0] ?? g.bannerUrl ?? null; // 아트워크는 로고 글자만 큰 그림이 많아 장면 사진을 먼저
   const withArt = games.filter(artOf).map((g) => ({ ...g, heroArt: artOf(g) }));
+  const instant = canHls() ? withArt.filter((g) => g.steamTrailer?.hls) : [];
   const withTrailer = withArt.filter((g) => g.trailer?.youtubeId);
-  const pool = withTrailer.length ? withTrailer : withArt;
+  const pool = instant.length ? instant : withTrailer.length ? withTrailer : withArt;
   return pool.length ? pool[Math.floor(VISIT_SEED * pool.length)] : null;
 }
 /** 게임의 가로 그림(장면 스크린샷 먼저, 없으면 아트워크) */

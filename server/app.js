@@ -27,6 +27,7 @@ import { createAiPlayers, canAskPlayers } from './services/aiPlayers.js';
 import { createPartySize } from './services/partySize.js';
 import { createAppStoreProvider } from './providers/appStoreProvider.js';
 import { createGracNew, overlayEntries } from './services/gracNew.js';
+import { createSteamTrailers } from './services/steamTrailer.js';
 import { cached } from './community/cached.js';
 import { createAppArt, pickArt } from './services/appArt.js';
 
@@ -92,6 +93,8 @@ export function createApp(config, deps = {}) {
   const partySize = deps.partySize ?? createPartySize(config.gemini ?? {}, { ...deps, log: (m) => console.log(m) });
   const appArt = deps.appArt ?? createAppArt(config.appStore?.artFile ?? null);
   const appStore = deps.appStore ?? createAppStoreProvider(config.appStore ?? { enabled: config.dataSource === 'live' }, deps);
+  // 홈 배경용 Steam 공식 트레일러(영상 파일) — live 모드만
+  const steamTrailers = deps.steamTrailers ?? (config.dataSource === 'live' ? createSteamTrailers({ fetchImpl: deps.steamFetch ?? deps.fetchImpl ?? globalThis.fetch }) : null);
   // 회원 DB: 테스트는 메모리, 배포는 Turso(TURSO_DATABASE_URL), 로컬은 파일(.data/playpick.db)
   const dbTarget = config.dbFile === ':memory:' || !config.dbFile ? config.dbFile ?? ':memory:' : config.turso?.url || config.dbFile;
   const db = deps.db ?? openDb(dbTarget, { authToken: config.turso?.authToken });
@@ -780,7 +783,9 @@ const SLIDES = 5;
       const { games: all, warnings } = await catalog.featured();
       const games = partySize.applyCached(all).filter((g) => listable(appArt.apply(g))); // 서비스 종료·출시 예정·상태 모름(게임위) 빼기
       const slides = await withKoreanSummaries(translator, games.slice(0, SLIDES));
-      return sendJson(res, 200, { meta: meta(), games: await decorate([...slides, ...games.slice(SLIDES)], user), slideCount: Math.min(SLIDES, games.length), warnings });
+      let out = [...slides, ...games.slice(SLIDES)];
+      if (steamTrailers) out = await steamTrailers.attach(out); // 홈 배경을 바로 재생할 Steam 트레일러
+      return sendJson(res, 200, { meta: meta(), games: await decorate(out, user), slideCount: Math.min(SLIDES, games.length), warnings });
     }
 
     // ── 메뉴별 목록 ──

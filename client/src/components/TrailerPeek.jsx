@@ -157,31 +157,42 @@ const PRELOAD_MARGIN = '200% 0px';
 const motionOk = () =>
   typeof matchMedia !== 'undefined' && !matchMedia('(prefers-reduced-motion: reduce)').matches && !(typeof navigator !== 'undefined' && navigator.connection?.saveData);
 
+/** Steam 트레일러 앞부분(등급 안내·회사 로고)을 건너뛸 시작 위치(초): 40초 넘는 영상은 12초부터, 짧으면 앞 20% 뒤부터 */
+const startAt = (duration) => (Number.isFinite(duration) && duration > 0 ? (duration > 40 ? 12 : duration * 0.2) : 0);
+
+/** 이 브라우저가 HLS 영상(Steam 트레일러)을 그냥 재생할 수 있는지 — Chrome·Edge·Safari는 됨, Firefox는 안 됨(→ YouTube) */
+export const canHls = () => typeof document !== 'undefined' && document.createElement('video').canPlayType('application/vnd.apple.mpegurl') !== '';
+
 /**
- * 배경 트레일러 (홈 첫 화면 큰 그림·인기 1위): 화면 가까이 있는 동안만 소리 없이 반복 재생, 멀어지면 멈춤(iframe 지움).
- * 조작(멈춤·소리) 없이 사진 자리에서 그냥 움직이는 그림처럼 보임
- * 실제로 재생이 시작되고(YouTube가 알려 주는 상태 1) YouTube 단추가 사라진 뒤(REVEAL_AFTER) 사진 위로 영상이 나타남.
- * 화면 가까이 오면 미리 불러 둠(PRELOAD_MARGIN). 제목 줄·로고는 영상을 크게 키워 위아래를 잘라 가림(styles.css .backdrop-video)
- * → 자동 재생이 막히거나(일부 휴대폰) 재생 못 하는 영상이면 YouTube 화면 대신 사진이 그대로 보임
+ * 배경 트레일러 (홈 첫 화면 큰 그림·인기 1위): 화면 가까이 있는 동안만 소리 없이 반복 재생, 멀어지면 멈춤(영상 지움).
+ * 조작(멈춤·소리) 없이 사진 자리에서 그냥 움직이는 그림처럼 보임. 화면 가까이 오면 미리 불러 둠(PRELOAD_MARGIN)
+ * 1) Steam 공식 트레일러(game.steamTrailer.hls)가 있고 브라우저가 HLS를 재생하면 <video>로 — YouTube 단추가 없어 재생되자마자 보임.
+ *    앞부분 등급 안내·로고는 건너뛰고 중간부터(startAt), 끝나면 다시 그 자리부터 반복
+ * 2) 아니면(또는 Steam 영상 오류면) YouTube: 재생이 시작되고(상태 1) YouTube 단추가 사라진 뒤(REVEAL_AFTER) 사진 위로.
+ *    제목 줄·로고는 영상을 크게 키워 위아래를 잘라 가림(styles.css .backdrop-video)
+ * → 자동 재생이 막히거나(일부 휴대폰) 재생 못 하는 영상이면 사진이 그대로 보임
  */
 export function BackdropTrailer({ game, testId = 'lead-trailer' }) {
   const box = useRef(null);
   const frame = useRef(null);
   const [inView, setInView] = useState(false);
   const [ready, setReady] = useState(false);
-  const yt = game?.trailer?.youtubeId;
+  const [steamFailed, setSteamFailed] = useState(false);
+  const hls = !steamFailed && game?.steamTrailer?.hls && canHls() ? game.steamTrailer.hls : null;
+  const yt = hls ? null : game?.trailer?.youtubeId;
+  const has = Boolean(hls || yt);
   useEffect(() => {
     const el = box.current;
-    if (!el || !yt || !motionOk() || typeof IntersectionObserver === 'undefined') return undefined;
+    if (!el || !has || !motionOk() || typeof IntersectionObserver === 'undefined') return undefined;
     const io = new IntersectionObserver(([e]) => {
       setInView(e.isIntersecting);
       if (!e.isIntersecting) setReady(false);
     }, { rootMargin: PRELOAD_MARGIN });
     io.observe(el);
     return () => io.disconnect();
-  }, [yt]);
+  }, [has]);
   useEffect(() => {
-    if (!inView) return undefined;
+    if (!inView || !yt) return undefined;
     // 플레이어가 준비될 때까지 '듣고 있어요'를 거듭 보냄(처음 한 번은 놓치는 일이 많음) → 답이 오면 멈춤
     const say = () => frame.current?.contentWindow?.postMessage(JSON.stringify({ event: 'listening', id: 'lead' }), YT_ORIGIN);
     const hello = setInterval(say, 200);
@@ -203,25 +214,53 @@ export function BackdropTrailer({ game, testId = 'lead-trailer' }) {
       clearInterval(hello);
       clearTimeout(timer);
     };
-  }, [inView]);
-  if (!yt) return null;
+  }, [inView, yt]);
+  if (!has) return null;
+  if (hls) {
+    return (
+      <div className="backdrop-video" ref={box} aria-hidden="true">
+        {inView && (
+          <video
+            src={hls}
+            muted
+            autoPlay
+            playsInline
+            preload="auto"
+            disablePictureInPicture
+            tabIndex={-1}
+            className={ready ? 'is-ready' : ''}
+            onLoadedMetadata={(e) => (e.currentTarget.currentTime = startAt(e.currentTarget.duration))}
+            onEnded={(e) => {
+              // 반복도 앞부분을 건너뛰고 (loop 속성은 0초로 돌아가 등급 안내가 다시 보임)
+              e.currentTarget.currentTime = startAt(e.currentTarget.duration);
+              e.currentTarget.play().catch(() => {});
+            }}
+            onPlaying={() => setReady(true)}
+            onError={() => setSteamFailed(true)}
+            data-testid={testId}
+            data-source="steam"
+          />
+        )}
+      </div>
+    );
+  }
   const id = encodeURIComponent(yt);
   const origin = typeof location !== 'undefined' ? encodeURIComponent(location.origin) : '';
   const src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&controls=0&rel=0&playsinline=1&loop=1&playlist=${id}&disablekb=1&iv_load_policy=3&enablejsapi=1&origin=${origin}`;
   return (
     <div className="backdrop-video" ref={box} aria-hidden="true">
-        {inView && (
-          <iframe
-            ref={frame}
-            src={src}
-            title={`${game.title} 트레일러`}
-            allow="autoplay; encrypted-media"
-            referrerPolicy="strict-origin-when-cross-origin"
-            tabIndex={-1}
-            className={ready ? 'is-ready' : ''}
-            data-testid={testId}
-          />
-        )}
+      {inView && (
+        <iframe
+          ref={frame}
+          src={src}
+          title={`${game.title} 트레일러`}
+          allow="autoplay; encrypted-media"
+          referrerPolicy="strict-origin-when-cross-origin"
+          tabIndex={-1}
+          className={ready ? 'is-ready' : ''}
+          data-testid={testId}
+        />
+      )}
     </div>
   );
 }
