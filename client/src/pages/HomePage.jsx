@@ -17,11 +17,19 @@ import { BackdropTrailer, TrailerPeekProvider, usePeek } from '../components/Tra
 
 const POPULAR_COUNT = 6; // 인기 게임: 1위 큰 그림 + 2~6위 목록
 
-/** 첫 화면 큰 그림으로 쓸 게임: 주목할 게임 중 여럿이 할 수 있고(추천 최대 2명 이상) 실제 게임 장면(IGDB 스크린샷, 없으면 아트워크)이 있는 첫 게임 */
-function pickFeature(slides) {
+// 사이트에 들어올 때(새로 열기·새로고침)마다 한 번 정하는 수 — 사이트 안에서 오가거나 뒤로 가기로 돌아오면 같은 게임 그대로
+const VISIT_SEED = Math.random();
+
+/**
+ * 첫 화면 큰 그림으로 쓸 게임: 인기 게임 30개 중 실제 게임 장면(IGDB 스크린샷, 없으면 아트워크)이 있는 게임 가운데
+ * 접속할 때마다 무작위로 하나(트레일러 있는 게임 먼저). 아래 인기 순위 띠와 겹쳐도 됨(사용자 요청 2026-11-14)
+ */
+function pickFeature(games) {
   const artOf = (g) => g.screenshots?.[0] ?? g.bannerUrl ?? null; // 아트워크는 로고 글자만 큰 그림이 많아 장면 사진을 먼저
-  const withArt = slides.filter(artOf).map((g) => ({ ...g, heroArt: artOf(g) }));
-  return withArt.find((g) => (g.recommendedPlayers?.max ?? g.players?.max ?? 0) >= 2) ?? withArt[0] ?? null;
+  const withArt = games.filter(artOf).map((g) => ({ ...g, heroArt: artOf(g) }));
+  const withTrailer = withArt.filter((g) => g.trailer?.youtubeId);
+  const pool = withTrailer.length ? withTrailer : withArt;
+  return pool.length ? pool[Math.floor(VISIT_SEED * pool.length)] : null;
 }
 /** 게임의 가로 그림(장면 스크린샷 먼저, 없으면 아트워크) */
 const sceneOf = (g) => g.screenshots?.[0] ?? g.bannerUrl ?? null;
@@ -217,7 +225,7 @@ export function HomePage({ options }) {
   const { games, slideCount, warnings } = data;
   const slides = games.slice(0, slideCount);
   const rest = games.slice(slideCount);
-  const feature = pickFeature(slides);
+  const feature = pickFeature(games);
   // 첫 화면 큰 그림 게임은 아래 '주목할 게임'에서 빼서 같은 게임이 두 번 나오지 않게 (그것뿐이면 그대로)
   const spotlight = slides.filter((g) => g.id !== feature?.id);
   const side = ready ? user ? <ProfilePanel /> : <LoginPanel /> : <div className="hero-side-empty" />;
