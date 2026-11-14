@@ -1934,28 +1934,14 @@ h3 { letter-spacing: -0.01em; }
   left: 50%;
   width: max(100cqw, 177.78cqh);
   height: max(100cqh, 56.25cqw);
-  transform: translate(-50%, -50%) scale(1.04); /* 가장자리 검은 줄 가리기 */
+  transform: translate(-50%, -50%) scale(1.34); /* 영화 비율(2.39:1) 트레일러의 위아래 검은 띠까지 가리기 — 배경 장면이라 가장자리는 잘려도 됨 */
   border: 0;
   opacity: 0;
   transition: opacity 600ms ease;
 }
 .backdrop-video iframe.is-ready { opacity: 1; }
-.backdrop-sound {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  z-index: 2;
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 999px;
-  border: 1px solid rgb(255 255 255 / 0.35);
-  background: rgb(0 0 0 / 0.45);
-  color: #fff;
-  cursor: pointer;
-  transition: transform 160ms var(--ease-out), background-color 160ms ease;
-}
-.backdrop-sound:hover { background: rgb(0 0 0 / 0.65); }
-.backdrop-sound:active { transform: scale(0.97); }
-.backdrop-sound:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* 첫 화면 큰 제목은 굵게(2026-11-14 요청) — 다른 큰 제목은 얇게(300) 그대로 */
+.hero-mag h1 { font-weight: 700; letter-spacing: -0.03em; }
+/* 첫 화면 큰 그림도 트레일러가 소리 없이 재생(BackdropTrailer) — 게임 카드는 영상 위에 */
+.hero-art .hero-feature { z-index: 1; }

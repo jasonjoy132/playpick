@@ -130,7 +130,6 @@ const bigArt = (url) => url.replace('/t_screenshot_big/', '/t_1080p/');
  */
 function HeroFinder({ options, feature, pending }) {
   const { openFinder } = useFinder();
-  const peek = usePeek();
   const [players, setPlayers] = useState(null);
   const [platforms, setPlatforms] = useState([]);
   const criteria = { players, platforms, genres: [] };
@@ -177,8 +176,9 @@ function HeroFinder({ options, feature, pending }) {
       </div>
       {!feature && pending && <div className="hero-art is-pending" aria-hidden="true" />}
       {feature && (
-        <figure className="hero-art" {...peek(feature)}>
+        <figure className="hero-art">
           <img src={bigArt(feature.heroArt)} alt={`${feature.title} 게임 화면`} referrerPolicy="no-referrer" fetchPriority="high" />
+          <BackdropTrailer game={feature} testId="hero-trailer" />
           <Link to={`/games/${encodeURIComponent(feature.id)}`} className="hero-feature" data-testid="hero-feature">
             <span className="hero-feature-cover">
               <Cover game={feature} />

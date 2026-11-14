@@ -238,28 +238,13 @@ test('live + IGDB 화면: 게임위에 없는 게임은 IGDB로 표시(국내 �
     await trailer.getByTestId('trailer-play').click();
     assert.match(await trailer.getByTestId('trailer-iframe').getAttribute('src'), /^https:\/\/www\.youtube-nocookie\.com\/embed\/abcDEF12345\?/);
     await shot(page, 'igdb-detail');
-    // 홈: 게임 위에 마우스를 잠깐 올려 두면 트레일러 팝업(소리 없이 자동 재생), 벗어나면 닫힘
-    await page.goto(`${b}/`);
-    const target = page.locator('.hero-art:not(.is-pending), .pop-lead, .pop-item').first();
-    await target.waitFor();
-    await target.hover();
-    assert.equal(await page.getByTestId('trailer-peek').count(), 0, '바로 뜨지 않음');
-    const peek = page.getByTestId('trailer-peek');
-    await peek.waitFor({ timeout: 4000 });
-    const src = await peek.getByTestId('trailer-peek-iframe').getAttribute('src');
-    assert.match(src, /^https:\/\/www\.youtube-nocookie\.com\/embed\/abcDEF12345\?/);
-    assert.match(src, /autoplay=1/);
-    assert.match(src, /mute=1/);
-    await shot(page, 'home-peek');
-    await page.mouse.move(2, 2);
-    await peek.waitFor({ state: 'detached', timeout: 2000 });
   } finally {
     await page.close();
     live.close();
   }
 });
 
-test('홈 인기 1위: 사진 대신 트레일러가 소리 없이 바로 재생(동작 줄이기면 사진만)', async () => {
+test('홈: 첫 화면 큰 그림·인기 1위는 트레일러가 소리 없이 바로 재생, 2~6위는 마우스 팝업(동작 줄이기면 사진만)', async () => {
   const { GUIDE_SAMPLE } = await import('../test/fixtures.js');
   const games = [201, 202, 203, 204, 205, 206, 207].map((id, i) => ({
     id, name: `Party Game ${id}`, total_rating_count: 100 - i,
@@ -288,6 +273,10 @@ test('홈 인기 1위: 사진 대신 트레일러가 소리 없이 바로 재생
     const page = await ctx.newPage();
     await page.route(/youtube|ytimg|images\.igdb/, (r) => r.abort());
     await page.goto(`${b}/`);
+    // 첫 화면 큰 그림도 트레일러가 소리 없이 재생(마우스 팝업 없음)
+    const heroSrc = await page.getByTestId('hero-trailer').getAttribute('src');
+    assert.match(heroSrc, /autoplay=1/);
+    assert.match(heroSrc, /mute=1/);
     const lead = page.locator('.pop-lead');
     await lead.scrollIntoViewIfNeeded();
     const video = lead.getByTestId('lead-trailer');
@@ -297,6 +286,21 @@ test('홈 인기 1위: 사진 대신 트레일러가 소리 없이 바로 재생
     assert.match(src, /autoplay=1/);
     assert.match(src, /mute=1/);
     assert.match(src, /loop=1/);
+    assert.equal(await lead.getByRole('button', { name: /소리|멈춤|일시 정지|재생/ }).count(), 0, '멈춤·소리 단추 없음');
+    // 인기 2~6위: 게임 위에 마우스를 잠깐 올려 두면 트레일러 팝업(소리 없이 자동 재생), 벗어나면 닫힘
+    const target = page.locator('.pop-item').first();
+    await target.waitFor();
+    await target.hover();
+    assert.equal(await page.getByTestId('trailer-peek').count(), 0, '바로 뜨지 않음');
+    const peek = page.getByTestId('trailer-peek');
+    await peek.waitFor({ timeout: 4000 });
+    const peekSrc = await peek.getByTestId('trailer-peek-iframe').getAttribute('src');
+    assert.match(peekSrc, /^https:\/\/www\.youtube-nocookie\.com\/embed\/vid\w+\?/);
+    assert.match(peekSrc, /autoplay=1/);
+    assert.match(peekSrc, /mute=1/);
+    await shot(page, 'home-peek');
+    await page.mouse.move(2, 2);
+    await peek.waitFor({ state: 'detached', timeout: 2000 });
     // 동작 줄이기 설정이면 영상 없이 사진만
     const still = await calm.newPage();
     await still.route(/youtube|ytimg|images\.igdb/, (r) => r.abort());
