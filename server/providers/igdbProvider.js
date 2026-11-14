@@ -85,7 +85,8 @@ const part = (v, n) => (Number.isFinite(Number(v)) && Number(n) > 0 ? { avg: to5
 export function globalRatingFromIgdb(g) {
   const total = part(g.total_rating, g.total_rating_count);
   if (!total) return null;
-  return { ...total, users: part(g.rating, g.rating_count), critics: part(g.aggregated_rating, g.aggregated_rating_count), source: 'IGDB' };
+  // exact: 반올림 안 한 5점 만점 값 — 순위 합계(가중 평균) 계산용
+  return { ...total, exact: Number(g.total_rating) / 20, users: part(g.rating, g.rating_count), critics: part(g.aggregated_rating, g.aggregated_rating_count), source: 'IGDB' };
 }
 
 // 본편만: 다른 판(에디션·이식판, version_parent)과 본편에 딸린 항목(시즌·DLC·확장팩·에피소드, parent_game) 제외

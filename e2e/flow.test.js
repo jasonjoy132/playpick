@@ -451,7 +451,7 @@ test('번역된 소개 표시 + 원문 보기 (DeepL 응답 모의)', async () =
   }
 });
 
-test('상단 메뉴: 홈·인기 게임·신작·평점 랭킹·장르별 게임 이동과 필터', async () => {
+test('상단 메뉴: 홈·인기 게임(평가 많은 순·평점 높은 순)·신작·장르별 게임 이동과 필터', async () => {
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -467,6 +467,22 @@ test('상단 메뉴: 홈·인기 게임·신작·평점 랭킹·장르별 게임
   await page.waitForURL(/platform=mobile/);
   await page.waitForFunction((n) => document.querySelectorAll('[data-testid=browse-grid] [data-testid=game-card]').length < n, all);
   assert.equal(await nav.getByRole('link', { name: '인기 게임' }).getAttribute('aria-current'), 'page');
+  // 순위 기준(평가 많은 순 기본 · 평점 높은 순) × 출처(글로벌 기본 · PlayPick · 합계)
+  assert.equal(await nav.getByRole('link', { name: '평점 랭킹' }).count(), 0, '평점 랭킹은 인기 게임에 합침');
+  const by = page.getByRole('tablist', { name: '순위 기준' });
+  const src = page.getByRole('tablist', { name: '평가 출처' });
+  assert.equal(await by.getByRole('tab', { name: '평가 많은 순' }).getAttribute('aria-selected'), 'true');
+  assert.equal(await src.getByRole('tab', { name: '글로벌' }).getAttribute('aria-selected'), 'true');
+  await src.getByRole('tab', { name: 'PlayPick' }).click();
+  await page.waitForURL(/sort=playpick/);
+  await page.getByTestId('browse-empty').waitFor();
+  await src.getByRole('tab', { name: '합계' }).click();
+  await page.waitForURL(/sort=total/);
+  await page.getByTestId('browse-grid').getByText(/^합계 \d[\d,]* = 글로벌 [\d,]+ \+ PlayPick [\d,]+$/).first().waitFor();
+  await by.getByRole('tab', { name: '평점 높은 순' }).click();
+  await page.waitForURL(/by=rating/);
+  assert.match(page.url(), /sort=total/, '출처는 그대로');
+  await page.getByText(/평가 수만큼 반영해 합친 평균/).waitFor();
 
   await nav.getByRole('link', { name: '장르별 게임' }).click();
   await page.waitForURL(/\/genres$/);
@@ -480,10 +496,12 @@ test('상단 메뉴: 홈·인기 게임·신작·평점 랭킹·장르별 게임
   await page.getByRole('tab', { name: '출시 예정' }).click();
   await page.waitForURL(/tab=upcoming/);
 
-  await nav.getByRole('link', { name: '평점 랭킹' }).click();
-  await page.getByRole('tab', { name: '회원 평점 TOP' }).click();
-  await page.waitForURL(/tab=members/);
+  // 예전 '평점 랭킹' 주소는 인기 게임의 평점 높은 순으로 (회원 평점 탭이면 PlayPick)
+  await page.goto(`${base}/ranking?tab=members`);
+  await page.waitForURL(/\/popular\?by=rating&sort=playpick$/);
   await page.getByTestId('browse-empty').waitFor();
+  await page.goto(`${base}/ranking`);
+  await page.waitForURL(/\/popular\?by=rating$/);
 
   await nav.getByRole('link', { name: '홈' }).click();
   await page.getByRole('link', { name: '전체 순위 보기' }).click();

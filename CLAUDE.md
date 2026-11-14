@@ -89,6 +89,10 @@
 
 - 문의 연락처: `InfoPages.jsx`의 `CONTACT_EMAIL`(개인정보처리방침·이용약관에 표시)
 - 계정·세션·비밀번호 재설정(메일: Brevo), 찜, 별점·리뷰(1인 1리뷰, 수정 불가·삭제 후 재작성), 최근 본 게임
+- **인기 게임 순위**(예전 '평점 랭킹'을 합침, `/ranking`은 `/popular?by=rating`으로 이동): `/popular?by=&sort=` · `/api/browse/popular?by=count|rating&sort=global|playpick|total`. 순위는 `server/services/ranking.js`의 `rankGames`
+  - 평가 많은 순(기본): 글로벌 IGDB 평가 수 · PlayPick 숨김 안 된 회원 리뷰 수(`community.mostReviewed`) · 합계 두 수를 그대로 더함
+  - 평점 높은 순: 글로벌 IGDB 평점(평가 100개 이상, IGDB `top`) · PlayPick 회원 별점 평균(`community.topRated`) · 합계 두 평균을 평가 수만큼 가중한 평균(평가 합 100개 이상, 반올림 전 IGDB 값 `globalRating.exact` 사용)
+  - 합계 후보는 글로벌 상위 200개 + 회원 리뷰 있는 게임. 카드에 순위 숫자 표시. `/api/ranking/members`는 예전 주소용으로 남김
 - **다른 계정으로 로그인(Google·Discord)** `oauth.js`(제공자 주소·코드 교환) + `accounts.oauth*`: 서버가 제공자로 보냈다가(`/api/auth/oauth/:p/start`) 돌아온 코드를 서버에서 바꿈(`…/callback`, state는 HttpOnly 쿠키 `pp_oauth`). 연결 표 `user_identities`(provider, subject)
   - 이미 연결 → 로그인 / **인증된** 같은 이메일 회원 → 그 계정에 연결 / 처음 → `/signup/social`에서 닉네임 정하기(`oauth_pending`, 쿠키 `pp_oauth_pending` 30분) / 인증 안 된 이메일 → 거절
   - 소셜로만 가입한 계정: 아이디 `g_…`·`d_…` 자동, `password_hash = ''`(`hasPassword: false`) → 비밀번호 '만들기'(현재 비밀번호 없이), 탈퇴는 '탈퇴'만, 아이디 찾기 메일은 '○○로 로그인' 안내

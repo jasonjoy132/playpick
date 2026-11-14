@@ -28,6 +28,7 @@ import { createPartySize } from './services/partySize.js';
 import { createAppStoreProvider } from './providers/appStoreProvider.js';
 import { createGracNew, overlayEntries } from './services/gracNew.js';
 import { createSteamTrailers } from './services/steamTrailer.js';
+import { rankGames } from './services/ranking.js';
 import { cached } from './community/cached.js';
 import { createAppArt, pickArt } from './services/appArt.js';
 
@@ -129,6 +130,15 @@ export function createApp(config, deps = {}) {
   const meOut = async (u) => (u ? { ...withRole(u), badge: await badges.displayFor(u.id), newBadges: await badges.newBadges(u.id) } : u);
   /** 일반 게임 + 승인된 제보 게임(user-…) */
   const getAnyGame = async (id) => (String(id).startsWith('user-') ? await submissions.getGame(id) : catalog.getGame(id));
+  /** 리뷰 집계 행(id·제목·표지·userRating) → 게임 정보 채우기 (IGDB 한 번에, 제보 게임은 DB에서, 못 찾으면 리뷰에 저장된 제목·표지) */
+  const reviewedAsGames = async (rows) => {
+    const extra = new Map((await catalog.getMany(rows.map((g) => g.id))).map((g) => [g.id, g]));
+    for (const r of rows.filter((g) => g.id.startsWith('user-'))) {
+      const g = await submissions.getGame(r.id).catch(() => null);
+      if (g) extra.set(r.id, g);
+    }
+    return rows.map((g) => ({ ...(extra.get(g.id) ?? {}), ...g, imageUrl: extra.get(g.id)?.imageUrl ?? g.imageUrl, title: extra.get(g.id)?.title ?? g.title }));
+  };
   const limits = {
     login: createRateLimiter({ limit: 5, windowMs: 10 * 60e3 }),
     mail: createRateLimiter({ limit: 5, windowMs: 10 * 60e3 }),
@@ -207,6 +217,7 @@ export function createApp(config, deps = {}) {
   const RESULT_PAGE = 24;
   const IGDB_SCAN = 48; // 추천 인원으로 다시 거르면 줄어드므로 한 번에 넉넉히 훑음
 const SLIDES = 5;
+const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하는 후보 수
   const distDir = path.join(config.root, 'client', 'dist');
 
   const cookieOf = (name, value, maxAge, cookiePath = '/') =>
@@ -798,7 +809,26 @@ const SLIDES = 5;
       if (genre && !opts.genres.some((g) => g.value === genre)) throw apiError('BAD_REQUEST', '알 수 없는 장르입니다.', 400);
       if (platform && !opts.platforms.some((x) => x.value === platform)) throw apiError('BAD_REQUEST', '알 수 없는 플랫폼입니다.', 400);
       if (bm[1] === 'genre' && !genre) throw apiError('BAD_REQUEST', '장르를 골라 주세요.', 400);
-      const kind = bm[1] === 'genre' ? 'popular' : bm[1];
+      // 인기 게임 순위: 기준(by) 평가 많은 순(count, 기본)·평점 높은 순(rating) × 출처(sort) 글로벌(IGDB, 기본)·PlayPick(회원)·합계
+      const by = url.searchParams.get('by') || 'count';
+      const sort = url.searchParams.get('sort') || 'global';
+      const ranked = by !== 'count' || sort !== 'global';
+      if (!['count', 'rating'].includes(by) || !['global', 'playpick', 'total'].includes(sort) || (ranked && bm[1] !== 'popular')) throw apiError('BAD_REQUEST', '알 수 없는 정렬입니다.', 400);
+      if (ranked && sort !== 'global') {
+        const rows = by === 'rating' ? await community.topRated({ minCount: 1, limit: POPULAR_POOL }) : await community.mostReviewed({ limit: POPULAR_POOL });
+        const reviewed = await reviewedAsGames(rows);
+        let pool = reviewed;
+        if (sort === 'total') {
+          // 합계 후보: 글로벌 상위 POPULAR_POOL개(평가 수 / 평점 순) + 회원 평가가 있는 게임 (회원 평가는 많아야 몇 개라 그 밖의 게임이 앞설 일은 거의 없음)
+          const { games: top } = await catalog.browse(by === 'rating' ? 'top' : 'popular', { platform, offset: 0, limit: POPULAR_POOL });
+          const seen = new Set(top.map((g) => g.id));
+          pool = [...top, ...reviewed.filter((g) => !seen.has(g.id))];
+        }
+        let list = (await decorate(pool, user)).filter((g) => listable(g) && !blockedReason(g) && (!platform || g.platforms?.includes(platform)));
+        list = rankGames(list, by, sort);
+        return sendJson(res, 200, { meta: meta(), games: list.slice(offset, offset + 24), hasMore: offset + 24 < list.length, nextOffset: offset + 24, warnings: [] });
+      }
+      const kind = bm[1] === 'genre' ? 'popular' : by === 'rating' ? 'top' : bm[1];
       const { games, hasMore, warnings } = await catalog.browse(kind, { genre, platform, offset });
       // 출시 예정: IGDB 기대작 + 국내 등급분류는 받았지만 아직 안 나온 게임위 게임(AI 판단, 첫 페이지에만)
       let domestic;
@@ -817,8 +847,7 @@ const SLIDES = 5;
     }
     if (p === '/api/ranking/members') {
       const top = await community.topRated({ minCount: 1, limit: 50 });
-      const extra = new Map((await catalog.getMany(top.map((g) => g.id))).map((g) => [g.id, g]));
-      const games = top.map((g) => ({ ...(extra.get(g.id) ?? {}), ...g, imageUrl: extra.get(g.id)?.imageUrl ?? g.imageUrl, title: extra.get(g.id)?.title ?? g.title }));
+      const games = await reviewedAsGames(top);
       const ranked = (await decorate(games, user)).map((g, i) => ({ ...g, userRating: top[i].userRating }));
       return sendJson(res, 200, { meta: meta(), games: ranked.filter((g) => !blockedReason(g)), warnings: [] });
     }

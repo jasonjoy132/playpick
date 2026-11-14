@@ -1974,3 +1974,9 @@ h3 { letter-spacing: -0.01em; }
   .hero-full .hero-feature { left: 16px; right: 16px; bottom: 16px; }
   .hero-finder.hero-mag.hero-full { padding-bottom: 120px; }
 }
+
+/* 인기 게임: 둘째 줄 탭(평가 출처 글로벌·PlayPick·합계)은 작은 알약 모양 — 첫째 줄(순위 기준)과 구분 */
+.tabs.tabs-sub { display: inline-flex; justify-self: start; gap: 2px; padding: 3px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; }
+.tabs.tabs-sub button { padding: 6px 16px; border-radius: 999px; font-size: 0.9rem; }
+.tabs.tabs-sub button::after { display: none; }
+.tabs.tabs-sub button.is-on { background: var(--bg); box-shadow: 0 1px 3px rgb(0 0 0 / 0.16); }

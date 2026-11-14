@@ -32,6 +32,8 @@ export function createCommunity(db, { now = () => Date.now(), badgeOf } = {}) {
     all: db.prepare('SELECT game_id, COUNT(*) AS count, AVG(rating) AS avg FROM reviews WHERE hidden_at IS NULL GROUP BY game_id'),
     top: db.prepare(`SELECT game_id, COUNT(*) AS count, AVG(rating) AS avg, MAX(game_title) AS title, MAX(game_image) AS image
                      FROM reviews WHERE hidden_at IS NULL GROUP BY game_id HAVING COUNT(*) >= ? ORDER BY AVG(rating) DESC, COUNT(*) DESC, MAX(created_at) DESC LIMIT ?`),
+    mostReviewed: db.prepare(`SELECT game_id, COUNT(*) AS count, AVG(rating) AS avg, MAX(game_title) AS title, MAX(game_image) AS image
+                     FROM reviews WHERE hidden_at IS NULL GROUP BY game_id ORDER BY COUNT(*) DESC, AVG(rating) DESC, MAX(created_at) DESC LIMIT ?`),
   };
   const statsFor = async (gameId) => {
     const s = await q.stats.get(gameId);
@@ -69,6 +71,16 @@ export function createCommunity(db, { now = () => Date.now(), badgeOf } = {}) {
     /** 회원 평점 랭킹 (평균 별점 높은 순, 같으면 평가 많은 순) */
     async topRated({ minCount = 1, limit = 50 } = {}) {
       return (await q.top.all(minCount, limit)).map((r) => ({
+        id: r.game_id,
+        title: r.title || r.game_id,
+        imageUrl: r.image,
+        isDemo: r.game_id.startsWith('demo-'),
+        userRating: { count: Number(r.count), avg: Math.round(Number(r.avg) * 10) / 10 },
+      }));
+    },
+    /** PlayPick 인기: 회원 평가(리뷰)가 많은 순 (같으면 평균 별점 높은 순) — 숨겨진 리뷰는 빼고 셈 */
+    async mostReviewed({ limit = 200 } = {}) {
+      return (await q.mostReviewed.all(limit)).map((r) => ({
         id: r.game_id,
         title: r.title || r.game_id,
         imageUrl: r.image,

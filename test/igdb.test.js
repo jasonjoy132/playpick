@@ -312,7 +312,7 @@ test('서비스 종료(Offline) 게임 숨김: 목록에서 제외, 같은 제�
 
 test('글로벌 평점: IGDB 100점 만점 → 5점 만점, 이용자·평론가 내역, 평가 없으면 null', () => {
   const g = globalRatingFromIgdb({ total_rating: 87.43, total_rating_count: 1520, rating: 85.1, rating_count: 1400, aggregated_rating: 90, aggregated_rating_count: 120 });
-  assert.deepEqual(g, { avg: 4.4, count: 1520, users: { avg: 4.3, count: 1400 }, critics: { avg: 4.5, count: 120 }, source: 'IGDB' });
+  assert.deepEqual(g, { avg: 4.4, count: 1520, exact: 4.3715, users: { avg: 4.3, count: 1400 }, critics: { avg: 4.5, count: 120 }, source: 'IGDB' });
   assert.deepEqual(globalRatingFromIgdb({ total_rating: 60, total_rating_count: 3, rating: 60, rating_count: 3 }).critics, null);
   assert.equal(globalRatingFromIgdb({ total_rating: 80, total_rating_count: 0 }), null);
   assert.equal(globalRatingFromIgdb({}), null);

@@ -53,7 +53,6 @@ export const api = {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
     return get(`/api/browse/${kind}${qs ? `?${qs}` : ''}`);
   },
-  memberRanking: () => get('/api/ranking/members'),
 
   me: () => get('/api/auth/me'),
   signup: (b) => request('POST', '/api/auth/signup', b),

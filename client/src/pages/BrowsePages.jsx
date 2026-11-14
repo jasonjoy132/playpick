@@ -1,4 +1,4 @@
-// 상단 메뉴: 인기 게임 · 신작·출시 예정 · 평점 랭킹 · 장르별 게임
+// 상단 메뉴: 인기 게임(평가 많은 순·평점 높은 순) · 신작·출시 예정 · 명예의 전당 · 장르별 게임
 import { useEffect, useRef, useState } from 'react';
 import { usePageState } from '../lib/pageMemory.js';
 import { api } from '../lib/api.js';
@@ -37,10 +37,10 @@ function ChipBar({ label, name, items, value, allLabel = '전체' }) {
   );
 }
 
-function Tabs({ name, items, value }) {
+function Tabs({ name, items, value, label, sub = false }) {
   const { pathname, search } = useLocation();
   return (
-    <div className="tabs" role="tablist">
+    <div className={`tabs${sub ? ' tabs-sub' : ''}`} role="tablist" aria-label={label}>
       {items.map((t) => (
         <button key={t.value} type="button" role="tab" aria-selected={value === t.value} className={value === t.value ? 'is-on' : ''} onClick={() => setParam(pathname, search, name, t.value === items[0].value ? '' : t.value)}>
           {t.label}
@@ -152,15 +152,65 @@ function PageHead({ title, desc, scene, children }) {
 
 const fmtDate = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }) : null);
 
+// 인기 게임 순위: 기준(by) 평가 많은 순·평점 높은 순 × 출처(sort) 글로벌·PlayPick·합계 (예전 '평점 랭킹' 화면을 합침)
+const RANK_BY = [
+  { value: 'count', label: '평가 많은 순' },
+  { value: 'rating', label: '평점 높은 순' },
+];
+const RANK_SOURCE = [
+  { value: 'global', label: '글로벌' },
+  { value: 'playpick', label: 'PlayPick' },
+  { value: 'total', label: '합계' },
+];
+const RANK_INFO = {
+  count: {
+    global: { desc: '전 세계(IGDB)에서 평가를 많이 받은 순서예요.', tag: '' },
+    playpick: { desc: '플레이픽 회원이 평가(리뷰)를 많이 남긴 순서예요.', tag: 'PlayPick 인기 ' },
+    total: { desc: '전 세계(IGDB) 평가 수와 플레이픽 회원 평가 수를 더한 순서예요.', tag: '합계 ' },
+  },
+  rating: {
+    global: { desc: 'IGDB 종합 평점(100점 만점)을 5점 만점으로 바꾼 순서예요. 평가가 100개 이상인 게임만 넣어요.', tag: '글로벌 평점 ' },
+    playpick: { desc: '플레이픽 회원 별점 평균이 높은 순서예요. 평균이 같으면 평가가 많은 게임이 먼저예요.', tag: 'PlayPick 평점 ' },
+    total: { desc: '전 세계 평점과 플레이픽 회원 별점을 평가 수만큼 반영해 합친 평균 순서예요. 평가가 모두 합해 100개 이상인 게임만 넣어요.', tag: '평점 합계 ' },
+  },
+};
+const n = (v) => Number(v ?? 0).toLocaleString('ko-KR');
+const star = (r) => (r?.avg != null && r.count ? `★${r.avg.toFixed(1)}` : '없음');
+
+/** 카드 아래 한 줄: 지금 순위를 매긴 숫자 */
+function rankNote(g, by, sort) {
+  const global = g.globalRating?.count ?? 0;
+  const mine = g.userRating?.count ?? 0;
+  if (by === 'count') {
+    if (sort === 'playpick') return `PlayPick 평가 ${n(mine)}개`;
+    if (sort === 'total') return `합계 ${n(global + mine)} = 글로벌 ${n(global)} + PlayPick ${n(mine)}`;
+    return global ? `글로벌 평가 ${n(global)}개` : undefined;
+  }
+  if (sort === 'playpick') return `PlayPick ${star(g.userRating)} · 평가 ${n(mine)}개`;
+  if (sort === 'total') return g.totalRating ? `합계 ★${g.totalRating.avg.toFixed(1)} · 글로벌 ${star(g.globalRating)} · PlayPick ${star(g.userRating)}` : undefined;
+  return g.globalRating ? `글로벌 ${star(g.globalRating)} · 평가 ${n(global)}개` : undefined;
+}
+
 export function PopularPage({ options }) {
   const platform = useParam('platform');
-  const state = useBrowse('popular', { platform });
+  const by = (RANK_BY.find((x) => x.value === useParam('by')) ?? RANK_BY[0]).value;
+  const sort = (RANK_SOURCE.find((x) => x.value === useParam('sort')) ?? RANK_SOURCE[0]).value;
+  const info = RANK_INFO[by][sort];
+  const state = useBrowse('popular', { platform, by: by === 'count' ? undefined : by, sort: sort === 'global' ? undefined : sort });
   return (
     <>
-      <PageHead title="인기 게임" desc="IGDB에서 평가를 많이 받은 순서예요." scene={<PageScene state={state} rankPrefix="" />}>
+      <PageHead title="인기 게임" desc={info.desc} scene={<PageScene state={state} rankPrefix={info.tag} />}>
+        <Tabs name="by" value={by} items={RANK_BY} label="순위 기준" />
+        <Tabs name="sort" value={sort} items={RANK_SOURCE} label="평가 출처" sub />
         <ChipBar label="플랫폼" name="platform" items={options.platforms} value={platform} />
       </PageHead>
-      <GameGrid state={state} options={options} />
+      <GameGrid
+        state={state}
+        options={options}
+        noteFor={(g) => rankNote(g, by, sort)}
+        rankFrom={1}
+        emptyText={sort === 'playpick' ? '아직 회원 평가가 없어요. 게임 상세 화면에서 첫 평가를 남겨 보세요!' : undefined}
+      />
     </>
   );
 }
@@ -201,48 +251,13 @@ export function NewPage({ options }) {
   );
 }
 
-export function RankingPage({ options }) {
-  const tab = useParam('tab') || 'global';
-  const top = useBrowse('top', {}); // 머리 사진(글로벌 1위)과 글로벌 순위가 같이 씀
-  return (
-    <>
-      <PageHead title="평점 랭킹" desc="전 세계 평점과 플레이픽 회원 평점을 따로 보여 드려요." scene={<PageScene state={top} rankPrefix="글로벌 " />}>
-        <Tabs name="tab" value={tab} items={[{ value: 'global', label: '글로벌 평점 TOP' }, { value: 'members', label: '회원 평점 TOP' }]} />
-      </PageHead>
-      {tab === 'members' ? <MemberRanking options={options} /> : <GlobalRanking options={options} state={top} />}
-    </>
-  );
-}
-
-function GlobalRanking({ options, state }) {
-  return (
-    <>
-      <p className="muted small">IGDB 종합 평점(100점 만점)을 5점 만점으로 바꾼 순위예요. 평가가 100개 이상인 게임만 포함해요.</p>
-      <GameGrid state={state} options={options} rankFrom={1} />
-    </>
-  );
-}
-
-function MemberRanking({ options }) {
-  const [state, setState] = useState({ status: 'loading', games: [], warnings: [] });
-  const [nonce, setNonce] = useState(0);
+/** 예전 '평점 랭킹'(/ranking) 주소 → 인기 게임의 평점 높은 순으로 (회원 평점 탭이면 PlayPick) */
+export function RankingRedirect() {
+  const tab = useParam('tab');
   useEffect(() => {
-    let alive = true;
-    setState({ status: 'loading', games: [], warnings: [] });
-    api.memberRanking().then(
-      (r) => alive && setState({ status: 'success', games: r.games, warnings: r.warnings || [], hasMore: false }),
-      (error) => alive && setState({ status: 'error', error, games: [], warnings: [] }),
-    );
-    return () => {
-      alive = false;
-    };
-  }, [nonce]);
-  return (
-    <>
-      <p className="muted small">플레이픽 회원이 남긴 별점 평균이 높은 순서예요. 평균이 같으면 평가가 많은 게임이 먼저 나와요.</p>
-      <GameGrid state={{ ...state, retry: () => setNonce((n) => n + 1) }} options={options} rankFrom={1} emptyText="아직 회원 평점이 없어요. 게임 상세 화면에서 첫 평가를 남겨 보세요!" />
-    </>
-  );
+    navigate(`/popular?by=rating${tab === 'members' ? '&sort=playpick' : ''}`, { replace: true });
+  }, [tab]);
+  return <Loading message="인기 게임으로 이동하는 중이에요…" />;
 }
 
 /** 명예의 전당: 게임·사진·정보를 제보해 플레이픽을 채워 준 회원 순위 */
