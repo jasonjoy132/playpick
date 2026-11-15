@@ -777,7 +777,9 @@ img { max-width: 100%; }
 .admin-rows dd { margin: 0; font-size: 0.9rem; min-width: 0; overflow-wrap: anywhere; }
 .admin-summary { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--field); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 0.92rem; }
 .reject-box { display: grid; gap: 6px; }
-.admin-page .tabs .count { color: var(--muted); font-weight: 600; margin-left: 2px; }
+/* 제보 상태 탭 숫자: 회색 글자가 검은 알약 위에 겹쳐 안 보이던 것 → 옅은 알약 + 진한 글자, 고른 탭은 반전 */
+.admin-page .tabs .count { margin-left: 4px; background: var(--track); color: var(--text); font-weight: 700; }
+.admin-page .tabs button.is-on .count { background: var(--text); color: var(--bg); }
 
 /* ── 명예 뱃지·칭호 ── */
 .ubadge { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; border-radius: 999px; font-weight: 800; line-height: 1; white-space: nowrap; vertical-align: middle; letter-spacing: -0.01em; border: 1px solid transparent; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.45); }
