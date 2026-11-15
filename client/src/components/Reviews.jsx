@@ -73,6 +73,18 @@ export function Reviews({ gameId, onStats, globalRating, isIgdb }) {
       setBusy(false);
     }
   };
+  // 관리자: 다른 회원 리뷰 바로 삭제(작성자에게 알림)
+  const adminRemove = async (r) => {
+    if (!window.confirm(`${r.nickname}님의 리뷰를 삭제할까요? 되돌릴 수 없고, 작성자에게 알림이 가요.`)) return;
+    setBusy(true);
+    try {
+      apply(await api.adminDeleteReview(r.id));
+    } catch (err) {
+      setFormError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
   const loadMore = async () => {
     setMore({ loading: true, done: false });
     try {
@@ -141,6 +153,11 @@ export function Reviews({ gameId, onStats, globalRating, isIgdb }) {
             )
           )}
 
+          {formError && !editing && (
+            <p className="form-error" role="alert">
+              {formError}
+            </p>
+          )}
           <ul className="review-list">
             {data.reviews.map((r) => (
               <li key={r.id} className={r.mine ? 'is-mine' : ''} data-testid="review-item">
@@ -162,6 +179,12 @@ export function Reviews({ gameId, onStats, globalRating, isIgdb }) {
                   <div className="review-foot">
                     <button type="button" className="review-delete" onClick={remove} disabled={busy} data-testid="delete-review">
                       삭제
+                    </button>
+                  </div>
+                ) : user?.isAdmin ? (
+                  <div className="review-foot">
+                    <button type="button" className="review-delete" onClick={() => adminRemove(r)} disabled={busy} data-testid="admin-delete-review">
+                      삭제 (관리자)
                     </button>
                   </div>
                 ) : (

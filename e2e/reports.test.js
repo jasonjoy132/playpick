@@ -133,3 +133,43 @@ test('서비스 종료·정보 수정 제보, 리뷰 신고 → 관리자 처리
   if (SHOTS) await user.screenshot({ path: `${SHOTS}/report-applied.png`, fullPage: true });
   assert.deepEqual(errors, []);
 });
+
+test('관리자: 상세에서 정보 바로 수정(지금 값 채워짐, 새로고침 없이 반영), 남의 리뷰 바로 삭제', async () => {
+  const errors = [];
+  const writer = await signedIn({ loginId: 'e2e_wr3', password: 'secret123', nickname: '삭제될이', email: 'wr3@example.com' });
+  await writer.request.put(`${base}/api/games/igdb-82/reviews/mine`, { data: { rating: 1, content: '지울 리뷰' }, headers: { 'X-Requested-With': 'playpick' } });
+  // 위 테스트에서 만든 관리자(e2e_adm)로 로그인
+  const admin = await (await browser.newContext({ locale: 'ko-KR', viewport: { width: 1200, height: 900 } })).newPage();
+  assert.equal((await admin.request.post(`${base}/api/auth/login`, { data: { loginId: 'e2e_adm', password: 'secret123' }, headers: { 'X-Requested-With': 'playpick' } })).status(), 200);
+  admin.on('pageerror', (e) => errors.push(e.message));
+  await admin.goto(`${base}/games/igdb-82`);
+  const box = admin.getByTestId('report-box');
+  await box.getByRole('heading', { name: '관리자 · 정보 바로 수정' }).waitFor();
+  await admin.getByTestId('open-report-fix').click();
+  const form = admin.getByTestId('report-form-fix');
+  const nums = form.locator('input[type="number"]');
+  await nums.nth(0).fill('2');
+  await nums.nth(1).fill('6');
+  if (SHOTS) await box.screenshot({ path: `${SHOTS}/admin-fix.png` });
+  await admin.getByTestId('submit-report').click();
+  await admin.getByTestId('report-done').waitFor();
+  await admin.getByText('2~6명').first().waitFor(); // 새로고침 없이 반영
+  // 다시 열면 바뀐 값이 채워져 있음
+  await admin.getByTestId('open-report-fix').click();
+  assert.equal(await nums.nth(0).inputValue(), '2');
+  assert.equal(await nums.nth(1).inputValue(), '6');
+  // 더 고칠 칸: 장르를 목록에서 골라 바꾸면 장르 칸·태그가 바로 바뀌고 출처가 붙음
+  await form.getByTestId('report-more').locator('summary').click();
+  await form.getByTestId('report-more').locator('label.chip', { hasText: '퍼즐' }).click();
+  if (SHOTS) await box.screenshot({ path: `${SHOTS}/admin-fix-more.png` });
+  await admin.getByTestId('submit-report').click();
+  await admin.getByTestId('report-done').waitFor();
+  await admin.locator('.info-table', { hasText: '퍼즐' }).getByText('사용자 제보 · 관리자 확인').first().waitFor();
+
+  admin.on('dialog', (d) => d.accept());
+  await admin.getByTestId('admin-delete-review').click();
+  await admin.getByText('지울 리뷰').waitFor({ state: 'detached' });
+  assert.deepEqual(errors, []);
+  await admin.context().close();
+  await writer.context().close();
+});

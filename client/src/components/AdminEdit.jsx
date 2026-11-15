@@ -132,18 +132,36 @@ export function SubmissionEditForm({ item, options, busy, submitLabel, onSubmit,
 }
 
 /** 정보 수정 제보 고치기 (비운 칸은 반영하지 않음) */
-export function FixEditForm({ item, busy, submitLabel, onSubmit, onCancel }) {
+export function FixEditForm({ item, options, busy, submitLabel, onSubmit, onCancel }) {
   const fx = item.fix || {};
-  const init = { playersMin: str(fx.players?.min), playersMax: str(fx.players?.max), hours: str(fx.hours), storeUrl: str(fx.storeUrl) };
+  const init = {
+    playersMin: str(fx.players?.min),
+    playersMax: str(fx.players?.max),
+    hours: str(fx.hours),
+    storeUrl: str(fx.storeUrl),
+    title: str(fx.title),
+    summary: str(fx.summary),
+    releaseDate: str(fx.releaseDate),
+    publisher: str(fx.publisher),
+    platforms: fx.platforms ?? [],
+    genres: fx.genres ?? [],
+    removeStores: fx.removeStores ?? [],
+  };
   const [f, setF] = useState(init);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
-  const diff = (k) => f[k] !== init[k];
+  const toggle = (k) => (v) => setF((x) => ({ ...x, [k]: x[k].includes(v) ? x[k].filter((y) => y !== v) : [...x[k], v] }));
+  const diff = (k) => !same(f[k], init[k]);
   const playersChanged = diff('playersMin') || diff('playersMax');
   const changed = Object.keys(init).some(diff);
   const pre = `fix-${item.id}`;
+  const text = (k, label, props = {}) => (
+    <Field id={`${pre}-${k}`} label={label} changed={diff(k)}>
+      <input id={`${pre}-${k}`} value={f[k]} onChange={set(k)} {...props} />
+    </Field>
+  );
   return (
     <div className="admin-edit" data-testid="edit-form">
-      <p className="admin-edit-head">틀린 값만 고쳐 주세요. 칸을 비우면 그 항목은 반영하지 않아요.</p>
+      <p className="admin-edit-head">틀린 값만 고쳐 주세요. 칸을 비우면(플랫폼·장르는 하나도 안 고르면) 그 항목은 반영하지 않아요.</p>
       <fieldset className={`field${playersChanged ? ' is-changed' : ''}`}>
         <legend>
           추천 인원 {playersChanged && <span className="changed-tag">수정</span>}
@@ -156,15 +174,41 @@ export function FixEditForm({ item, busy, submitLabel, onSubmit, onCancel }) {
         </div>
       </fieldset>
       <div className="form-row">
-        <Field id={`${pre}-hours`} label="플레이 시간(시간)" changed={diff('hours')}>
-          <input id={`${pre}-hours`} type="number" min="1" max="1000" inputMode="numeric" value={f.hours} onChange={set('hours')} />
-        </Field>
-        <span />
+        {text('hours', '플레이 시간(시간)', { type: 'number', min: 1, max: 1000, inputMode: 'numeric' })}
+        {text('releaseDate', '출시일', { placeholder: '2024-05-01 또는 2024', maxLength: 10 })}
       </div>
-      <Field id={`${pre}-store`} label="구매처 링크" changed={diff('storeUrl')} note="공식 스토어 주소만 돼요.">
+      {text('title', '제목', { maxLength: 80 })}
+      {text('publisher', '개발·유통사', { maxLength: 60 })}
+      <Field id={`${pre}-summary`} label="소개" changed={diff('summary')}>
+        <textarea id={`${pre}-summary`} rows={3} maxLength={2000} value={f.summary} onChange={set('summary')} />
+      </Field>
+      {options && (
+        <>
+          <div className={diff('platforms') ? 'is-changed' : ''}>
+            <ChipGroup legend="플랫폼" hint={diff('platforms') ? '수정' : ''} name={`${pre}-pf`} type="checkbox" options={options.platforms.filter((o) => !o.hidden)} isChecked={(v) => f.platforms.includes(v)} onToggle={toggle('platforms')} />
+          </div>
+          <div className={diff('genres') ? 'is-changed' : ''}>
+            <ChipGroup legend="장르" hint={diff('genres') ? '수정' : ''} name={`${pre}-gn`} type="checkbox" options={options.genres} isChecked={(v) => f.genres.includes(v)} onToggle={toggle('genres')} />
+          </div>
+        </>
+      )}
+      <Field id={`${pre}-store`} label="구매처 추가 링크" changed={diff('storeUrl')} note="공식 스토어 주소만 돼요.">
         <input id={`${pre}-store`} type="url" value={f.storeUrl} onChange={set('storeUrl')} />
       </Field>
-      <Actions busy={busy} changed={changed} submitLabel={submitLabel} onCancel={onCancel} testid="confirm-edit" onSubmit={() => onSubmit({ ...f })} />
+      {init.removeStores.length > 0 && (
+        <fieldset className={`field${diff('removeStores') ? ' is-changed' : ''}`}>
+          <legend>뺄 구매처 (체크를 풀면 빼지 않음)</legend>
+          {init.removeStores.map((u) => (
+            <label key={u} className="check-line">
+              <input type="checkbox" checked={f.removeStores.includes(u)} onChange={() => toggle('removeStores')(u)} /> <span className="small">{u}</span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <Actions
+        busy={busy} changed={changed} submitLabel={submitLabel} onCancel={onCancel} testid="confirm-edit"
+        onSubmit={() => onSubmit({ ...f, platforms: f.platforms.length ? f.platforms : undefined, genres: f.genres.length ? f.genres : undefined })}
+      />
     </div>
   );
 }

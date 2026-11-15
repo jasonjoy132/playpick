@@ -32,7 +32,7 @@ const HELP = {
   games: '승인하면 검색·나만의 게임 찾기·상세 페이지에 ‘사용자 제보’ 게임으로 추가돼요.',
   photos: '승인하면 사진이 없는 게임의 카드·상세 표지로 보여요. 출처 주소에서 같은 게임의 실제 사진인지 확인해 주세요.',
   ended: '승인하면 그 게임을 추천·검색·목록에서 숨겨요(상세 페이지는 종료 안내와 함께 열림). 근거 주소를 꼭 확인해 주세요.',
-  fix: '승인하면 추천 인원·플레이 시간·구매처를 ‘사용자 제보’ 값으로 바꿔 보여 줘요. 설명에만 적힌 내용은 자동으로 반영되지 않아요.',
+  fix: '승인하면 추천 인원·플레이 시간·구매처·제목·소개·출시일·개발·유통사·플랫폼·장르를 ‘사용자 제보’ 값으로 바꿔 보여 줘요. 플랫폼·장르는 검색에도 반영돼요. 설명에만 적힌 내용은 자동으로 반영되지 않아요.',
   reviews: '숨긴 리뷰는 작성자에게만 보이고 평점에서 빠져요. ‘문제 없음’이면 그대로 둬요.',
   grac: '게임물관리위원회에 새로 등급분류된 게임을 하루 한 번(한국 시간 새벽 4시) 받아요. Steam·App Store에서 찾으면 서비스 중/출시 예정으로 보이고, 스토어 설명으로 AI가 추천 인원을 정해요. 못 찾은 게임은 등급분류 6개월 안이면 ‘새 등급분류’로 보이고 일주일마다 다시 찾아요.',
 };
@@ -79,7 +79,7 @@ export function AdminPage({ options }) {
   const tabs = kind === 'reviews' ? REVIEW_TABS : TABS;
   const card = (item) => {
     if (kind === 'photos') return <PhotoCard key={item.id} item={item} onChanged={list.retry} />;
-    if (kind === 'ended' || kind === 'fix') return <ReportCard key={item.id} item={item} onChanged={list.retry} />;
+    if (kind === 'ended' || kind === 'fix') return <ReportCard key={item.id} item={item} options={options} onChanged={list.retry} />;
     if (kind === 'reviews') return <ReviewReportCard key={item.reviewId} item={item} onChanged={list.retry} />;
     return <SubmissionCard key={item.id} item={item} options={options} onChanged={list.retry} />;
   };
@@ -276,7 +276,7 @@ function Decide({ item, onApprove, onReject, approveLabel, onChanged, testid = '
 }
 
 /** 서비스 종료·정보 수정 제보 */
-function ReportCard({ item, onChanged }) {
+function ReportCard({ item, options, onChanged }) {
   const fix = item.fix || {};
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -309,17 +309,21 @@ function ReportCard({ item, onChanged }) {
         </header>
         {item.kind === 'fix' && (
           <ul className="admin-fix">
-            {fix.players && <li>추천 인원: {fix.players.min}~{fix.players.max}명</li>}
-            {fix.hours && <li>플레이 시간: 약 {fix.hours}시간</li>}
-            {fix.storeUrl && (
-              <li>
-                구매처:{' '}
-                <a href={fix.storeUrl} target="_blank" rel="noopener noreferrer">
-                  {fix.storeUrl}
-                </a>
-              </li>
+            {(item.lines ?? []).map((l) =>
+              l.field === 'storeUrl' ? (
+                <li key={l.field}>
+                  구매처 추가:{' '}
+                  <a href={fix.storeUrl} target="_blank" rel="noopener noreferrer">
+                    {fix.storeUrl}
+                  </a>
+                </li>
+              ) : (
+                <li key={l.field}>
+                  {l.label}: {l.field === 'summary' ? fix.summary : l.field === 'hours' ? `약 ${fix.hours}시간` : l.value}
+                </li>
+              ),
             )}
-            {!fix.players && !fix.hours && !fix.storeUrl && <li className="muted">자동 반영할 값 없음 (설명 참고)</li>}
+            {!item.lines?.length && <li className="muted">자동 반영할 값 없음 (설명 참고)</li>}
           </ul>
         )}
         {item.sourceUrl && (
@@ -340,7 +344,7 @@ function ReportCard({ item, onChanged }) {
         )}
         {editing ? (
           <FixEditForm
-            item={item} busy={busy} onCancel={() => setEditing(false)} onSubmit={save}
+            item={item} options={options} busy={busy} onCancel={() => setEditing(false)} onSubmit={save}
             submitLabel={item.status === 'approved' ? '고친 내용 저장' : '고친 값으로 승인'}
           />
         ) : (

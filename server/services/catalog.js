@@ -281,7 +281,7 @@ export function createCatalog(config, deps = {}) {
      *  - 선택한 플랫폼·장르가 게임위 자료로 모두 '일치'인 게임만 (게임위에는 인원 정보가 없어 인원은 '정보 없음')
      *  - 최신 등급분류 순으로 훑으며 IGDB에 같은 이름(이름·별칭·한국어명)이 있는 게임은 제외
      */
-    async gracMatches(criteria, { offset = 0, limit = 24, keep = null } = {}) {
+    async gracMatches(criteria, { offset = 0, limit = 24, keep = null, patch = null, patchKey = '' } = {}) {
       if (!igdb.configured || !gracIndex) return { status: 'unavailable' };
       gracIndex.ensure();
       const snap = gracIndex.snapshot();
@@ -289,11 +289,11 @@ export function createCatalog(config, deps = {}) {
       const keys = ['platforms', 'genres'].filter((k) => criteria[k].length);
       if (!keys.length) return { status: 'ready', items: [], total: 0, hasMore: false, nextOffset: 0, reason: 'NEED_PLATFORM_OR_GENRE' };
 
-      const fkey = JSON.stringify([snap.updatedAt, criteria.platforms, criteria.genres]);
+      const fkey = JSON.stringify([snap.updatedAt, criteria.platforms, criteria.genres, patchKey]);
       let list = filtered.get(fkey);
       if (!list) {
         list = snap.games
-          .map((game) => ({ game, evaluation: evaluateGame(game, criteria) }))
+          .map((game) => ({ game, evaluation: evaluateGame(patch ? patch(game) : game, criteria) })) // 고친 플랫폼·장르로 판정(게임 정보는 원래대로 — 반영은 decorate 에서)
           .filter(({ evaluation }) => evaluation.checks.every((c) => c.key === 'players' || c.status === 'match'))
           .sort((a, b) => String(b.game.ratingDate || '').localeCompare(String(a.game.ratingDate || '')));
         if (filtered.size > 50) filtered.clear();

@@ -12,14 +12,14 @@ export function useAsync(fn, deps, memo = null) {
     return saved !== undefined ? { status: 'success', data: saved, error: null } : { status: 'loading', data: null, error: null };
   });
   const restored = useRef(state.status === 'success');
-  const [nonce, setNonce] = useState(0);
+  const [nonce, setNonce] = useState({ n: 0, quiet: false });
   useEffect(() => {
     if (restored.current) {
       restored.current = false; // 저장해 둔 데이터로 시작했으면 처음 한 번은 다시 받지 않음
       return undefined;
     }
     let alive = true;
-    setState({ status: 'loading', data: null, error: null });
+    if (!nonce.quiet) setState({ status: 'loading', data: null, error: null });
     fn().then(
       (data) => {
         if (!alive) return;
@@ -33,6 +33,8 @@ export function useAsync(fn, deps, memo = null) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, nonce]);
-  const retry = useCallback(() => setNonce((n) => n + 1), []);
-  return { ...state, retry };
+  const retry = useCallback(() => setNonce((x) => ({ n: x.n + 1, quiet: false })), []);
+  /** 화면을 '불러오는 중'으로 바꾸지 않고 조용히 다시 받기(관리자가 바로 고친 뒤 등) */
+  const reload = useCallback(() => setNonce((x) => ({ n: x.n + 1, quiet: true })), []);
+  return { ...state, retry, reload };
 }

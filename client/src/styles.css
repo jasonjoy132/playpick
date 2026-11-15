@@ -2008,3 +2008,10 @@ h3 { letter-spacing: -0.01em; }
 .email-ok { color: var(--ok); font-weight: 600; }
 .email-verify .btn { margin-left: 4px; }
 .email-verify .field-note { display: block; margin-top: 6px; }
+
+/* 정보 수정 제보: 더 고칠 칸(접어 둠)·구매처 빼기 */
+.report-more { margin: 10px 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 12px; }
+.report-more > summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; padding: 4px 0; }
+.report-more[open] > summary { margin-bottom: 8px; }
+.report-more .chips { flex-wrap: wrap; }
+.check-line { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; overflow-wrap: anywhere; }

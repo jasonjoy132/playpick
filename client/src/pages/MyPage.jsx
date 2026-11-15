@@ -577,6 +577,9 @@ const fmtShort = (iso) => new Date(iso).toLocaleDateString('ko-KR', { month: 'lo
 const fixText = (f = {}) =>
   [f.players && `추천 인원 ${f.players.min}~${f.players.max}명`, f.hours && `플레이 시간 ${f.hours}시간`, f.storeUrl && '구매처'].filter(Boolean).join(' · ');
 
+/** 정보 수정 제보 한 칸 → 짧은 문구 (긴 값은 이름만) */
+const lineText = (l) => ({ storeUrl: '구매처', summary: '소개', removeStores: '구매처 빼기' })[l.field] ?? `${l.label} ${l.value}`;
+
 /** 세 API 결과 → 같은 모양의 항목 (최신순) */
 function toSubItems([games, images, reportsList]) {
   const base = (s) => ({ id: s.id, status: s.status, createdAt: s.createdAt, reviewedAt: s.reviewedAt, rejectReason: s.rejectReason, edited: s.edited ?? [] });
@@ -615,7 +618,7 @@ function toSubItems([games, images, reportsList]) {
       title: s.gameTitle,
       link: `/games/${s.gameId}`,
       imageUrl: null,
-      what: s.kind === 'ended' ? '서비스가 종료된 게임이에요' : fixText(s.fix) || '게임 정보 수정',
+      what: s.kind === 'ended' ? '서비스가 종료된 게임이에요' : (s.lines?.length ? s.lines.map(lineText).join(' · ') : fixText(s.fix)) || '게임 정보 수정',
       done: s.kind === 'ended' ? '목록에서 내려졌어요. 고마워요!' : '게임 정보에 반영됐어요. 고마워요!',
       testid: 'report-row',
       cancel: () => api.cancelReport(s.id),

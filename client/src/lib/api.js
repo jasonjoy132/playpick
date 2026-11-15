@@ -128,4 +128,5 @@ export const api = {
   reviews: (id, offset = 0) => get(`/api/games/${gid(id)}/reviews?offset=${offset}`),
   saveReview: (id, b) => request('PUT', `/api/games/${gid(id)}/reviews/mine`, b),
   deleteReview: (id) => request('DELETE', `/api/games/${gid(id)}/reviews/mine`),
+  adminDeleteReview: (reviewId) => request('DELETE', `/api/admin/reviews/${reviewId}`),
 };

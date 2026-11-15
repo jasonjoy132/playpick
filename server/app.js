@@ -153,6 +153,19 @@ export function createApp(config, deps = {}) {
     reviewedPool = { at: Date.now(), games };
     return games;
   }
+  // 관리자·회원 제보로 플랫폼·장르를 고친 IGDB 게임 — IGDB 검색은 IGDB 자료로 하므로 고친 값으로는 안 걸림 → 직접 끼워 넣을 후보 (1분 캐시)
+  let retaggedPool = null;
+  async function retaggedGames() {
+    const ids = (await reports.retaggedIds()).filter((id) => id.startsWith('igdb-'));
+    const key = ids.join(',');
+    if (retaggedPool && retaggedPool.key === key && Date.now() - retaggedPool.at < 60_000) return retaggedPool.games;
+    const found = ids.length ? (await catalog.getMany?.(ids)) ?? [] : [];
+    const { games } = found.length ? await partySize.fill(found) : { games: [] };
+    retaggedPool = { at: Date.now(), key, games };
+    return games;
+  }
+  /** 같은 게임은 한 번만 */
+  const uniqueGames = (list) => [...new Map(list.map((g) => [g.id, g])).values()];
   const limits = {
     // 무차별 대입을 막아야 하는 곳은 DB에 기록(서버리스 인스턴스끼리 공유)
     login: createDbRateLimiter(db, { name: 'login', limit: 5, windowMs: 10 * 60e3 }),
@@ -686,6 +699,16 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
         await notes.afterReviewAction(ctx, avm[2]);
         return sendJson(res, 200, out);
       }
+      // 게임 상세에서 리뷰 바로 삭제 → 작성자에게 알림
+      const adm = p.match(/^\/api\/admin\/reviews\/(\d{1,12})$/);
+      if (adm && method === 'DELETE') {
+        const r = await community.deleteReviewById(adm[1]);
+        if (r.userId !== u.id) {
+          await notes.add(r.userId, { kind: 'review', tone: 'no', title: `‘${r.gameTitle || '게임'}’에 남긴 리뷰를 관리자가 삭제했어요`, body: '운영 정책에 맞지 않는 리뷰로 판단했어요. 평점·칭호 계산에서도 빠져요.', link: `/games/${r.gameId}` });
+          await badges.newBadges(r.userId); // 잃은 칭호를 기록에서 지워, 다시 얻으면 다시 알리게
+        }
+        return sendJson(res, 200, await reviewsOut(r.gameId, u.id, { limit: 20 }));
+      }
       if (p === '/api/admin/image-submissions' && method === 'GET') return sendJson(res, 200, await imageSubs.list(url.searchParams.get('status') || 'pending'));
       const aim = p.match(/^\/api\/admin\/image-submissions\/(\d{1,9})\/(approve|reject)$/);
       if (aim && method === 'POST') {
@@ -772,7 +795,8 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
         // 게임위 게임 AI 추천 인원도 IGDB 쪽과 동시에 물음 (기다리는 시간이 겹치게)
         wantGrac
           ? timed('게임위+AI', async () => {
-              const r = await catalog.gracMatches(criteria, { offset: goffset, limit: gracLimit, keep: listableRaw });
+              const fixes = await reports.patcher(); // 관리자·회원 제보로 고친 플랫폼·장르로 고름
+              const r = await catalog.gracMatches(criteria, { offset: goffset, limit: gracLimit, keep: listableRaw, patch: fixes.patch, patchKey: fixes.key });
               if (!r.items?.length) return r;
               const f = await partySize.fill(r.items.map((x) => x.game));
               return { ...r, games: f.games, aiWarning: f.warning };
@@ -789,8 +813,8 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
         const igdbHasMore = paged.skipped ? false : paged.hasMore;
         const useGrac = !!grac && !igdbHasMore; // IGDB가 끝났을 때만 게관위 게임을 씀 (아니면 버리고 위치도 그대로)
         const judge = async (games) => (await decorate(games, user)).filter(listable).map((game) => ({ game, evaluation: evaluateGame(game, criteria) }));
-        // PlayPick 평가가 있는 게임: 모든 조건 일치만, 점수 자리에 끼움 (IGDB·게관위 흐름에서는 뺌)
-        const reviewed = byPopularity((await judge(await reviewedGames())).filter((x) => x.evaluation.isFullMatch));
+        // PlayPick 평가가 있는 게임 + 플랫폼·장르를 고친 IGDB 게임: 모든 조건 일치만, 점수 자리에 끼움 (IGDB·게관위 흐름에서는 뺌)
+        const reviewed = byPopularity((await judge(uniqueGames([...(await reviewedGames()), ...(await retaggedGames())]))).filter((x) => x.evaluation.isFullMatch));
         const reviewedIds = new Set(reviewed.map((x) => x.game.id));
         // 이번 IGDB 묶음의 마지막 평가 수 — 이보다 크고 앞 페이지 경계 이하인 '끼울 게임'을 이 페이지에
         const lo = igdbHasMore ? (paged.games.at(-1)?.globalRating?.count ?? 0) : -Infinity;
@@ -873,7 +897,19 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       if (kind === 'upcoming' && offset === 0) {
         domestic = (await decorate(upcomingDomestic(), user)).filter((g) => !platform || g.platforms?.includes(platform));
       }
-      return sendJson(res, 200, { meta: meta(), games: (await decorate(games, user)).filter(listable), hasMore, nextOffset: offset + 24, warnings, domestic });
+      let out = (await decorate(games, user)).filter(listable);
+      if (bm[1] === 'genre') {
+        // 고친 장르·플랫폼 반영: 빠진 게임은 빼고, 새로 들어온 IGDB 게임은 평가 수 자리에 끼움(이 페이지 범위만, 끝 페이지면 나머지 모두)
+        const fits = (g) => g.genres?.includes(genre) && (!platform || g.platforms?.includes(platform));
+        out = out.filter((g) => !g.userFixed || fits(g));
+        const have = new Set(out.map((g) => g.id));
+        const count = (g) => g.globalRating?.count ?? 0;
+        const lo = hasMore ? count(out.at(-1) ?? {}) : -Infinity;
+        const hi = offset === 0 ? Infinity : count(out[0] ?? {});
+        const add = (await decorate(await retaggedGames(), user)).filter((g) => listable(g) && fits(g) && !have.has(g.id) && count(g) > lo && count(g) <= hi);
+        if (add.length) out = [...out, ...add].sort((a, b) => count(b) - count(a));
+      }
+      return sendJson(res, 200, { meta: meta(), games: out, hasMore, nextOffset: offset + 24, warnings, domestic });
     }
     if (p === '/api/contributors' && method === 'GET') {
       const board = await contributors.leaderboard({ period: url.searchParams.get('period') || 'month' });

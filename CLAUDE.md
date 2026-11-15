@@ -107,8 +107,10 @@
   - **고쳐서 승인**: 게임 제보·정보 수정 제보는 관리자가 틀린 칸만 고쳐 승인(이미 승인된 것도 '고치기'). 회원이 낸 원래 값은 `original_json`·`original_payload`에, 바뀐 칸은 응답 `edited`(원래 → 반영)로 관리자 카드·회원 '내 제보'·알림에 보임. 표지 사진·서비스 종료 제보는 승인·거절만
   - 게임 제보 `submissions.js` → 승인 시 `user-<번호>` 게임
   - 표지 사진 제보 `imageSubmissions.js`(출처 주소 필수)
-  - 서비스 종료 제보·정보 수정 제보(추천 인원·플레이 시간·구매처) `reports.js`
+  - 서비스 종료 제보·정보 수정 제보(추천 인원·플레이 시간·구매처 추가 + 접어 둔 칸: 제목·소개·출시일·개발·유통사·플랫폼·장르·구매처 빼기) `reports.js`. 칸에는 지금 값이 채워져 있고 바꾼 칸만 보냄. 플랫폼·장르는 사이트 목록(조건 고르기와 같은 값)에서만 고르고, 고친 칸은 `userFixed`로 상세에 '사용자 제보 · 관리자 확인' 표시
+    - **고친 플랫폼·장르의 검색 반영**: 빼면 판정(`judge`)에서 빠짐. 넣으면 IGDB 검색에는 안 걸리므로 `retaggedGames`(고친 IGDB 게임)를 추천 목록의 '끼울 게임'(평가 수 자리)·장르별 게임(그 페이지 평가 수 범위)에 끼움. 게관위는 `gracMatches`에 `patch`(`reports.patcher`)를 넘겨 고친 값으로 고름(`patchKey`로 캐시 구분). 제목을 고쳐도 IGDB 검색어로는 안 걸림
   - 리뷰 신고 `reports.js` → 관리자가 숨기면 작성자에게만 보이고 평점·칭호 계산에서 빠짐
+  - **관리자는 게임 상세에서 바로**: '관리자 · 정보 바로 수정'(지금 값이 채워진 칸, 바꾼 칸만 보내 바로 승인 → 화면을 조용히 다시 받음 `useAsync`의 `reload`) · 남의 리뷰 '삭제 (관리자)'(`DELETE /api/admin/reviews/:id`, `community.deleteReviewById`, 작성자에게 알림)
 - **관리자**: `.env`의 `ADMIN_EMAILS`(쉼표 구분) 이메일로 가입하고 **그 이메일을 인증한** 계정(인증 전엔 `adminPending`, 마이페이지에 안내). 화면 `/admin`(제보 종류별 탭)
 - **칭호·뱃지** `badges.js`: 저장 없이 그때그때 계산(대표 칭호 `users.title_badge`, 알림 확인 `users.badges_seen`)
   - 단계: 제보(finder~curator), 리뷰(rv1~rv5), 사진(ph1~ph3), 정보(if1~if3) + 특별 뱃지(pioneer, popular, thorough, local, early, essay, cleaner, firstword)

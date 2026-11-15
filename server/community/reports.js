@@ -7,6 +7,12 @@ import { DataSourceError } from '../providers/errors.js';
 import { storeFromUrl } from '../providers/igdbProvider.js';
 import { validateSourceUrl } from './imageSubmissions.js';
 import { cached } from './cached.js';
+import { PLATFORMS, GENRES } from '../services/taxonomy.js';
+
+const PLATFORM_VALUES = new Set(PLATFORMS.filter((p) => !p.hidden).map((p) => p.value));
+const GENRE_VALUES = new Set(GENRES.map((g) => g.value));
+const LABEL = new Map([...PLATFORMS, ...GENRES].map((x) => [x.value, x.label]));
+const labels = (arr) => arr.map((v) => LABEL.get(v) ?? v).join('·');
 
 const fail = (code, message, status = 400) => new DataSourceError(code, message, status);
 export const MAX_PENDING_REPORTS = 20;
@@ -25,7 +31,10 @@ const clean = (v, max, label) => {
 };
 const has = (v) => v != null && v !== '';
 
-/** 정보 수정 제보 값 검증 → { players?, hours?, storeUrl? } (하나 이상 또는 메모 필요) */
+/**
+ * 정보 수정 제보 값 검증 → { players?, hours?, storeUrl?, title?, summary?, releaseDate?, publisher?, platforms?, genres?, removeStores? }
+ * (하나 이상 또는 메모 필요). 플랫폼·장르는 사이트 목록(조건 고르기와 같은 값)에서만
+ */
 export function validateFix(input) {
   const b = input && typeof input === 'object' ? input : {};
   const out = {};
@@ -47,6 +56,34 @@ export function validateFix(input) {
     if (!s) throw fail('INVALID_REPORT', '구매처는 Steam·App Store·Google Play·닌텐도·PlayStation·Xbox·Epic 등 공식 스토어 주소만 넣을 수 있어요.');
     out.storeUrl = s.url;
   }
+  if (has(b.title)) out.title = clean(b.title, 80, '제목');
+  if (has(b.summary)) {
+    const t = String(b.summary).trim();
+    if (t.length > 2000) throw fail('INVALID_REPORT', '소개는 2000자 이내로 입력해 주세요.');
+    if (t) out.summary = t;
+  }
+  if (has(b.releaseDate)) {
+    const d = String(b.releaseDate).trim();
+    const y = Number(d.slice(0, 4));
+    if (!/^\d{4}(-\d{2}(-\d{2})?)?$/.test(d) || y < 1950 || y > 2100 || (d.length === 10 && Number.isNaN(Date.parse(d)))) {
+      throw fail('INVALID_REPORT', '출시일은 2024-05-01 또는 2024 처럼 입력해 주세요.');
+    }
+    out.releaseDate = d;
+  }
+  if (has(b.publisher)) out.publisher = clean(b.publisher, 60, '개발·유통사');
+  const pick = (v, allowed, label) => {
+    const arr = [...new Set(v)];
+    if (!arr.length) throw fail('INVALID_REPORT', `${label}을(를) 하나 이상 골라 주세요.`);
+    if (arr.some((x) => !allowed.has(x))) throw fail('INVALID_REPORT', `알 수 없는 ${label}이(가) 있어요.`);
+    return arr;
+  };
+  if (Array.isArray(b.platforms)) out.platforms = pick(b.platforms, PLATFORM_VALUES, '플랫폼');
+  if (Array.isArray(b.genres)) out.genres = pick(b.genres, GENRE_VALUES, '장르');
+  if (Array.isArray(b.removeStores) && b.removeStores.length) {
+    const urls = [...new Set(b.removeStores.map((u) => String(u).trim()))];
+    if (urls.length > 10 || urls.some((u) => !/^https?:\/\//.test(u) || u.length > 500)) throw fail('INVALID_REPORT', '뺄 구매처가 올바르지 않아요.');
+    out.removeStores = urls;
+  }
   return out;
 }
 
@@ -55,7 +92,16 @@ const FIX_FIELDS = [
   ['players', '추천 인원', (f) => (f.players ? `${f.players.min}~${f.players.max}명` : null)],
   ['hours', '플레이 시간', (f) => (f.hours ? `${f.hours}시간` : null)],
   ['storeUrl', '구매처', (f) => f.storeUrl ?? null],
+  ['title', '제목', (f) => f.title ?? null],
+  ['summary', '소개', (f) => (f.summary ? (f.summary.length > 40 ? `${f.summary.slice(0, 40)}…` : f.summary) : null)],
+  ['releaseDate', '출시일', (f) => f.releaseDate ?? null],
+  ['publisher', '개발·유통사', (f) => f.publisher ?? null],
+  ['platforms', '플랫폼', (f) => (f.platforms ? labels(f.platforms) : null)],
+  ['genres', '장르', (f) => (f.genres ? labels(f.genres) : null)],
+  ['removeStores', '뺄 구매처', (f) => (f.removeStores?.length ? f.removeStores.join(', ') : null)],
 ];
+/** 화면에 보여 줄 '고칠 내용' 목록 [{ field, label, value }] */
+export const fixLines = (f) => FIX_FIELDS.flatMap(([field, label, show]) => (show(f || {}) ? [{ field, label, value: show(f) }] : []));
 export function diffFix(a, b) {
   return FIX_FIELDS.flatMap(([field, label, show]) => {
     const from = show(a) ?? '(없음)';
@@ -104,6 +150,7 @@ export function createReports(db, { now = () => Date.now() } = {}) {
     gameId: r.game_id,
     gameTitle: r.game_title,
     fix: JSON.parse(r.payload || '{}'),
+    lines: fixLines(JSON.parse(r.payload || '{}')), // 화면용 '고칠 내용' [{ field, label, value }]
     sourceUrl: r.source_url,
     note: r.note,
     rejectReason: r.reject_reason,
@@ -142,6 +189,8 @@ export function createReports(db, { now = () => Date.now() } = {}) {
         if (f.players) o.players = f.players;
         if (f.hours) o.hours = f.hours;
         if (f.storeUrl) o.storeUrls = [...new Set([...(o.storeUrls ?? []), f.storeUrl])];
+        for (const k of ['title', 'summary', 'releaseDate', 'publisher', 'platforms', 'genres']) if (f[k]) o[k] = f[k];
+        if (f.removeStores) o.removeStores = [...new Set([...(o.removeStores ?? []), ...f.removeStores])];
         o.fixedBy = r.nickname ?? null;
       }
       cache.set(r.game_id, o);
@@ -165,6 +214,17 @@ export function createReports(db, { now = () => Date.now() } = {}) {
       }
       out = { ...out, stores };
     }
+    if (o.removeStores) {
+      const gone = new Set(o.removeStores);
+      out = { ...out, stores: (out.stores || []).filter((x) => !gone.has(x.url)) };
+    }
+    // 제목: 원래 이름은 원제로 남겨 둠(검색·확인용)
+    if (o.title && o.title !== out.title) out = { ...out, title: o.title, originalTitle: out.originalTitle || out.title, userFixed: [...(out.userFixed ?? []), 'title'] };
+    if (o.summary) out = { ...out, summary: o.summary, summaryKo: o.summary, summaryTranslated: false, userFixed: [...(out.userFixed ?? []), 'summary'] };
+    if (o.releaseDate) out = { ...out, releaseDate: o.releaseDate, userFixed: [...(out.userFixed ?? []), 'releaseDate'] };
+    if (o.publisher) out = { ...out, publisher: o.publisher, userFixed: [...(out.userFixed ?? []), 'publisher'] };
+    if (o.platforms) out = { ...out, platforms: o.platforms, userFixed: [...(out.userFixed ?? []), 'platforms'] };
+    if (o.genres) out = { ...out, genres: o.genres, userFixed: [...(out.userFixed ?? []), 'genres'] };
     if (o.fixedBy !== undefined) out = { ...out, fixedByUser: true };
     return out;
   }
@@ -184,7 +244,7 @@ export function createReports(db, { now = () => Date.now() } = {}) {
         sourceUrl = validateSourceUrl(input?.sourceUrl); // 종료 공지 등 근거 필수
       } else {
         payload = validateFix(input);
-        if (!Object.keys(payload).length && !note) throw fail('INVALID_REPORT', '고칠 내용(추천 인원·플레이 시간·구매처)이나 설명을 하나 이상 입력해 주세요.');
+        if (!Object.keys(payload).length && !note) throw fail('INVALID_REPORT', '고칠 내용(추천 인원·플레이 시간·구매처·제목·소개·출시일·개발·유통사·플랫폼·장르)이나 설명을 하나 이상 입력해 주세요.');
         if (has(input?.sourceUrl)) sourceUrl = validateSourceUrl(input.sourceUrl);
       }
       if (!user.isAdmin) {
@@ -255,6 +315,15 @@ export function createReports(db, { now = () => Date.now() } = {}) {
     async applyAll(games) {
       const map = await overrides();
       return map.size ? games.map((g) => apply(map, g)) : games;
+    },
+    /** 검색 단계에서 쓰는 동기 반영 함수 + 바뀌면 달라지는 키(게관위 고르기 캐시용) */
+    async patcher() {
+      const map = await overrides();
+      return { patch: (g) => (map.has(g.id) ? apply(map, g) : g), key: map.size ? JSON.stringify([...map].filter(([, o]) => o.platforms || o.genres).map(([id, o]) => [id, o.platforms, o.genres])) : '' };
+    },
+    /** 플랫폼·장르를 고친 게임 id (IGDB 검색 결과에 끼워 넣을 후보) */
+    async retaggedIds() {
+      return [...(await overrides())].filter(([, o]) => o.platforms || o.genres).map(([id]) => id);
     },
 
     // ── 리뷰 신고 ──

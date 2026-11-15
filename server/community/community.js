@@ -163,5 +163,16 @@ export function createCommunity(db, { now = () => Date.now(), badgeOf } = {}) {
       ]);
       return await statsFor(gameId);
     },
+    /** 관리자: 리뷰 하나 삭제(누가 썼든). 지운 리뷰의 작성자·게임을 돌려줌 */
+    async deleteReviewById(reviewId) {
+      const id = Number(reviewId);
+      const r = Number.isInteger(id) && id > 0 ? await db.prepare('SELECT id, user_id, game_id, game_title FROM reviews WHERE id = ?').get(id) : null;
+      if (!r) throw new DataSourceError('NOT_FOUND', '리뷰를 찾을 수 없어요.', 404);
+      await db.batch([
+        ['DELETE FROM review_reports WHERE review_id = ?', [id]],
+        ['DELETE FROM reviews WHERE id = ?', [id]],
+      ]);
+      return { userId: r.user_id, gameId: r.game_id, gameTitle: r.game_title };
+    },
   };
 }

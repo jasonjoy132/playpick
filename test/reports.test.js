@@ -153,6 +153,38 @@ test('리뷰 신고 → 관리자 숨김 → 다른 사람에게 안 보이고 �
   assert.equal((await reviewer('GET', '/api/games/igdb-72/reviews')).body.reviews.length, 1, '다시 보이기');
 });
 
+test('관리자: 게임 상세에서 다른 회원 리뷰 바로 삭제 → 작성자 알림, 회원은 못 함', async () => {
+  const author = client();
+  await signup(author, 'writer2', 'w2@example.com');
+  await author('PUT', '/api/games/igdb-71/reviews/mine', { rating: 2, content: '욕설 리뷰' });
+  const rid = (await author('GET', '/api/games/igdb-71/reviews')).body.reviews[0].id;
+  const other = client();
+  await signup(other, 'reader2', 'r2@example.com');
+  assert.equal((await other('DELETE', `/api/admin/reviews/${rid}`)).status, 403, '회원은 남의 리뷰 삭제 불가');
+  const admin = client();
+  await admin('POST', '/api/auth/login', { loginId: 'boss1', password: 'secret123' });
+  const r = await admin('DELETE', `/api/admin/reviews/${rid}`);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.reviews.length, 0, '삭제한 뒤 목록을 돌려줌');
+  assert.equal(r.body.stats.count, 0, '평점에서도 빠짐');
+  assert.equal((await admin('DELETE', `/api/admin/reviews/${rid}`)).status, 404, '없는 리뷰');
+  const note = (await author('GET', '/api/me/notifications')).body.items[0];
+  assert.match(note.title, /리뷰를 관리자가 삭제했어요/);
+  assert.equal(note.link, '/games/igdb-71');
+});
+
+test('관리자: 정보 수정은 바로 반영(바꾼 칸만 보내면 그 칸만)', async () => {
+  const admin = client();
+  await admin('POST', '/api/auth/login', { loginId: 'boss1', password: 'secret123' });
+  const before = (await admin('GET', '/api/games/igdb-72')).body.game;
+  const c = await admin('POST', '/api/games/igdb-72/reports', { kind: 'fix', hours: 33 });
+  assert.equal(c.body.item.status, 'approved');
+  const g = (await admin('GET', '/api/games/igdb-72')).body.game;
+  assert.equal(g.playtime.hours, 33);
+  assert.equal(g.playtime.source, 'user');
+  assert.deepEqual(g.recommendedPlayers, before.recommendedPlayers, '안 보낸 추천 인원은 그대로');
+});
+
 test('상세까지 막는 게임: IGDB 판매 중단·개발 취소는 이유별 안내(관리자는 열림)', async () => {
   const { createApp: make } = await import('../server/app.js');
   const G = {

@@ -14,12 +14,13 @@ import { NameBadge } from '../components/Badge.jsx';
 import { useAuth } from '../lib/auth.jsx';
 import { toCoverDataUrl } from '../lib/image.js';
 import { Arrow } from '../components/Arrow.jsx';
+import { ChipGroup } from '../components/FinderModal.jsx';
 
 export function GamePage({ id, options }) {
   const { search } = useLocation();
   const criteria = criteriaFromSearch(search);
   const qs = hasAnyCriteria(criteria) ? criteriaToSearch(criteria) : '';
-  const { status, data, error, retry } = useAsync(() => api.game(id, qs), [id, qs]);
+  const { status, data, error, retry, reload } = useAsync(() => api.game(id, qs), [id, qs]);
   const back = qs ? `/results?${qs}` : null;
 
   return (
@@ -63,7 +64,7 @@ export function GamePage({ id, options }) {
         ) : (
           <ErrorState title={error.status === 404 ? '게임을 찾을 수 없어요' : undefined} error={error} onRetry={error.status === 404 ? null : retry} />
         ))}
-      {status === 'success' && <GameDetail data={data} options={options} />}
+      {status === 'success' && <GameDetail data={data} options={options} reload={reload} />}
     </>
   );
 }
@@ -77,6 +78,7 @@ function Summary({ game }) {
       <>
         <p className="detail-summary" lang={ko ? 'ko' : 'en'}>{ko || game.summary}</p>
         {!ko && <p className="muted small" data-testid="translation-note">번역 정보가 없어 원문을 표시합니다.</p>}
+        {game.userFixed?.includes('summary') && <p className="muted small">소개 출처: 사용자 제보 · 관리자 확인</p>}
       </>
     );
   }
@@ -250,19 +252,22 @@ function Trailer({ game }) {
   );
 }
 
-function GameDetail({ data, options }) {
+function GameDetail({ data, options, reload }) {
   const { game, evaluation } = data;
   const [rating, setRating] = useState(game.userRating);
   const [photoOpen, setPhotoOpen] = useState(false);
   const fromIgdb = game.source === 'IGDB';
   const hasGrac = Boolean(game.ratingNo);
+  // 회원 제보(관리자 확인)로 고친 칸은 출처 표시
+  const fixed = new Set(game.userFixed ?? []);
+  const byUser = (k, v) => (fixed.has(k) ? <>{v} <span className="muted small">(출처: 사용자 제보 · 관리자 확인)</span></> : v);
   const rows = [
     ...partyRows(game),
-    ['플랫폼', formatList(game.platforms, game.platformsRaw, options.platforms)],
-    ['장르', formatList(game.genres, game.genresRaw, options.genres)],
+    ['플랫폼', byUser('platforms', formatList(game.platforms, game.platformsRaw, options.platforms))],
+    ['장르', byUser('genres', formatList(game.genres, game.genresRaw, options.genres))],
     ['국내 이용 등급', game.rating ? `${game.rating}${game.ratingSource && game.ratingSource !== '게임물관리위원회' ? ` (${game.ratingSource})` : ''}` : '국내 등급분류 정보 없음'],
-    ['개발·유통사', orNoInfo(game.publisher)],
-    ...(fromIgdb ? [['출시일', orNoInfo(game.releaseDate)]] : []),
+    ['개발·유통사', byUser('publisher', orNoInfo(game.publisher))],
+    ...(fromIgdb || fixed.has('releaseDate') ? [['출시일', byUser('releaseDate', orNoInfo(game.releaseDate))]] : []),
     [
       '평균 플레이 시간',
       <Playtime key={game.id} game={game} />,
@@ -481,7 +486,7 @@ function GameDetail({ data, options }) {
               </p>
             )}
           </section>
-          {!game.isDemo && <ReportBox game={game} />}
+          {!game.isDemo && <ReportBox game={game} options={options} onChanged={reload} />}
         </aside>
       </div>
     </article>
@@ -645,34 +650,72 @@ function ImageSubmitBox({ game, onClose }) {
   );
 }
 
-/** 정보가 틀렸나요? — 서비스 종료 제보·정보 수정 제보 (관리자 확인 후 반영, 관리자는 바로 반영) */
-function ReportBox({ game }) {
+const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+const sorted = (arr) => [...arr].sort();
+
+/**
+ * 정보가 틀렸나요? — 서비스 종료 제보·정보 수정 제보 (관리자 확인 후 반영, 관리자는 바로 반영)
+ * 정보 수정 칸에는 지금 값이 채워져 있고, 바꾼 칸만 보냄(안 바꾼 칸이 '사용자 제보' 값으로 덮이지 않게)
+ */
+function ReportBox({ game, options, onChanged }) {
   const { user } = useAuth();
+  const admin = Boolean(user?.isAdmin);
+  const current = {
+    playersMin: game.recommendedPlayers?.min != null ? String(game.recommendedPlayers.min) : '',
+    playersMax: game.recommendedPlayers?.max != null ? String(game.recommendedPlayers.max) : '',
+    hours: game.playtime?.hours != null ? String(game.playtime.hours) : '',
+    title: game.title ?? '',
+    summary: game.summaryKo || game.summary || '',
+    releaseDate: game.releaseDate ?? '',
+    publisher: game.publisher ?? '',
+    platforms: sorted(game.platforms ?? []),
+    genres: sorted(game.genres ?? []),
+  };
   const { pathname, search } = useLocation();
   const [kind, setKind] = useState(null);
-  const [f, setF] = useState({ sourceUrl: '', note: '', playersMin: '', playersMax: '', hours: '', storeUrl: '' });
+  const [f, setF] = useState({ sourceUrl: '', note: '', storeUrl: '', removeStores: [], ...current });
   const [state, setState] = useState({});
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const toggle = (k) => (v) => setF((x) => ({ ...x, [k]: x[k].includes(v) ? x[k].filter((y) => y !== v) : [...x[k], v] }));
   const open = (k) => {
     setKind(k);
     setState({});
+    setF({ sourceUrl: '', note: '', storeUrl: '', removeStores: [], ...current });
+  };
+  /** 지금 값과 다른 칸만 */
+  const changes = () => {
+    const out = {};
+    if (f.playersMin !== current.playersMin || f.playersMax !== current.playersMax) Object.assign(out, { playersMin: f.playersMin, playersMax: f.playersMax });
+    for (const k of ['hours', 'title', 'summary', 'releaseDate', 'publisher']) if (f[k].trim() !== current[k].trim() && f[k].trim()) out[k] = f[k].trim();
+    for (const k of ['platforms', 'genres']) if (!same(sorted(f[k]), current[k])) out[k] = f[k];
+    if (f.storeUrl.trim()) out.storeUrl = f.storeUrl.trim();
+    if (f.removeStores.length) out.removeStores = f.removeStores;
+    return out;
   };
   const submit = async (e) => {
     e.preventDefault();
+    let body;
+    if (kind === 'ended') body = { kind, sourceUrl: f.sourceUrl, note: f.note };
+    else {
+      const ch = changes();
+      if (!Object.keys(ch).length && !f.note.trim()) return setState({ error: '바꾼 칸이 없어요. 고칠 값을 바꾸거나 설명을 적어 주세요.' });
+      if ((ch.platforms && !ch.platforms.length) || (ch.genres && !ch.genres.length)) return setState({ error: '플랫폼·장르는 하나 이상 골라 주세요.' });
+      body = { kind, sourceUrl: f.sourceUrl, note: f.note, ...ch };
+    }
     setState({ busy: true });
     try {
-      const body = kind === 'ended' ? { kind, sourceUrl: f.sourceUrl, note: f.note } : { kind, ...f };
       const { item } = await api.reportGame(game.id, body);
       setKind(null);
-      setState({ done: item.status === 'approved' ? '바로 반영했어요. 새로고침하면 보여요.' : '제보했어요! 관리자가 확인한 뒤 반영돼요. 마이페이지 ‘내 제보’에서 결과를 볼 수 있어요.' });
+      if (item.status === 'approved') onChanged?.(); // 화면을 다시 받아 바로 보여 줌
+      setState({ done: item.status === 'approved' ? '바로 반영했어요.' : '제보했어요! 관리자가 확인한 뒤 반영돼요. 마이페이지 ‘내 제보’에서 결과를 볼 수 있어요.' });
     } catch (err) {
       setState({ error: err.message });
     }
   };
   return (
     <section className="panel report-box" aria-labelledby="report-title" data-testid="report-box">
-      <h2 id="report-title">정보가 틀렸나요?</h2>
-      <p className="muted small">서비스가 끝났거나 정보가 다르면 알려 주세요. 관리자가 확인한 뒤 반영해요.</p>
+      <h2 id="report-title">{admin ? '관리자 · 정보 바로 수정' : '정보가 틀렸나요?'}</h2>
+      <p className="muted small">{admin ? '고친 값은 검토 없이 바로 반영되고, 화면에는 ‘사용자 제보 · 관리자 확인’으로 보여요.' : '서비스가 끝났거나 정보가 다르면 알려 주세요. 관리자가 확인한 뒤 반영해요.'}</p>
       {state.done && (
         <p className="small" role="status" data-testid="report-done">
           {state.done}
@@ -686,17 +729,17 @@ function ReportBox({ game }) {
         <div className="report-actions">
           {!game.userEnded && (
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => open('ended')} data-testid="open-report-ended">
-              서비스 종료 제보
+              {admin ? '서비스 종료 처리' : '서비스 종료 제보'}
             </button>
           )}
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => open('fix')} data-testid="open-report-fix">
-            정보 수정 제보
+            {admin ? '추천 인원·플레이 시간·구매처 고치기' : '정보 수정 제보'}
           </button>
         </div>
       ) : (
         <form onSubmit={submit} data-testid={`report-form-${kind}`}>
           <p className="small">
-            <b>{kind === 'ended' ? '서비스 종료 제보' : '정보 수정 제보'}</b>
+            <b>{kind === 'ended' ? (admin ? '서비스 종료 처리' : '서비스 종료 제보') : admin ? '정보 바로 수정 — 지금 값이 채워져 있어요. 바꾼 칸만 반영돼요.' : '정보 수정 제보'}</b>
           </p>
           {kind === 'fix' && (
             <>
@@ -715,9 +758,46 @@ function ReportBox({ game }) {
                 <input type="number" min={1} max={1000} value={f.hours} onChange={set('hours')} />
               </label>
               <label className="field">
-                구매처(공식 스토어 주소)
+                구매처 추가(공식 스토어 주소)
                 <input type="url" value={f.storeUrl} onChange={set('storeUrl')} placeholder="https://store.steampowered.com/app/…" />
               </label>
+              <details className="report-more" data-testid="report-more">
+                <summary>제목·소개·출시일·개발사·플랫폼·장르·구매처 빼기</summary>
+                <label className="field">
+                  제목
+                  <input type="text" value={f.title} onChange={set('title')} maxLength={80} />
+                </label>
+                <label className="field">
+                  소개
+                  <textarea rows={4} maxLength={2000} value={f.summary} onChange={set('summary')} />
+                </label>
+                <div className="row2">
+                  <label className="field">
+                    출시일
+                    <input type="text" value={f.releaseDate} onChange={set('releaseDate')} placeholder="2024-05-01 또는 2024" maxLength={10} />
+                  </label>
+                  <label className="field">
+                    개발·유통사
+                    <input type="text" value={f.publisher} onChange={set('publisher')} maxLength={60} />
+                  </label>
+                </div>
+                {options && (
+                  <>
+                    <ChipGroup legend="플랫폼" hint="검색 조건과 같은 목록" name="fix-pf" type="checkbox" options={options.platforms.filter((o) => !o.hidden)} isChecked={(v) => f.platforms.includes(v)} onToggle={toggle('platforms')} />
+                    <ChipGroup legend="장르" hint="검색 조건과 같은 목록" name="fix-gn" type="checkbox" options={options.genres} isChecked={(v) => f.genres.includes(v)} onToggle={toggle('genres')} />
+                  </>
+                )}
+                {game.stores?.length > 0 && (
+                  <fieldset className="field">
+                    <legend>틀린 구매처 빼기</legend>
+                    {game.stores.map((st) => (
+                      <label key={st.url} className="check-line">
+                        <input type="checkbox" checked={f.removeStores.includes(st.url)} onChange={() => toggle('removeStores')(st.url)} /> {st.name} <span className="muted small">{st.url}</span>
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
+              </details>
             </>
           )}
           <label className="field">
