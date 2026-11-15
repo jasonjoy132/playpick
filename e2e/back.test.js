@@ -57,10 +57,10 @@ test('상세에서 브라우저 뒤로 가기 → 펼친 목록·스크롤 위�
   await page.close();
 });
 
-test("상세의 '← 추천 목록으로'도 새로 열지 않고 떠나기 전 그대로", async () => {
+test("상세의 '추천 목록으로'도 새로 열지 않고 떠나기 전 그대로", async () => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const { cards, y, calls } = await openList(page);
-  await page.getByRole('link', { name: '← 추천 목록으로' }).click();
+  await page.getByRole('link', { name: '추천 목록으로' }).click();
   await page.waitForURL(/\/results\?platforms=pc$/);
   await page.waitForFunction((want) => Math.abs(window.scrollY - want) < 5, y);
   assert.ok((await cards.count()) >= 48);

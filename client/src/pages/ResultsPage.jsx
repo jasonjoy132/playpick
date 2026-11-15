@@ -50,7 +50,7 @@ export function ResultsPage({ options }) {
 
 function Results({ data, options, qs, criteria }) {
   const { totalGames, warnings = [] } = data;
-  // IGDB 전체 검색 + IGDB에 없는 게임위 게임을 한 목록으로. '더 보기'는 섹션별로 서버에서 이어 받음
+  // IGDB 전체 검색 + IGDB에 없는 게임위 게임을 한 목록으로(평가 수 합계 순, PlayPick 평가 없는 게관위 게임은 IGDB 뒤). '더 보기'는 섹션별로 서버에서 이어 받음
   // 더 불러온 목록·위치는 기록 항목에 저장 → 상세를 보고 뒤로 오면 떠나기 전 그대로
   const m = `results:${qs}`;
   const [full, setFull] = usePageState(`${m}:full`, data.fullMatches);
@@ -81,6 +81,7 @@ function Results({ data, options, qs, criteria }) {
     try {
       const params = new URLSearchParams({ more: section, offset: cursor.offset ?? 0, goffset: cursor.goffset ?? 0 });
       if (cursor.igdbDone) params.set('igdbDone', '1');
+      if (cursor.cut != null) params.set('cut', cursor.cut); // 앞 페이지까지 보여 준 점수(평가 수 합계) — PlayPick 평가 있는 게임을 제자리에 끼우는 데 씀
       const r = await api.recommendations(`${qs}&${params}`);
       // 게임위 게임은 판정 결과에 따라 두 섹션 어디로든 올 수 있어서 둘 다 이어 붙임
       setFull((cur) => append(cur, r.fullMatches));
@@ -125,7 +126,7 @@ function Results({ data, options, qs, criteria }) {
           </>
         ) : data.paged ? (
           <>
-            IGDB와 게임물관리위원회 전체에서 찾았어요. 모든 조건에 맞는 게임 <b>{n != null ? `약 ${n.toLocaleString('ko-KR')}개 이상` : '여러 개'}</b>(인기순).
+            IGDB와 게임물관리위원회 전체에서 찾았어요. 모든 조건에 맞는 게임 <b>{n != null ? `약 ${n.toLocaleString('ko-KR')}개 이상` : '여러 개'}</b>(평가 많은 순 · IGDB + PlayPick).
           </>
         ) : (
           <>

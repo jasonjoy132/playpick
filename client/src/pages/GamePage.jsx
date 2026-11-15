@@ -13,6 +13,7 @@ import { Reviews } from '../components/Reviews.jsx';
 import { NameBadge } from '../components/Badge.jsx';
 import { useAuth } from '../lib/auth.jsx';
 import { toCoverDataUrl } from '../lib/image.js';
+import { Arrow } from '../components/Arrow.jsx';
 
 export function GamePage({ id, options }) {
   const { search } = useLocation();
@@ -33,7 +34,7 @@ export function GamePage({ id, options }) {
               goBackTo(back);
             }}
           >
-            ← 추천 목록으로
+            <Arrow dir="left" /> 추천 목록으로
           </a>
         ) : (
           <a
@@ -45,7 +46,7 @@ export function GamePage({ id, options }) {
               }
             }}
           >
-            ← 뒤로
+            <Arrow dir="left" /> 뒤로
           </a>
         )}
       </nav>

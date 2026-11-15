@@ -7,6 +7,7 @@ import { Link } from '../lib/router.jsx';
 import { Avatar } from './Avatar.jsx';
 import { NameBadge } from './Badge.jsx';
 import { ErrorState, Loading } from './Status.jsx';
+import { Arrow } from './Arrow.jsx';
 
 const MEDAL = ['🥇', '🥈', '🥉'];
 const counts = (c) => [c.games && `게임 ${c.games}`, c.photos && `사진 ${c.photos}`, c.infos && `정보 ${c.infos}`].filter(Boolean).join(' · ');
@@ -188,7 +189,7 @@ export function ImpactCard({ impact }) {
             이번 달 기여자 <b>{m.rank}위</b> · {m.score}점 ·{' '}
           </>
         ) : null}
-        <Link to="/hall-of-fame">명예의 전당 보기 →</Link>
+        <Link to="/hall-of-fame" className="link-with-arrow">명예의 전당 보기 <Arrow /></Link>
       </p>
       <p className="muted small">다른 회원의 반응만 세요(내 찜·리뷰·조회 제외). 조회는 같은 사람이 하루에 여러 번 열어도 한 번이에요.</p>
     </div>

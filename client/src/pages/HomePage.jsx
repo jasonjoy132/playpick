@@ -31,7 +31,10 @@ function pickFeature(games) {
   const instant = canHls() ? withArt.filter((g) => g.steamTrailer?.hls) : [];
   const withTrailer = withArt.filter((g) => g.trailer?.youtubeId);
   const pool = instant.length ? instant : withTrailer.length ? withTrailer : withArt;
-  return pool.length ? pool[Math.floor(VISIT_SEED * pool.length)] : null;
+  // '같이 할 게임' 첫인상: 추천 인원이 2명 이상인 게임을 먼저 (없으면 아무 게임)
+  const together = pool.filter((g) => (g.recommendedPlayers?.max ?? 0) >= 2);
+  const pick = together.length ? together : pool;
+  return pick.length ? pick[Math.floor(VISIT_SEED * pick.length)] : null;
 }
 /** 게임의 가로 그림(장면 스크린샷 먼저, 없으면 아트워크) */
 const sceneOf = (g) => g.screenshots?.[0] ?? g.bannerUrl ?? null;

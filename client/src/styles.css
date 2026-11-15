@@ -61,6 +61,7 @@
   --mine-bg: #e6f1fb;
   --star: #f5a623;
   --star-empty: #d9dbde;
+  --star-input-empty: #7d828a; /* 별점 입력 빈 별: 바탕과 3:1 이상 (누르는 요소) */
   --member-ink: #121314;
   --member-soft: #e9eaec;
   --member-kind: #121314;
@@ -138,6 +139,7 @@
   --mine-bg: #0b2236;
   --star: #ffce21;
   --star-empty: #3a3c42;
+  --star-input-empty: #6b7079;
   --member-ink: #f5f5f5;
   --member-soft: #2b2c30;
   --member-kind: #f5f5f5;
@@ -549,12 +551,12 @@ img { max-width: 100%; }
 .review-form textarea:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
 .review-form-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .stars-input { border: 0; margin: 0; padding: 0; display: flex; gap: 2px; }
-.stars-input label { position: relative; cursor: pointer; font-size: 2rem; line-height: 1; color: var(--star-empty); }
+.stars-input label { position: relative; cursor: pointer; font-size: 2rem; line-height: 1; color: var(--star-input-empty); }
 .stars-input label.is-on { color: var(--star); }
 .stars-input input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
 .stars-input input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 .stars-input:hover label { color: var(--star); }
-.stars-input label:hover ~ label { color: var(--star-empty); }
+.stars-input label:hover ~ label { color: var(--star-input-empty); }
 .review-list { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 12px; }
 .review-list li { padding: 12px 0; border-top: 1px solid var(--line); }
 .review-list li:first-child { border-top: 0; }
@@ -1980,3 +1982,22 @@ h3 { letter-spacing: -0.01em; }
 .tabs.tabs-sub button { padding: 6px 16px; border-radius: 999px; font-size: 0.9rem; }
 .tabs.tabs-sub button::after { display: none; }
 .tabs.tabs-sub button.is-on { background: var(--bg); box-shadow: 0 1px 3px rgb(0 0 0 / 0.16); }
+
+/* ── 디자인 점검(2026-11-15) ── */
+/* 슬라이드 점: 보이는 점은 8px 그대로, 누르는 영역은 24px (WCAG 2.5.8) */
+.dots { bottom: 6px; gap: 0; }
+.dots button, .dots button.is-active { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; background: none; }
+.dots button.is-active { width: 40px; }
+.dots button::before { content: ''; width: 8px; height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.45); transition: width 200ms var(--ease-out, ease-out), background-color 200ms ease; }
+.dots button.is-active::before { width: 26px; background: #fff; }
+.dots button:hover:not(.is-active)::before { background: rgba(255, 255, 255, 0.75); }
+@media (prefers-reduced-motion: reduce) { .dots button::before { transition: none; } }
+/* 홈 '장르까지 고르기': 누르는 영역 넓게 */
+.hero-more { padding-block: 7px; margin-top: 9px; }
+/* 좁은 화면 상단 메뉴: 옆으로 더 있으면 오른쪽 끝을 흐리게 (끝까지 밀면 사라짐, Layout.jsx data-more) */
+@media (max-width: 1040px) {
+  .nav[data-more] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
+}
+/* 글자 화살표 대신 SVG (Arrow.jsx) */
+.breadcrumb a, .link-with-arrow { display: inline-flex; align-items: center; gap: 4px; }
+.link-arrow { flex-shrink: 0; }

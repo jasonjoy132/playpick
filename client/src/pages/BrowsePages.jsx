@@ -103,11 +103,14 @@ function GameGrid({ state, options, noteFor, emptyText, rankFrom }) {
           </div>
         )
       ) : (
+        <>
+        <h2 className="sr-only">게임 목록</h2>{/* 제목 단계: h1 → (h2) → 카드 h3 */}
         <div className="card-grid" data-testid="browse-grid">
           {state.games.map((g, i) => (
             <GameTile key={g.id} game={g} options={options} note={noteFor?.(g)} rank={rankFrom != null ? rankFrom + i : undefined} />
           ))}
         </div>
+        </>
       )}
       {state.hasMore && (
         <AutoMore onMore={state.loadMore} busy={state.more} error={state.moreError} watch={state.games.length} testid="browse-more">

@@ -3,7 +3,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createCatalog } from './services/catalog.js';
-import { parseCriteria, recommend, evaluateGame, compareResults, interleave } from './services/recommend.js';
+import { parseCriteria, recommend, evaluateGame, popularity, mergeByPopularity, byPopularity, compareSimilar } from './services/recommend.js';
 import { getOptions, isOffTopic, isArcadeOnly } from './services/taxonomy.js';
 import { DataSourceError } from './providers/errors.js';
 import { createTranslator, withKoreanSummaries } from './services/translator.js';
@@ -139,6 +139,18 @@ export function createApp(config, deps = {}) {
     }
     return rows.map((g) => ({ ...(extra.get(g.id) ?? {}), ...g, imageUrl: extra.get(g.id)?.imageUrl ?? g.imageUrl, title: extra.get(g.id)?.title ?? g.title }));
   };
+  // 추천 목록: PlayPick 평가가 있는 게임(IGDB·게관위·회원 제보 모두) — '평가 수 합계' 자리에 끼워 넣을 후보 (1분 캐시)
+  let reviewedPool = null;
+  async function reviewedGames() {
+    if (reviewedPool && Date.now() - reviewedPool.at < 60_000) return reviewedPool.games;
+    const rows = await community.mostReviewed({ limit: POPULAR_POOL });
+    if (!rows.length) return [];
+    const many = new Map(((await catalog.getMany?.(rows.map((r) => r.id))) ?? []).map((g) => [g.id, g]));
+    const others = await Promise.all(rows.filter((r) => !many.has(r.id) && !r.id.startsWith('igdb-')).map((r) => getAnyGame(r.id).catch(() => null)));
+    const { games } = await partySize.fill([...many.values(), ...others.filter(Boolean)]);
+    reviewedPool = { at: Date.now(), games };
+    return games;
+  }
   const limits = {
     login: createRateLimiter({ limit: 5, windowMs: 10 * 60e3 }),
     mail: createRateLimiter({ limit: 5, windowMs: 10 * 60e3 }),
@@ -732,12 +744,17 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       // 게임위 게임(IGDB에 없는 것)을 어느 섹션의 '더 보기'와 함께 불러올지: 인원을 안 골랐으면 대부분 '모든 조건 일치',
       // 골랐으면 AI 추천 인원을 모르는 게임이 많아 '일부 조건 일치' 쪽. 받은 뒤에는 실제 판정 결과대로 두 섹션에 나눔
       const gracTo = criteria.players == null ? 'full' : 'partial';
+      const igdbDoneParam = url.searchParams.get('igdbDone') === '1';
+      // 순서 = IGDB 평가 수 + PlayPick 평가 수 (한 줄). 게관위 게임(PlayPick 평가 0개)은 IGDB를 끝까지 본 뒤에만:
+      // 아직 게관위를 하나도 안 받았으면 IGDB가 이번에 끝날 때를 대비해 같이 받아 두고(안 끝나면 버림), 그 뒤로는 IGDB가 끝난 다음에 이어 받음
       const wantIgdb = !more || more === 'full';
-      const wantGrac = !more || more === gracTo;
+      const wantGrac = !more || goffset === 0 || (more === 'partial' ? gracTo === 'partial' : gracTo === 'full' && igdbDoneParam);
+      const cutParam = Number(url.searchParams.get('cut'));
+      const cut = url.searchParams.has('cut') && !Number.isNaN(cutParam) ? cutParam : Infinity; // 앞 페이지까지 보여 준 점수
       const gracLimit = gracTo === 'full' ? (more === 'full' && url.searchParams.get('igdbDone') === '1' ? RESULT_PAGE : 6) : RESULT_PAGE;
       // 1) 모든 조건 일치: IGDB 전체에서 필터 검색  2) 일부 일치: 인기 후보에서 판정(첫 요청만)  3) IGDB에 없는 게임위 게임
       const [paged, pool, grac] = await Promise.all([
-        wantIgdb && url.searchParams.get('igdbDone') !== '1' ? timed('IGDB+AI', () => igdbRounds(criteria, offset)) : Promise.resolve({ games: [], total: null, hasMore: false, skipped: true }),
+        wantIgdb && !igdbDoneParam ? timed('IGDB+AI', () => igdbRounds(criteria, offset)) : Promise.resolve({ games: [], total: null, hasMore: false, skipped: true }),
         !more ? timed('인기 후보', () => catalog.listGames(criteria)) : Promise.resolve(null),
         // 게임위 게임 AI 추천 인원도 IGDB 쪽과 동시에 물음 (기다리는 시간이 겹치게)
         wantGrac
@@ -756,23 +773,29 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
         if (grac?.status === 'building')
           warnings.push(`게임물관리위원회 전체 목록을 준비하는 중이라(${grac.progress ? `${grac.progress.done}/${grac.progress.total}` : '시작'}) IGDB에 없는 국내 게임은 아직 빠져 있어요. 몇 분 뒤 다시 찾아 주세요.`);
         if (grac?.status === 'error') warnings.push(`IGDB에 없는 국내 등급분류 게임을 불러오지 못했어요${grac.error ? ` (${grac.error})` : ''}.`);
-        // 게임위 게임: AI 추천 인원을 붙인 뒤 다시 판정 → 모두 일치면 위 섹션, 아니면 아래 섹션
-        const gGames = grac?.games ?? (grac?.items ?? []).map((x) => x.game);
-        if (grac?.aiWarning && !warnings.includes(grac.aiWarning)) warnings.push(grac.aiWarning);
-        // 승인된 회원 제보 게임도 첫 요청에 함께 판정
-        const userGames = more ? [] : await submissions.approvedGames();
-        const gResults = (await decorate([...userGames, ...gGames], user))
-          .filter(listable) // 서비스 종료·출시 예정·상태 모름(게임위) 게임 빼기
-          .map((game) => ({ game, evaluation: evaluateGame(game, criteria) }))
-          .filter((x) => x.evaluation.matchedCount > 0 || x.game.source !== '사용자 제보');
-        const gFull = gResults.filter((x) => x.evaluation.isFullMatch);
-        const gPartial = gResults.filter((x) => !x.evaluation.isFullMatch);
-        const igdbFull = recommend((await decorate(paged.games, user)).filter(listable), criteria).fullMatches;
-        const poolPartial = pool ? recommend((await decorate(pool.games, user)).filter(listable), criteria).partialMatches : [];
-        const fullMatches = interleave(igdbFull, gFull);
-        const partialMatches = more ? gPartial : [...poolPartial, ...gPartial].sort(compareResults);
         const igdbHasMore = paged.skipped ? false : paged.hasMore;
-        const gracHasMore = !!grac?.hasMore;
+        const useGrac = !!grac && !igdbHasMore; // IGDB가 끝났을 때만 게관위 게임을 씀 (아니면 버리고 위치도 그대로)
+        const judge = async (games) => (await decorate(games, user)).filter(listable).map((game) => ({ game, evaluation: evaluateGame(game, criteria) }));
+        // PlayPick 평가가 있는 게임: 모든 조건 일치만, 점수 자리에 끼움 (IGDB·게관위 흐름에서는 뺌)
+        const reviewed = byPopularity((await judge(await reviewedGames())).filter((x) => x.evaluation.isFullMatch));
+        const reviewedIds = new Set(reviewed.map((x) => x.game.id));
+        // 이번 IGDB 묶음의 마지막 평가 수 — 이보다 크고 앞 페이지 경계 이하인 '끼울 게임'을 이 페이지에
+        const lo = igdbHasMore ? (paged.games.at(-1)?.globalRating?.count ?? 0) : -Infinity;
+        const extras = paged.skipped ? [] : reviewed.filter((x) => popularity(x.game) > lo && popularity(x.game) <= cut);
+        // IGDB 흐름: IGDB가 준 평가 많은 순 그대로 (정렬하지 않음)
+        const igdbFull = (await judge(paged.games)).filter((x) => x.evaluation.isFullMatch && !reviewedIds.has(x.game.id));
+        // 게관위·회원 제보 게임: AI 추천 인원을 붙인 뒤 판정 → 모두 일치면 위 섹션(맨 뒤), 아니면 아래 섹션
+        const gGames = useGrac ? grac.games ?? (grac.items ?? []).map((x) => x.game) : [];
+        if (useGrac && grac.aiWarning && !warnings.includes(grac.aiWarning)) warnings.push(grac.aiWarning);
+        const userGames = useGrac && goffset === 0 ? await submissions.approvedGames() : [];
+        const gResults = (await judge([...userGames, ...gGames])) // 서비스 종료·출시 예정·상태 모름(게임위) 게임 빼기
+          .filter((x) => x.evaluation.matchedCount > 0 || x.game.source !== '사용자 제보');
+        const gFull = gResults.filter((x) => x.evaluation.isFullMatch && !reviewedIds.has(x.game.id));
+        const gPartial = gResults.filter((x) => !x.evaluation.isFullMatch);
+        const poolPartial = pool ? recommend((await decorate(pool.games, user)).filter(listable), criteria).partialMatches : [];
+        const fullMatches = [...mergeByPopularity(igdbFull, extras), ...gFull];
+        const partialMatches = (more ? gPartial : [...poolPartial, ...gPartial]).sort(compareSimilar);
+        const gracHasMore = useGrac ? !!grac.hasMore : true; // 아직 안 받았으면 남은 것으로
         return sendJson(res, 200, {
           meta: meta(), warnings, criteria, paged: true, gracTo,
           fullMatches, partialMatches,
@@ -780,12 +803,14 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
           igdbDone: !igdbHasMore,
           hasMoreFull: igdbHasMore || (gracTo === 'full' && gracHasMore),
           hasMorePartial: gracTo === 'partial' && gracHasMore,
-          next: { offset: paged.skipped ? offset : paged.nextOffset, goffset: grac?.nextOffset ?? goffset },
+          next: { offset: paged.skipped ? offset : paged.nextOffset, goffset: useGrac ? grac.nextOffset ?? goffset : goffset, cut: igdbHasMore ? lo : '-Infinity' },
         });
       }
       const { games: listed, warnings } = pool ?? (await catalog.listGames(criteria));
       const games = [...await submissions.approvedGames(), ...listed];
-      const { fullMatches, partialMatches } = recommend((await decorate(games, user)).filter(listable), criteria);
+      const found = recommend((await decorate(games, user)).filter(listable), criteria);
+      const fullMatches = byPopularity(found.fullMatches);
+      const partialMatches = found.partialMatches.sort(compareSimilar);
       if (paged?.failed) warnings.unshift(`IGDB 전체 검색에 실패해 (${paged.failed.message}) 인기 게임 후보 안에서만 찾았어요.`);
       return sendJson(res, 200, { meta: meta(), warnings, criteria, paged: false, totalGames: games.length, fullMatches: more ? [] : fullMatches, partialMatches: more ? [] : partialMatches });
     }

@@ -222,6 +222,19 @@ export function Layout({ meta, children }) {
     const left = on.getBoundingClientRect().left - nav.getBoundingClientRect().left + nav.scrollLeft;
     nav.scrollLeft = left - (nav.clientWidth - on.offsetWidth) / 2;
   }, [pathname, narrow]);
+  // 메뉴가 옆으로 더 있으면 data-more → 오른쪽 끝을 흐리게 (끝까지 밀면 사라짐)
+  useEffect(() => {
+    const nav = document.querySelector('.site-header .nav');
+    if (!nav) return undefined;
+    const check = () => nav.toggleAttribute('data-more', nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 4);
+    check();
+    nav.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check);
+    return () => {
+      nav.removeEventListener('scroll', check);
+      window.removeEventListener('resize', check);
+    };
+  }, [pathname, narrow]);
   return (
     <div className="app">
       <a className="skip-link" href="#main">

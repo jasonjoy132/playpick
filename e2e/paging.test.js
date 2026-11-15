@@ -16,7 +16,12 @@ const TOTAL = 60;
 const fake = (i) => ({
   id: `igdb-${9000 + i}`, title: `테스트 게임 ${i + 1}`, source: 'IGDB',
   players: { min: 1, max: 4 }, platforms: ['pc'], genres: ['action'], stores: [], imageUrl: null,
+  globalRating: i < 30 ? { avg: 4, count: 30 - i } : null, // IGDB처럼 평가 많은 순 (30 → 1, 그 뒤는 평가 없음)
 });
+const gracGame = (i, criteria) => {
+  const ai = criteria?.genres?.includes('shooting'); // 이 장르로 찾을 때만 'AI 추정 대상' 게임위 게임으로
+  return { id: `grac-T${i}`, title: `국내 테스트 게임 ${i + 1}`, source: '게임물관리위원회', players: null, platforms: ['pc'], genres: ai ? ['shooting'] : ['action'], stores: [], imageUrl: null, domesticRating: true, ...(ai ? { recommendedPlayers: null } : {}) };
+};
 const calls = [];
 const catalog = {
   meta: { dataSource: 'live', isDemo: false, sources: ['IGDB'] },
@@ -27,8 +32,7 @@ const catalog = {
   },
   async gracMatches(criteria, { offset, limit }) {
     const all = Array.from({ length: 30 }, (_, i) => {
-      const ai = criteria.genres.includes('shooting'); // 이 장르로 찾을 때만 'AI 추정 대상' 게임위 게임으로
-      const game = { id: `grac-T${i}`, title: `국내 테스트 게임 ${i + 1}`, source: '게임물관리위원회', players: null, platforms: ['pc'], genres: ai ? ['shooting'] : ['action'], stores: [], imageUrl: null, domesticRating: true, ...(ai ? { recommendedPlayers: null } : {}) };
+      const game = gracGame(i, criteria);
       return { game, evaluation: evaluateGame(game, criteria) };
     });
     const items = all.slice(offset, offset + limit);
@@ -42,6 +46,7 @@ const catalog = {
     { id: 'grac-OLD', title: '서비스 중 게임', source: '게임물관리위원회', platforms: ['mobile'], genres: ['rpg'], players: null, stores: [], imageUrl: null, ratingDate: '2026-09-01' },
   ],
   async getGame(id) {
+    if (/^grac-T\d+$/.test(id)) return gracGame(Number(id.slice(6)));
     if (id === 'igdb-778') return { id, title: '테스트 RPG', source: 'IGDB', players: { min: 1, max: 1 }, recommendedPlayers: { min: 1, max: 1, source: 'igdb' }, aiPlaytime: 30, platforms: ['pc'], genres: ['rpg'], stores: [], imageUrl: null, altNames: [], screenshots: ['data:image/gif;base64,R0lGODlhAQABAAAAACw=', 'data:image/gif;base64,R0lGODlhAQABAAAAACwA'], screenshotSource: 'IGDB' };
     return id === 'igdb-777'
       ? { id, title: '테스트 배틀로얄', originalTitle: 'Test Royale', source: 'IGDB', players: { min: 1, max: 100 }, recommendedPlayers: null, platforms: ['pc'], genres: ['shooting'], stores: [], imageUrl: null, altNames: [] }
@@ -102,16 +107,21 @@ test('전체 검색: 개수 표시, 더 보기로 다음 페이지 요청', asyn
   assert.deepEqual(errors, []);
 });
 
-test('인원을 안 고르면 게임위 게임이 모든 조건 일치 목록에 섞여 나옴', async () => {
+test('인원을 안 고르면 게임위 게임도 모든 조건 일치 — 평가 수 합계 순이라 PlayPick 평가 없는 게임위 게임은 IGDB 뒤에', async () => {
   const page = await (await browser.newContext({ locale: 'ko-KR' })).newPage();
   await page.goto(`${base}/results?platforms=pc&genres=action`);
   const full = page.getByTestId('section-full');
   await full.getByTestId('game-card').first().waitFor();
   const titles = await full.getByTestId('game-card').allInnerTexts();
   assert.equal(titles.length, 24, '첫 화면 24개');
-  assert.ok(titles[4].includes('국내 테스트 게임 1'), 'IGDB 4개마다 게임위 1개');
+  assert.ok(titles.every((t) => !t.includes('국내 테스트 게임')), 'IGDB가 남아 있으면 게임위 게임은 아직');
   await full.getByTestId('more-full').dispatchEvent('click');
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="section-full"] [data-testid="game-card"]').length === 48);
+  await full.getByTestId('more-full').dispatchEvent('click'); // IGDB 마지막 12개 + 이어서 게임위
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid="section-full"] [data-testid="game-card"]').length > 60);
+  const after = await full.getByTestId('game-card').allInnerTexts();
+  assert.ok(after.slice(0, 60).every((t) => !t.includes('국내 테스트 게임')));
+  assert.match(after[60], /국내 테스트 게임 1/);
 });
 
 test('상세: AI 추정 추천 인원은 표시를 달고, 최대 인원도 함께', async () => {
@@ -149,4 +159,26 @@ test('출시 예정: AI가 미출시로 판단한 게임위 게임은 국내 출
   assert.equal(await sec.getByTestId('game-card').count(), 1);
   assert.match(await sec.innerText(), /곧 나올 국내 게임[\s\S]*등급분류/);
   assert.match(await sec.getByTestId('game-card').innerText(), /출시 예정/);
+});
+
+test('API: PlayPick 평가가 있는 게임위 게임은 평가 수 합계 자리에 끼고, 뒤쪽 게임위 목록에서는 빠짐', async () => {
+  const res = await fetch(`${base}/api/auth/signup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'playpick' },
+    body: JSON.stringify({ loginId: 'order_user1', password: 'secret123', nickname: '순서1', email: 'order1@example.com' }),
+  });
+  assert.equal(res.status, 201);
+  const cookie = res.headers.get('set-cookie').split(';')[0];
+  const put = await fetch(`${base}/api/games/grac-T5/reviews/mine`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'playpick', Cookie: cookie }, body: JSON.stringify({ rating: 5 }) });
+  assert.equal(put.status, 200);
+  const r = await (await fetch(`${base}/api/recommendations?platforms=pc&genres=action`)).json();
+  const ids = r.fullMatches.map((x) => x.game.id);
+  // 평가 1개 = 점수 1 → IGDB 평가 1개 게임(30번째) 바로 뒤, 평가 없는 IGDB 게임보다 앞
+  assert.equal(ids.indexOf('grac-T5'), 30);
+  assert.equal(ids[29], 'igdb-9029');
+  assert.ok(r.next.cut != null);
+  // 마지막 IGDB 페이지 + 게임위: 같은 게임이 다시 나오지 않음
+  const r2 = await (await fetch(`${base}/api/recommendations?platforms=pc&genres=action&more=full&offset=${r.next.offset}&goffset=0&cut=${r.next.cut}`)).json();
+  assert.ok(!r2.fullMatches.some((x) => x.game.id === 'grac-T5'));
+  assert.ok(r2.fullMatches.some((x) => x.game.id === 'grac-T0'));
 });

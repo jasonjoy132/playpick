@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCriteria, evaluateGame, recommend, interleave } from '../server/services/recommend.js';
+import { parseCriteria, evaluateGame, recommend, popularity, mergeByPopularity, byPopularity, compareSimilar } from '../server/services/recommend.js';
 import { DEMO_GAMES } from '../server/data/demoGames.js';
 
 const game = (o) => ({ id: 'x', title: 'x', players: null, platforms: null, genres: null, ...o });
@@ -56,10 +56,18 @@ test('데모 데이터: 이미지 없음, 구매처는 데모 표시된 내부 �
   }
 });
 
-test('목록 합치기: 4개마다 1개씩 끼우고 남으면 뒤에', () => {
-  assert.deepEqual(interleave([1, 2, 3, 4, 5, 6, 7, 8], ['a', 'b', 'c']), [1, 2, 3, 4, 'a', 5, 6, 7, 8, 'b', 'c']);
-  assert.deepEqual(interleave([], ['a']), ['a']);
-  assert.deepEqual(interleave([1, 2], []), [1, 2]);
+test('추천 목록 순서: IGDB 평가 수 + PlayPick 평가 수, 같으면 IGDB 먼저', () => {
+  const r = (id, igdb, pp) => ({ game: { id, globalRating: igdb == null ? null : { count: igdb }, userRating: { count: pp } }, evaluation: { matchedCount: 2, mismatchCount: 0 } });
+  assert.equal(popularity(r('a', 100, 5).game), 105);
+  assert.equal(popularity(r('g', null, 3).game), 3, '게관위 게임은 PlayPick 평가 수만');
+  // IGDB 흐름(평가 많은 순) 사이에 PlayPick 평가 있는 게임을 점수 자리에 끼움
+  const igdb = [r('i1', 900, 0), r('i2', 300, 0), r('i3', 30, 0), r('i4', 0, 0)];
+  const extras = [r('pp-big', 500, 20), r('grac', null, 30), r('grac-1', null, 1)];
+  assert.deepEqual(mergeByPopularity(igdb, byPopularity(extras)).map((x) => x.game.id), ['i1', 'pp-big', 'i2', 'i3', 'grac', 'grac-1', 'i4']);
+  assert.deepEqual(mergeByPopularity([r('i', 30, 0)], [r('g', null, 30)]).map((x) => x.game.id), ['i', 'g'], '같으면 IGDB 먼저');
+  // 비슷한 게임: 맞는 조건 수 먼저, 그다음 점수
+  const sim = [{ ...r('few', 10, 0), evaluation: { matchedCount: 2, mismatchCount: 1 } }, { ...r('lot', 900, 0), evaluation: { matchedCount: 1, mismatchCount: 2 } }, { ...r('mid', 50, 0), evaluation: { matchedCount: 2, mismatchCount: 1 } }];
+  assert.deepEqual(sim.sort(compareSimilar).map((x) => x.game.id), ['mid', 'few', 'lot']);
 });
 
 test('아케이드: 고를 수 없음(예전 링크의 arcade는 조용히 뺌), 아케이드 전용 게임 판단', async () => {

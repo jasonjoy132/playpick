@@ -88,15 +88,26 @@ export function compareResults(a, b) {
   );
 }
 
-/** a 사이사이에 b를 끼움 (a every 개마다 b 1개, 한쪽이 끝나면 나머지를 이어 붙임) */
-export function interleave(a, b, every = 4) {
+/** 추천 목록 순서 점수: IGDB 평가 수 + PlayPick 회원 평가 수 (게관위·회원 제보 게임은 회원 평가 수만) */
+export const popularity = (g) => (g.globalRating?.count ?? 0) + (g.userRating?.count ?? 0);
+
+/** 둘 다 점수 큰 순인 a·b를 합침 (같으면 a 먼저) */
+export function mergeByPopularity(a, b) {
   const out = [];
   let j = 0;
-  a.forEach((x, i) => {
+  for (const x of a) {
+    while (j < b.length && popularity(b[j].game) > popularity(x.game)) out.push(b[j++]);
     out.push(x);
-    if ((i + 1) % every === 0 && j < b.length) out.push(b[j++]);
-  });
+  }
   return [...out, ...b.slice(j)];
+}
+
+/** 점수 큰 순 (같으면 원래 순서) */
+export const byPopularity = (items) => items.map((x, i) => [x, i]).sort((p, q) => popularity(q[0].game) - popularity(p[0].game) || p[1] - q[1]).map(([x]) => x);
+
+/** 비슷한 게임: 맞는 조건 많은 순 → 틀린 조건 적은 순 → 점수 큰 순 */
+export function compareSimilar(a, b) {
+  return b.evaluation.matchedCount - a.evaluation.matchedCount || a.evaluation.mismatchCount - b.evaluation.mismatchCount || popularity(b.game) - popularity(a.game);
 }
 
 export function recommend(games, criteria) {
