@@ -34,6 +34,7 @@ test('제보 거절 알림: 종 숫자 → 패널 → 내 제보로 이동, 읽�
   const user = await signedIn({ loginId: 'e2e_bell', password: 'secret123', nickname: '종소리', email: 'bell@example.com' });
   user.on('pageerror', (e) => errors.push(e.message));
   const admin = await signedIn({ loginId: 'e2e_admin', password: 'secret123', nickname: '관리자', email: 'admin@example.com' });
+  await server.db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run('admin@example.com'); // 관리자는 이메일 인증한 계정만
 
   // 로그인 안 하면 종이 없음
   const anon = await (await browser.newContext()).newPage();
@@ -98,6 +99,7 @@ test('모바일 폭: 알림 패널이 화면 안에 들어옴', async () => {
 test("관리자 '고쳐서 승인' → 상세에 고친 값, 회원 '내 제보'에 고친 내용", async () => {
   const user = await signedIn({ loginId: 'e2e_fixme', password: 'secret123', nickname: '고침받는이', email: 'fixme@example.com' });
   const admin = await signedIn({ loginId: 'e2e_admin2', password: 'secret123', nickname: '관리자2', email: 'admin@example.com' }).catch(() => null);
+  await server.db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run('admin@example.com'); // 관리자는 이메일 인증한 계정만
   // 같은 관리자 이메일로 이미 가입돼 있으면 로그인
   const adminPage = admin ?? (await (await browser.newContext({ locale: 'ko-KR', viewport: { width: 1200, height: 900 } })).newPage());
   if (!admin) await adminPage.request.post(`${base}/api/auth/login`, { data: { loginId: 'e2e_admin', password: 'secret123' }, headers: H });

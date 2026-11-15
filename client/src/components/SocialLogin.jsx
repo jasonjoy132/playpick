@@ -41,6 +41,7 @@ export function oauthErrorText(code, provider) {
       OAUTH_DENIED: `${p} 로그인을 취소했어요.`,
       OAUTH_STATE: '로그인 확인 시간이 지났어요. 다시 시도해 주세요.',
       OAUTH_EMAIL_UNVERIFIED: `${p} 계정에 인증된 이메일이 없어요. ${p}에서 이메일을 인증한 뒤 다시 시도하거나, 아이디로 가입해 주세요.`,
+      OAUTH_EMAIL_UNVERIFIED_ACCOUNT: `이 이메일로 가입된 계정이 있지만 이메일 인증이 안 되어 있어요. 아이디로 로그인해 마이페이지에서 이메일을 인증한 뒤 ${p} 계정을 연결해 주세요.`,
       OAUTH_TAKEN: `이 ${p} 계정은 이미 다른 회원과 연결되어 있어요.`,
       OAUTH_DISABLED: `지금은 ${p} 계정으로 로그인할 수 없어요.`,
       RATE_LIMIT: '시도가 너무 많아요. 잠시 후 다시 시도해 주세요.',

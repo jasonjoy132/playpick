@@ -61,6 +61,7 @@ test('표지 사진 제보 → 관리자 승인 → 상세 표지, 사진 칭호
   assert.match(await user.getByTestId('my-submissions').innerText(), /검토 중[\s\S]*사진 없는 국내 게임/);
 
   const admin = await signedIn({ loginId: 'e2e_admin2', password: 'secret123', nickname: '운영자', email: 'admin@example.com' });
+  await server.db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run('admin@example.com'); // 관리자는 이메일 인증한 계정만
   admin.on('pageerror', (e) => errors.push(e.message));
   await admin.goto(`${base}/admin`);
   await admin.getByTestId('admin-kind-photos').click();

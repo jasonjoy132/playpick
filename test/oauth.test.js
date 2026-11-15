@@ -185,10 +185,29 @@ test('처음 온 Google 계정: 닉네임 정하기 → 가입, 다시 오면 �
   assert.equal((await e.api('POST', '/api/me/password', { newPassword: 'another12' })).status, 400);
 });
 
-test('아이디로 가입한 회원: 같은 인증 이메일이면 Google 연결, 관리자도 그대로', async () => {
+test('아이디로 가입한 회원: 이메일 인증 전에는 Google 자동 연결·관리자 안 됨, 인증하면 연결·관리자', async () => {
   const b = browser();
+  mails.length = 0;
   const s = await b.api('POST', '/api/auth/signup', { loginId: 'member1', password: 'pass1234', nickname: '회원1', email: 'member@example.com' });
   assert.equal(s.status, 201);
+  assert.equal(s.body.verifyMail, true);
+  assert.equal(s.body.user.emailVerified, false);
+  assert.equal(s.body.user.isAdmin, false, '관리자 이메일이어도 인증 전에는 관리자 아님');
+  assert.equal(s.body.user.adminPending, true);
+  assert.equal((await b.api('GET', '/api/admin/submissions')).status, 403);
+  // 남이 내 이메일로 먼저 가입해 둔 경우를 막음: 인증 안 된 계정에는 소셜 계정을 자동으로 붙이지 않음
+  const early = await browser().social('google', 'g-member', { next: '/admin' });
+  assert.match(early.location, /^\/login\?oauthError=OAUTH_EMAIL_UNVERIFIED_ACCOUNT&provider=google/);
+  // 메일 링크로 인증 (틀린 토큰은 거절)
+  assert.equal((await browser().api('POST', '/api/auth/verify-email', { token: 'nope' })).status, 400);
+  const link = mails.find((m) => m.subject.includes('이메일 인증'))?.link;
+  const token = new URL(link).searchParams.get('token');
+  assert.equal((await browser().api('POST', '/api/auth/verify-email', { token })).status, 200);
+  assert.equal((await browser().api('POST', '/api/auth/verify-email', { token })).status, 200, '같은 링크를 다시 열어도 인증됨');
+  const after = (await b.api('GET', '/api/auth/me')).body.user;
+  assert.equal(after.emailVerified, true);
+  assert.equal(after.isAdmin, true);
+  assert.equal((await b.api('POST', '/api/me/verify-email', {})).body.already, true);
   const c = browser();
   const { location } = await c.social('google', 'g-member', { next: '/admin' });
   assert.equal(location, '/admin');

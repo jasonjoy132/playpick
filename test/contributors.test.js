@@ -49,6 +49,7 @@ const signup = (c, id) => c('POST', '/api/auth/signup', { loginId: id, password:
 test('영향력 점수: 기본 점수 + 다른 회원 반응(내 몫 비율), 관리자·본인 반응 제외, 순위·내 기여 요약', async () => {
   const admin = client();
   await admin('POST', '/api/auth/signup', { loginId: 'boss', password: 'secret123', nickname: '보스', email: 'boss@example.com' });
+  await server.db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run('boss@example.com'); // 관리자는 이메일 인증한 계정만
   const [alice, bob, carol, dave] = [client(), client(), client(), client()];
   for (const [c, id] of [[alice, 'alice1'], [bob, 'bobby1'], [carol, 'carol1'], [dave, 'davey1']]) assert.equal((await signup(c, id)).status, 201);
 

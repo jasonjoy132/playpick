@@ -48,6 +48,7 @@ let admin;
 test('관리자 준비', async () => {
   admin = client();
   assert.equal((await signup(admin, 'boss', 'boss@example.com')).status, 201);
+  await server.db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run('boss@example.com'); // 관리자는 이메일 인증한 계정만
 });
 
 // ── 관리자 '고쳐서 승인' ──

@@ -8,10 +8,11 @@ import { providerLabel } from './oauth.js';
 const SESSION_DAYS = 14;
 const RESET_MINUTES = 30;
 const PENDING_MINUTES = 30;
+const VERIFY_HOURS = 24;
 const fail = (code, message, status = 400) => new DataSourceError(code, message, status);
 export const avatarUrl = (file) => (file ? `/avatars/${file}` : null);
 const publicUser = (u) =>
-  u ? { id: u.id, loginId: u.login_id, nickname: u.nickname, email: u.email, createdAt: u.created_at, avatarUrl: avatarUrl(u.avatar_file), hasPassword: Boolean(u.password_hash) } : null;
+  u ? { id: u.id, loginId: u.login_id, nickname: u.nickname, email: u.email, createdAt: u.created_at, avatarUrl: avatarUrl(u.avatar_file), hasPassword: Boolean(u.password_hash), emailVerified: Boolean(u.email_verified) } : null;
 const maskId = (id) => (id.length <= 3 ? `${id[0]}**` : `${id.slice(0, 3)}${'*'.repeat(id.length - 3)}`);
 
 export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.now() }) {
@@ -20,7 +21,12 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
     byEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
     byNick: db.prepare('SELECT id FROM users WHERE nickname = ?'),
     byId: db.prepare('SELECT * FROM users WHERE id = ?'),
-    insert: db.prepare('INSERT INTO users (login_id, nickname, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)'),
+    insert: db.prepare('INSERT INTO users (login_id, nickname, email, password_hash, created_at, email_verified) VALUES (?, ?, ?, ?, ?, ?)'),
+    setVerified: db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?'),
+    newVerify: db.prepare('INSERT INTO email_verifications (token_hash, user_id, email, expires_at) VALUES (?, ?, ?, ?)'),
+    verify: db.prepare('SELECT * FROM email_verifications WHERE token_hash = ? AND expires_at > ?'),
+    delVerifies: db.prepare('DELETE FROM email_verifications WHERE user_id = ?'),
+    purgeVerifies: db.prepare('DELETE FROM email_verifications WHERE expires_at <= ?'),
     setPw: db.prepare('UPDATE users SET password_hash = ? WHERE id = ?'),
     newSession: db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)'),
     session: db.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ?'),
@@ -62,7 +68,24 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
     }
     return '';
   }
+  /** 같은 이메일로 가입했지만 이메일 인증을 안 한 계정: 자동으로 연결하지 않음(남이 내 이메일로 먼저 가입해 둔 경우 막기) */
+  const unverifiedSame = (provider) =>
+    fail('OAUTH_EMAIL_UNVERIFIED_ACCOUNT', `이 이메일로 가입된 계정이 있지만 이메일 인증이 안 되어 있어요. 아이디로 로그인해 마이페이지에서 이메일을 인증한 뒤 ${providerLabel(provider)} 계정을 연결해 주세요.`, 409);
   const linkedLabels = async (userId) => (await q.identitiesOf.all(userId)).map((r) => providerLabel(r.provider)).join('·');
+
+  /** 이메일 인증 링크 메일 */
+  async function sendVerify(user) {
+    if (!mailer.configured && !mailer.devLog) throw fail('MAIL_NOT_CONFIGURED', '메일 발송 설정이 없어 인증 메일을 보낼 수 없습니다. 관리자에게 문의해 주세요.', 503);
+    const token = newToken();
+    await q.purgeVerifies.run(now());
+    await q.newVerify.run(sha256(token), user.id, String(user.email).toLowerCase(), now() + VERIFY_HOURS * 3600e3);
+    await mailer.send({
+      to: user.email,
+      subject: '[플레이픽] 이메일 인증',
+      lines: [`${user.nickname}님, 아래 링크를 누르면 이메일 인증이 끝나요.`, `링크는 ${VERIFY_HOURS}시간 동안 쓸 수 있어요.`, '본인이 가입하지 않았다면 이 메일을 무시해 주세요.'],
+      link: `${baseUrl}/verify-email?token=${encodeURIComponent(token)}`,
+    });
+  }
 
   async function createSession(userId) {
     const token = newToken();
@@ -85,6 +108,7 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
         throw fail('OAUTH_EMAIL_UNVERIFIED', `${providerLabel(profile.provider)} 계정에 인증된 이메일이 없어요. 이메일을 인증한 뒤 다시 시도하거나, 아이디로 가입해 주세요.`);
       const same = await q.byEmail.get(profile.email);
       if (same) {
+        if (!same.email_verified) throw unverifiedSame(profile.provider);
         if ((await q.identitiesOf.all(same.id)).some((r) => r.provider === profile.provider))
           throw fail('OAUTH_TAKEN', `이 이메일의 회원에게는 이미 다른 ${providerLabel(profile.provider)} 계정이 연결되어 있어요.`, 409);
         await q.addIdentity.run(profile.provider, profile.subject, same.id, profile.email, iso());
@@ -113,10 +137,11 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
       // 그사이 같은 계정·이메일로 가입된 경우: 그 계정으로 로그인
       const linked = await q.identity.get(row.provider, row.subject);
       const same = linked ? await q.byId.get(linked.user_id) : await q.byEmail.get(row.email);
+      if (same && !linked && !same.email_verified) throw unverifiedSame(row.provider);
       let userId = same?.id;
       if (!userId) {
         if (await q.byNick.get(nickname)) throw fail('DUPLICATE_NICKNAME', '이미 사용 중인 닉네임입니다.', 409);
-        const { lastInsertRowid } = await q.insert.run(await newSocialLoginId(row.provider), nickname, row.email, '', iso());
+        const { lastInsertRowid } = await q.insert.run(await newSocialLoginId(row.provider), nickname, row.email, '', iso(), 1); // 제공자가 인증한 이메일
         userId = Number(lastInsertRowid);
       }
       if (!linked) await q.addIdentity.run(row.provider, row.subject, userId, row.email, iso());
@@ -132,6 +157,9 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
       if ((await q.identitiesOf.all(userId)).some((r) => r.provider === profile.provider))
         throw fail('OAUTH_TAKEN', `이미 다른 ${providerLabel(profile.provider)} 계정이 연결되어 있어요. 먼저 연결을 끊어 주세요.`, 409);
       await q.addIdentity.run(profile.provider, profile.subject, userId, profile.email, iso());
+      // 연결한 계정이 인증한 이메일이 가입 이메일과 같으면 이메일 인증도 된 것으로
+      const me = await q.byId.get(userId);
+      if (profile.verified && profile.email && me && String(me.email).toLowerCase() === profile.email) await q.setVerified.run(userId);
       return { ok: true };
     },
 
@@ -160,9 +188,11 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
       if (await q.byLogin.get(loginId)) throw fail('DUPLICATE_LOGIN_ID', '이미 사용 중인 아이디입니다.', 409);
       if (await q.byNick.get(nickname)) throw fail('DUPLICATE_NICKNAME', '이미 사용 중인 닉네임입니다.', 409);
       if (await q.byEmail.get(email)) throw fail('DUPLICATE_EMAIL', '이미 가입된 이메일입니다. 아이디 찾기를 이용해 주세요.', 409);
-      const { lastInsertRowid } = await q.insert.run(loginId, nickname, email, hashPassword(password), new Date(now()).toISOString());
+      const { lastInsertRowid } = await q.insert.run(loginId, nickname, email, hashPassword(password), new Date(now()).toISOString(), 0);
       const user = await q.byId.get(Number(lastInsertRowid));
-      return { user: publicUser(user), session: await createSession(user.id) };
+      // 인증 메일은 보내 보되, 못 보내도 가입은 됨(마이페이지에서 다시 보낼 수 있음)
+      const verifyMail = await sendVerify(user).then(() => true, () => false);
+      return { user: publicUser(user), session: await createSession(user.id), verifyMail };
     },
 
     async login({ loginId, password }) {
@@ -275,7 +305,7 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
       const del = (t, col = 'user_id') => [`DELETE FROM ${t} WHERE ${col} = ?`, [userId]];
       const nul = (t, col = 'user_id') => [`UPDATE ${t} SET ${col} = NULL WHERE ${col} = ?`, [userId]];
       await db.batch([
-        ...['sessions', 'password_resets', 'user_identities', 'wishlist', 'recent_views', 'notifications', 'contrib_milestones'].map((t) => del(t)),
+        ...['sessions', 'password_resets', 'email_verifications', 'user_identities', 'wishlist', 'recent_views', 'notifications', 'contrib_milestones'].map((t) => del(t)),
         ['DELETE FROM review_reports WHERE review_id IN (SELECT id FROM reviews WHERE user_id = ?)', [userId]],
         del('reviews'),
         nul('game_submissions'),
@@ -290,12 +320,33 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
       return { ok: true };
     },
 
+    /** 인증 메일 다시 보내기 */
+    async requestVerify(userId) {
+      const user = await q.byId.get(userId);
+      if (!user) throw fail('LOGIN_REQUIRED', '로그인이 필요합니다.', 401);
+      if (user.email_verified) return { ok: true, already: true };
+      await sendVerify(user);
+      return { ok: true };
+    },
+
+    /** 메일 링크로 이메일 인증 (로그인 안 해도 됨) */
+    async verifyEmail({ token } = {}) {
+      const row = token ? await q.verify.get(sha256(String(token)), now()) : null;
+      const user = row ? await q.byId.get(row.user_id) : null;
+      // 링크를 보낸 뒤 이메일이 바뀌었으면 쓸 수 없음
+      if (!row || !user || String(user.email).toLowerCase() !== row.email) throw fail('INVALID_TOKEN', '인증 링크가 만료되었거나 이미 사용되었어요. 마이페이지에서 인증 메일을 다시 받아 주세요.', 400);
+      await q.setVerified.run(user.id);
+      // 토큰은 지우지 않음(같은 링크를 두 번 열어도 '인증됨') — 만료되면 정리됨
+      return { ok: true };
+    },
+
     async resetPassword({ token, password }) {
       const err = checkPassword(password);
       if (err) throw fail('INVALID_INPUT', err);
       const row = token ? await q.reset.get(sha256(String(token)), now()) : null;
       if (!row) throw fail('INVALID_TOKEN', '재설정 링크가 만료되었거나 이미 사용되었습니다. 비밀번호 찾기를 다시 해 주세요.', 400);
       await q.setPw.run(hashPassword(password), row.user_id);
+      await q.setVerified.run(row.user_id); // 메일로 받은 링크를 썼으니 이메일도 본인 것
       await q.useReset.run(row.user_id);
       await q.delUserSessions.run(row.user_id); // 다른 기기 로그아웃
       return { ok: true };

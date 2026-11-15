@@ -232,6 +232,19 @@ CREATE TABLE IF NOT EXISTS images (
   data BLOB NOT NULL,
   created_at TEXT NOT NULL
 );
+-- 이메일 인증 링크(가입 이메일이 본인 것인지 확인). 토큰은 해시만 저장
+CREATE TABLE IF NOT EXISTS email_verifications (
+  token_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+-- 로그인·메일·가입 시도 횟수 제한(서버리스 인스턴스가 여러 개라 메모리 대신 DB에)
+CREATE TABLE IF NOT EXISTS rate_hits (
+  key TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS rate_hits_key ON rate_hits (key, at);
 `;
 
 // 기존 DB 파일에 나중에 추가된 열 보충
@@ -244,7 +257,13 @@ const COLUMNS = [
   ['reviews', 'hidden_at', 'TEXT'], // 신고로 숨긴 리뷰
   ['game_submissions', 'original_json', 'TEXT'], // 관리자가 고쳐서 승인했을 때 회원이 낸 원래 값
   ['game_reports', 'original_payload', 'TEXT'], // 관리자가 고쳐서 승인한 정보 수정 제보의 원래 값
+  ['users', 'email_verified', 'INTEGER NOT NULL DEFAULT 0'], // 이메일 인증(메일 링크·비밀번호 재설정·소셜 계정의 인증된 이메일)
 ];
+/** 열을 처음 추가할 때 한 번 채우는 값 */
+const BACKFILL = {
+  // 소셜 계정으로 가입·연결해 제공자가 인증한 이메일과 같은 회원은 인증된 것으로
+  'users.email_verified': `UPDATE users SET email_verified = 1 WHERE EXISTS (SELECT 1 FROM user_identities i WHERE i.user_id = users.id AND lower(i.email) = lower(users.email))`,
+};
 
 /**
  * @param {string} target  ':memory:' | 파일 경로 | libsql://… (Turso)
@@ -268,7 +287,9 @@ export function openDb(target, { authToken } = {}) {
       await client.executeMultiple(SCHEMA);
       for (const [table, col, type] of COLUMNS) {
         const { rows } = await client.execute(`PRAGMA table_info(${table})`);
-        if (!rows.some((c) => c.name === col)) await client.execute(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+        if (rows.some((c) => c.name === col)) continue;
+        await client.execute(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+        if (BACKFILL[`${table}.${col}`]) await client.execute(BACKFILL[`${table}.${col}`]);
       }
     })().catch((e) => {
       ready = null; // 실패하면 다음 요청에서 다시 시도

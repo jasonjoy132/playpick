@@ -12,7 +12,7 @@ import { ResultsPage } from './pages/ResultsPage.jsx';
 import { SearchPage } from './pages/SearchPage.jsx';
 import { GamePage } from './pages/GamePage.jsx';
 import { DemoStorePage } from './pages/DemoStorePage.jsx';
-import { LoginPage, SignupPage, SocialSignupPage, FindIdPage, FindPasswordPage, ResetPasswordPage } from './pages/AuthPages.jsx';
+import { LoginPage, SignupPage, SocialSignupPage, FindIdPage, FindPasswordPage, ResetPasswordPage, VerifyEmailPage } from './pages/AuthPages.jsx';
 import { MyPage } from './pages/MyPage.jsx';
 import { PopularPage, NewPage, RankingRedirect, GenrePage, HallOfFamePage } from './pages/BrowsePages.jsx';
 import { SubmitPage } from './pages/SubmitPage.jsx';
@@ -61,6 +61,7 @@ function route(pathname, options) {
   if (pathname === '/find-id') return <FindIdPage />;
   if (pathname === '/find-password') return <FindPasswordPage />;
   if (pathname === '/reset-password') return <ResetPasswordPage />;
+  if (pathname === '/verify-email') return <VerifyEmailPage />;
   if (pathname === '/wishlist') return <MyPage section="wishlist" options={options} />;
   if (pathname === '/mypage') return <MyPage section="profile" options={options} />;
   m = matchPath('/mypage/:section', pathname);

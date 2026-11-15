@@ -45,6 +45,7 @@ test('서비스 종료·정보 수정 제보, 리뷰 신고 → 관리자 처리
   const user = await signedIn({ loginId: 'e2e_rep', password: 'secret123', nickname: '알림이', email: 'rep2@example.com' });
   const writer = await signedIn({ loginId: 'e2e_wr', password: 'secret123', nickname: '광고왕', email: 'wr@example.com' });
   const admin = await signedIn({ loginId: 'e2e_adm', password: 'secret123', nickname: '운영자', email: 'admin@example.com' });
+  await server.db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run('admin@example.com'); // 관리자는 이메일 인증한 계정만
   for (const p of [user, writer, admin]) p.on('pageerror', (e) => errors.push(e.message));
 
   // 서비스 종료 제보

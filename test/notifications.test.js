@@ -50,6 +50,7 @@ let admin;
 test('관리자 준비', async () => {
   admin = client();
   assert.equal((await signup(admin, 'boss', 'boss@example.com')).status, 201);
+  await server.db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run('boss@example.com'); // 관리자는 이메일 인증한 계정만
 });
 
 test('가입하면 환영 알림, 로그인 안 하면 알림을 볼 수 없음', async () => {

@@ -49,6 +49,7 @@ test('탈퇴: 로그인·비밀번호·확인 문구 검사 → 지울 것만 �
 
   const admin = client();
   assert.equal((await admin('POST', '/api/auth/signup', { loginId: 'boss', password: 'secret123', nickname: '보스', email: 'boss@example.com' })).status, 201);
+  await server.db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run('boss@example.com'); // 관리자는 이메일 인증한 계정만
   const u = client();
   assert.equal((await u('POST', '/api/auth/signup', account)).status, 201);
   const other = client();

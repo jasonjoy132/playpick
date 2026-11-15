@@ -233,6 +233,7 @@ test('관리자만 새 게임 목록·지금 받기', async () => {
   assert.equal((await call('GET', '/api/admin/grac-new')).status, 403);
   cookie = '';
   await call('POST', '/api/auth/signup', { loginId: 'boss1', password: 'pass1234', nickname: '관리자', email: 'boss@example.com' });
+  await server.db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run('boss@example.com'); // 관리자는 이메일 인증한 계정만
   const list = await call('GET', '/api/admin/grac-new');
   assert.equal(list.body.available, true);
   assert.match(list.body.lastRun.note, /새 게임 5개/);

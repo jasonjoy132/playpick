@@ -12,7 +12,7 @@ import { createAccounts } from './community/accounts.js';
 import { createOAuth } from './community/oauth.js';
 import { createCommunity } from './community/community.js';
 import { createMailer } from './community/mailer.js';
-import { createRateLimiter } from './community/rateLimit.js';
+import { createRateLimiter, createDbRateLimiter } from './community/rateLimit.js';
 import { GAME_ID } from './community/validate.js';
 import { createAvatarStore, avatarMime } from './community/avatars.js';
 import { createSubmissions } from './community/submissions.js';
@@ -125,9 +125,11 @@ export function createApp(config, deps = {}) {
   };
   const admins = new Set((config.adminEmails ?? []).map((e) => String(e).toLowerCase()));
   const contributors = createContributors(db, { adminEmails: admins, badgeOf: async (id) => await badges.displayFor(id), notify: async (uid, n) => await notes.add(uid, n) });
-  const withRole = (u) => (u ? { ...u, isAdmin: admins.has(String(u.email).toLowerCase()) } : u);
-  /** 화면에 돌려주는 내 정보: 관리자 여부 + 닉네임 옆 대표 뱃지 */
-  const meOut = async (u) => (u ? { ...withRole(u), badge: await badges.displayFor(u.id), newBadges: await badges.newBadges(u.id) } : u);
+  // 관리자: ADMIN_EMAILS 의 이메일 + 그 이메일을 인증한 계정만 (남이 관리자 이메일로 먼저 가입해도 관리자가 되지 않게)
+  const adminEmail = (u) => admins.has(String(u.email).toLowerCase());
+  const withRole = (u) => (u ? { ...u, isAdmin: adminEmail(u) && u.emailVerified === true } : u);
+  /** 화면에 돌려주는 내 정보: 관리자 여부(+ 인증하면 관리자가 되는지) + 닉네임 옆 대표 뱃지 */
+  const meOut = async (u) => (u ? { ...withRole(u), adminPending: adminEmail(u) && !u.emailVerified, badge: await badges.displayFor(u.id), newBadges: await badges.newBadges(u.id) } : u);
   /** 일반 게임 + 승인된 제보 게임(user-…) */
   const getAnyGame = async (id) => (String(id).startsWith('user-') ? await submissions.getGame(id) : catalog.getGame(id));
   /** 리뷰 집계 행(id·제목·표지·userRating) → 게임 정보 채우기 (IGDB 한 번에, 제보 게임은 DB에서, 못 찾으면 리뷰에 저장된 제목·표지) */
@@ -152,10 +154,11 @@ export function createApp(config, deps = {}) {
     return games;
   }
   const limits = {
-    login: createRateLimiter({ limit: 5, windowMs: 10 * 60e3 }),
-    mail: createRateLimiter({ limit: 5, windowMs: 10 * 60e3 }),
-    signup: createRateLimiter({ limit: 10, windowMs: 60 * 60e3 }),
-    oauth: createRateLimiter({ limit: 30, windowMs: 10 * 60e3 }),
+    // 무차별 대입을 막아야 하는 곳은 DB에 기록(서버리스 인스턴스끼리 공유)
+    login: createDbRateLimiter(db, { name: 'login', limit: 5, windowMs: 10 * 60e3 }),
+    mail: createDbRateLimiter(db, { name: 'mail', limit: 5, windowMs: 10 * 60e3 }),
+    signup: createDbRateLimiter(db, { name: 'signup', limit: 10, windowMs: 60 * 60e3 }),
+    oauth: createDbRateLimiter(db, { name: 'oauth', limit: 30, windowMs: 10 * 60e3 }),
     write: createRateLimiter({ limit: 60, windowMs: 60e3 }),
     aiPlaytime: createRateLimiter({ limit: 30, windowMs: 60 * 60e3 }), // 회원 한 명이 AI 플레이 시간을 새로 물을 수 있는 수(시간당)
     aiPlayers: createRateLimiter({ limit: 30, windowMs: 60 * 60e3 }), // 회원 한 명이 AI 추천 인원을 새로 물을 수 있는 수(시간당)
@@ -381,17 +384,17 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       return sendJson(res, 200, await badges.select(u.id, id ?? null));
     }
     if (p === '/api/auth/signup' && method === 'POST') {
-      if (!limits.signup.hit(ip)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
-      const { user: u, session } = await accounts.signup(await readJson(req));
+      if (!(await limits.signup.hit(ip))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
+      const { user: u, session, verifyMail } = await accounts.signup(await readJson(req));
       await notes.welcome(u.id, u.nickname);
-      return sendJson(res, 201, { user: await meOut(u) }, { 'Set-Cookie': sessionCookie(session.token, session.maxAgeSec) });
+      return sendJson(res, 201, { user: await meOut(u), verifyMail }, { 'Set-Cookie': sessionCookie(session.token, session.maxAgeSec) });
     }
     if (p === '/api/auth/login' && method === 'POST') {
       const body = await readJson(req);
       const key = `${ip}|${String(body.loginId || '').toLowerCase()}`;
-      if (!limits.login.hit(key)) throw apiError('RATE_LIMIT', '로그인 시도가 너무 많습니다. 10분 뒤 다시 시도해 주세요.', 429);
+      if (!(await limits.login.hit(key))) throw apiError('RATE_LIMIT', '로그인 시도가 너무 많습니다. 10분 뒤 다시 시도해 주세요.', 429);
       const { user: u, session } = await accounts.login(body);
-      limits.login.reset(key);
+      await limits.login.reset(key);
       return sendJson(res, 200, { user: await meOut(u) }, { 'Set-Cookie': sessionCookie(session.token, session.maxAgeSec) });
     }
     if (p === '/api/auth/logout' && method === 'POST') {
@@ -409,7 +412,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
         const back = mode === 'link' ? '/mypage/accounts' : `/login?next=${encodeURIComponent(next)}`;
         const sep = back.includes('?') ? '&' : '?';
         if (mode === 'link' && !user) return redirect(res, `/login?next=${encodeURIComponent('/mypage/accounts')}`);
-        if (!limits.oauth.hit(ip)) return redirect(res, `${back}${sep}oauthError=RATE_LIMIT`);
+        if (!(await limits.oauth.hit(ip))) return redirect(res, `${back}${sep}oauthError=RATE_LIMIT`);
         if (!oauth.has(prov)) return redirect(res, `${back}${sep}oauthError=OAUTH_DISABLED&provider=${prov}`);
         const { url: to, cookie } = oauth.start(prov, { next, mode });
         return redirect(res, to, [oauthCookie(cookie, 600)]);
@@ -425,7 +428,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
           : `/login?oauthError=${code}&provider=${prov}&next=${encodeURIComponent(next)}`;
       if (url.searchParams.get('error')) return redirect(res, back('OAUTH_DENIED'), [clear]);
       if (!saved || saved.provider !== prov || saved.state !== url.searchParams.get('state')) return redirect(res, back('OAUTH_STATE'), [clear]);
-      if (!limits.oauth.hit(ip)) return redirect(res, back('RATE_LIMIT'), [clear]);
+      if (!(await limits.oauth.hit(ip))) return redirect(res, back('RATE_LIMIT'), [clear]);
       try {
         const profile = await oauth.finish(prov, url.searchParams.get('code'));
         if (mode === 'link') {
@@ -445,7 +448,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       return sendJson(res, 200, { pending: await accounts.oauthPending(readCookies(req)[PENDING_COOKIE]) });
     }
     if (p === '/api/auth/oauth/complete' && method === 'POST') {
-      if (!limits.signup.hit(ip)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
+      if (!(await limits.signup.hit(ip))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
       const r = await accounts.oauthComplete(readCookies(req)[PENDING_COOKIE], await readJson(req));
       res.writeHead(201, {
         'Content-Type': 'application/json; charset=utf-8',
@@ -465,15 +468,25 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       return sendJson(res, 200, { items: await accounts.identities(u.id) });
     }
     if (p === '/api/auth/find-id' && method === 'POST') {
-      if (!limits.mail.hit(ip)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
+      if (!(await limits.mail.hit(ip))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
       return sendJson(res, 200, await accounts.findId(await readJson(req)));
     }
     if (p === '/api/auth/reset-request' && method === 'POST') {
-      if (!limits.mail.hit(ip)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
+      if (!(await limits.mail.hit(ip))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
       return sendJson(res, 200, await accounts.requestReset(await readJson(req)));
     }
+    // ── 이메일 인증 ──
+    if (p === '/api/me/verify-email' && method === 'POST') {
+      const u = requireUser();
+      if (!(await limits.mail.hit(`verify|${u.id}`))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
+      return sendJson(res, 200, await accounts.requestVerify(u.id));
+    }
+    if (p === '/api/auth/verify-email' && method === 'POST') {
+      if (!(await limits.mail.hit(`verify-use|${ip}`))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
+      return sendJson(res, 200, await accounts.verifyEmail(await readJson(req)));
+    }
     if (p === '/api/auth/reset' && method === 'POST') {
-      if (!limits.mail.hit(`reset|${ip}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
+      if (!(await limits.mail.hit(`reset|${ip}`))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
       return sendJson(res, 200, await accounts.resetPassword(await readJson(req)));
     }
 
@@ -495,20 +508,20 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     }
     if (p === '/api/me/avatar' && (method === 'PUT' || method === 'DELETE')) {
       const u = requireUser();
-      if (!limits.write.hit(`a|${u.id}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
+      if (!(await limits.write.hit(`a|${u.id}`))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
       const dataUrl = method === 'PUT' ? (await readJson(req, 1024 * 1024)).dataUrl : null;
       if (method === 'PUT' && !dataUrl) throw apiError('INVALID_IMAGE', '이미지를 선택해 주세요.', 400);
       return sendJson(res, 200, { user: await meOut(await accounts.setAvatar(u.id, dataUrl)) });
     }
     if (p === '/api/me/password' && method === 'POST') {
       const u = requireUser();
-      if (!limits.login.hit(`pw|${u.id}`)) throw apiError('RATE_LIMIT', '시도가 너무 많습니다. 10분 뒤 다시 시도해 주세요.', 429);
+      if (!(await limits.login.hit(`pw|${u.id}`))) throw apiError('RATE_LIMIT', '시도가 너무 많습니다. 10분 뒤 다시 시도해 주세요.', 429);
       return sendJson(res, 200, await accounts.changePassword(u.id, token, await readJson(req)));
     }
     if (p === '/api/me/delete' && method === 'POST') {
       // 회원 탈퇴: 검토 중인 제보 정리 → 계정 삭제(DB가 세션·찜·리뷰·알림 함께 삭제, 승인된 제보는 작성자 없이 남음)
       const u = requireUser();
-      if (!limits.login.hit(`pw|${u.id}`)) throw apiError('RATE_LIMIT', '시도가 너무 많습니다. 10분 뒤 다시 시도해 주세요.', 429);
+      if (!(await limits.login.hit(`pw|${u.id}`))) throw apiError('RATE_LIMIT', '시도가 너무 많습니다. 10분 뒤 다시 시도해 주세요.', 429);
       await accounts.deleteAccount(u.id, await readJson(req), async () => {
         await submissions.removePendingOf(u.id);
         await imageSubs.removePendingOf(u.id);
@@ -539,7 +552,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     const wm = p.match(/^\/api\/wishlist\/([^/]+)$/);
     if (wm && (method === 'PUT' || method === 'DELETE')) {
       const u = requireUser();
-      if (!limits.write.hit(`w|${u.id}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
+      if (!(await limits.write.hit(`w|${u.id}`))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
       const id = decodeURIComponent(wm[1]);
       if (method === 'PUT') {
         await community.addWish(u.id, await findGame(id));
@@ -558,7 +571,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       }
       if (rm[2] && (method === 'PUT' || method === 'DELETE')) {
         const u = requireUser();
-        if (!limits.write.hit(`r|${u.id}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
+        if (!(await limits.write.hit(`r|${u.id}`))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
         if (method === 'PUT') {
           const body = await readJson(req);
           const done = await notes.watchBadges(u.id);
@@ -576,7 +589,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     // ── 게임 제보 (회원) ──
     if (p === '/api/submissions' && method === 'POST') {
       const u = requireUser();
-      if (!limits.write.hit(`s|${u.id}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
+      if (!(await limits.write.hit(`s|${u.id}`))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
       return sendJson(res, 201, { item: await submissions.create(u.id, await readJson(req, 2.5 * 1024 * 1024)) });
     }
     if (p === '/api/me/submissions' && method === 'GET') return sendJson(res, 200, { items: await submissions.mine(requireUser().id) });
@@ -587,7 +600,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     const pim = p.match(/^\/api\/games\/([^/]+)\/image-submissions$/);
     if (pim && method === 'POST') {
       const u = requireUser();
-      if (!limits.write.hit(`p|${u.id}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
+      if (!(await limits.write.hit(`p|${u.id}`))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
       let gid;
       try {
         gid = decodeURIComponent(pim[1]);
@@ -608,7 +621,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     const grm = p.match(/^\/api\/games\/([^/]+)\/reports$/);
     if (grm && method === 'POST') {
       const u = requireUser();
-      if (!limits.write.hit(`g|${u.id}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
+      if (!(await limits.write.hit(`g|${u.id}`))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
       let gid;
       try {
         gid = decodeURIComponent(grm[1]);
@@ -627,7 +640,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     const rrm = p.match(/^\/api\/reviews\/(\d{1,12})\/report$/);
     if (rrm && method === 'POST') {
       const u = requireUser();
-      if (!limits.write.hit(`rr|${u.id}`)) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
+      if (!(await limits.write.hit(`rr|${u.id}`))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
       return sendJson(res, 201, await reports.reportReview(u.id, rrm[1], await readJson(req)));
     }
 
@@ -700,7 +713,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       if (!canAskPlaytime(g)) return sendJson(res, 200, { playtime: null, status: 'none' });
       if (await aiPlaytime.cached(g.id) !== undefined) return sendJson(res, 200, { playtime: null, status: 'cached' }); // AI가 모른다고 한 게임
       if (!aiPlaytime.enabled) return sendJson(res, 200, { playtime: null, status: 'off' });
-      if (!limits.aiPlaytime.hit(`t|${u.id}`)) return sendJson(res, 200, { playtime: null, status: 'limit' });
+      if (!(await limits.aiPlaytime.hit(`t|${u.id}`))) return sendJson(res, 200, { playtime: null, status: 'limit' });
       const r = await aiPlaytime.ask(g, u.id);
       return sendJson(res, 200, { playtime: r.hours ? { hours: r.hours, source: 'ai' } : null, status: r.status });
     }
@@ -721,7 +734,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       if (!canAskPlayers(g) || !('recommendedPlayers' in g)) return sendJson(res, 200, { players: null, status: 'none' });
       if ((await aiPlayers.cached(g)) !== undefined) return sendJson(res, 200, { players: null, status: 'cached' }); // AI가 모른다고 한 게임
       if (!aiPlayers.enabled) return sendJson(res, 200, { players: null, status: 'off' });
-      if (!limits.aiPlayers.hit(`p|${u.id}`)) return sendJson(res, 200, { players: null, status: 'limit' });
+      if (!(await limits.aiPlayers.hit(`p|${u.id}`))) return sendJson(res, 200, { players: null, status: 'limit' });
       const r = await aiPlayers.ask(g, u.id);
       if (r.players) askedPlayers.clear();
       return sendJson(res, 200, { players: r.players ? { ...r.players, source: 'ai' } : null, status: r.status });
@@ -1010,6 +1023,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     if (!deps.db) db.close();
   });
   server.catalog = catalog;
+  server.db = db; // 테스트에서 직접 준비·확인용(관리자 이메일 인증 처리 등)
   /** 로컬 서버 시작 때: 마지막 수집이 하루 넘었으면 백그라운드로 한 번 (배포는 Vercel Cron) */
   server.runGracNewIfStale = async () => {
     if (!gracNew || config.vercel) return;

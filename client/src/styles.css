@@ -2001,3 +2001,8 @@ h3 { letter-spacing: -0.01em; }
 /* 글자 화살표 대신 SVG (Arrow.jsx) */
 .breadcrumb a, .link-with-arrow { display: inline-flex; align-items: center; gap: 4px; }
 .link-arrow { flex-shrink: 0; }
+
+/* 마이페이지 이메일 인증 상태 */
+.email-ok { color: var(--ok); font-weight: 600; }
+.email-verify .btn { margin-left: 4px; }
+.email-verify .field-note { display: block; margin-top: 6px; }

@@ -73,6 +73,7 @@ test('관리자: 게관위 새 게임 받기 → 결과·목록, 찾은 게임�
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   const r = await page.request.post(`${base}/api/auth/signup`, { data: { loginId: 'e2e_gadm', password: 'secret123', nickname: '운영자', email: 'admin@example.com' }, headers: { 'X-Requested-With': 'playpick' } });
+  await server.db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run('admin@example.com'); // 관리자는 이메일 인증한 계정만
   assert.equal(r.status(), 201);
 
   await page.goto(`${base}/admin`);

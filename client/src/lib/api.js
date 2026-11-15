@@ -61,6 +61,9 @@ export const api = {
   findId: (b) => request('POST', '/api/auth/find-id', b),
   resetRequest: (b) => request('POST', '/api/auth/reset-request', b),
   resetPassword: (b) => request('POST', '/api/auth/reset', b),
+  // 이메일 인증
+  sendVerifyEmail: () => request('POST', '/api/me/verify-email', {}),
+  verifyEmail: (b) => request('POST', '/api/auth/verify-email', b),
   // 다른 계정으로 로그인
   providers: () => get('/api/auth/providers'),
   oauthPending: () => get('/api/auth/oauth/pending'),

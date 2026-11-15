@@ -65,6 +65,7 @@ test('서비스 종료 제보 → 승인 → 목록·검색에서 숨김, 내리
 
   const admin = client();
   await signup(admin, 'boss1', 'boss@example.com');
+  await server.db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run('boss@example.com'); // 관리자는 이메일 인증한 계정만
   assert.equal((await user('GET', '/api/admin/reports?kind=ended')).status, 403);
   const list = await admin('GET', '/api/admin/reports?kind=ended');
   assert.equal(list.body.counts.pending, 1);

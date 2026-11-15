@@ -70,6 +70,7 @@ test('게임 제보 → 관리자 승인 → 검색·상세, 내 제보 상태',
 
   // 관리자 승인
   const admin = await signedIn({ loginId: 'e2e_admin', password: 'secret123', nickname: '운영자', email: 'admin@example.com' });
+  await server.db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run('admin@example.com'); // 관리자는 이메일 인증한 계정만
   admin.on('pageerror', (e) => errors.push(e.message));
   await admin.goto(base);
   await admin.getByTestId('user-menu').click();

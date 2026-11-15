@@ -90,12 +90,15 @@
 
 - 문의 연락처: `InfoPages.jsx`의 `CONTACT_EMAIL`(개인정보처리방침·이용약관에 표시)
 - 계정·세션·비밀번호 재설정(메일: Brevo), 찜, 별점·리뷰(1인 1리뷰, 수정 불가·삭제 후 재작성), 최근 본 게임
+- **이메일 인증**(`users.email_verified`): 아이디 가입 때 인증 메일(`/verify-email?token=`, 24시간, `email_verifications`), 마이페이지 '인증 메일 보내기'(`POST /api/me/verify-email`). 비밀번호 재설정 링크를 쓰거나 같은 이메일의 소셜 계정을 연결해도 인증됨. 소셜 가입은 처음부터 인증
+- **시도 제한**: 로그인·메일·가입·소셜 로그인은 DB `rate_hits`(`createDbRateLimiter`, 서버리스 인스턴스끼리 공유), 글쓰기·AI 질문은 메모리
+- 보안 헤더: API는 `app.js`, 화면(정적 파일)은 `vercel.json` `headers`(X-Frame-Options·frame-ancestors 등)
 - **인기 게임 순위**(예전 '평점 랭킹'을 합침, `/ranking`은 `/popular?by=rating`으로 이동): `/popular?by=&sort=` · `/api/browse/popular?by=count|rating&sort=global|playpick|total`. 순위는 `server/services/ranking.js`의 `rankGames`
   - 평가 많은 순(기본): 글로벌 IGDB 평가 수 · PlayPick 숨김 안 된 회원 리뷰 수(`community.mostReviewed`) · 합계 두 수를 그대로 더함
   - 평점 높은 순: 글로벌 IGDB 평점(평가 100개 이상, IGDB `top`) · PlayPick 회원 별점 평균(`community.topRated`) · 합계 두 평균을 평가 수만큼 가중한 평균(평가 합 100개 이상, 반올림 전 IGDB 값 `globalRating.exact` 사용)
   - 합계 후보는 글로벌 상위 200개 + 회원 리뷰 있는 게임. 카드에 순위 숫자 표시. `/api/ranking/members`는 예전 주소용으로 남김
 - **다른 계정으로 로그인(Google·Discord)** `oauth.js`(제공자 주소·코드 교환) + `accounts.oauth*`: 서버가 제공자로 보냈다가(`/api/auth/oauth/:p/start`) 돌아온 코드를 서버에서 바꿈(`…/callback`, state는 HttpOnly 쿠키 `pp_oauth`). 연결 표 `user_identities`(provider, subject)
-  - 이미 연결 → 로그인 / **인증된** 같은 이메일 회원 → 그 계정에 연결 / 처음 → `/signup/social`에서 닉네임 정하기(`oauth_pending`, 쿠키 `pp_oauth_pending` 30분) / 인증 안 된 이메일 → 거절
+  - 이미 연결 → 로그인 / 같은 이메일 회원 → **그 회원이 이메일 인증을 했을 때만** 연결(안 했으면 `OAUTH_EMAIL_UNVERIFIED_ACCOUNT` — 남이 내 이메일로 먼저 가입해 둔 계정에 붙지 않게) / 처음 → `/signup/social`에서 닉네임 정하기(`oauth_pending`, 쿠키 `pp_oauth_pending` 30분) / 인증 안 된 이메일 → 거절
   - 소셜로만 가입한 계정: 아이디 `g_…`·`d_…` 자동, `password_hash = ''`(`hasPassword: false`) → 비밀번호 '만들기'(현재 비밀번호 없이), 탈퇴는 '탈퇴'만, 아이디 찾기 메일은 '○○로 로그인' 안내
   - 마이페이지 '연결된 계정'(`/mypage/accounts`): 연결(`?mode=link`)·끊기(마지막 로그인 방법은 못 끊음). 오류는 `?oauthError=코드&provider=`로 돌아와 화면이 문구로 바꿈(`SocialLogin.jsx`의 `oauthErrorText`)
   - 키 `GOOGLE_CLIENT_ID/SECRET`·`DISCORD_CLIENT_ID/SECRET`(둘 다 있는 것만 버튼 보임). 돌아올 주소 `<APP_BASE_URL>/api/auth/oauth/<google|discord>/callback`을 각 콘솔에 등록. 테스트는 `deps.oauthFetch`·`deps.oauthEndpoints`로 가짜 제공자
@@ -106,7 +109,7 @@
   - 표지 사진 제보 `imageSubmissions.js`(출처 주소 필수)
   - 서비스 종료 제보·정보 수정 제보(추천 인원·플레이 시간·구매처) `reports.js`
   - 리뷰 신고 `reports.js` → 관리자가 숨기면 작성자에게만 보이고 평점·칭호 계산에서 빠짐
-- **관리자**: `.env`의 `ADMIN_EMAILS`(쉼표 구분) 이메일로 가입한 계정. 화면 `/admin`(제보 종류별 탭)
+- **관리자**: `.env`의 `ADMIN_EMAILS`(쉼표 구분) 이메일로 가입하고 **그 이메일을 인증한** 계정(인증 전엔 `adminPending`, 마이페이지에 안내). 화면 `/admin`(제보 종류별 탭)
 - **칭호·뱃지** `badges.js`: 저장 없이 그때그때 계산(대표 칭호 `users.title_badge`, 알림 확인 `users.badges_seen`)
   - 단계: 제보(finder~curator), 리뷰(rv1~rv5), 사진(ph1~ph3), 정보(if1~if3) + 특별 뱃지(pioneer, popular, thorough, local, early, essay, cleaner, firstword)
   - 그림 `client/public/badge-<id>.webp`(128px, 배경 투명). 그림이 없으면 `noImage: true`로 이모지 표시

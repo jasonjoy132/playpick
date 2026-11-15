@@ -93,6 +93,32 @@ function Notice({ state }) {
   return null;
 }
 
+/** 이메일 인증 상태 + 인증 메일 보내기 */
+function EmailVerify() {
+  const { user } = useAuth();
+  const [state, setState] = useState(null);
+  if (user.emailVerified) return <span className="email-ok" data-testid="email-verified">· 인증됨</span>;
+  const send = async () => {
+    setState({ busy: true });
+    try {
+      await api.sendVerifyEmail();
+      setState({ ok: '인증 메일을 보냈어요. 메일함(스팸함 포함)에서 링크를 눌러 주세요.' });
+    } catch (err) {
+      setState({ error: err.message });
+    }
+  };
+  return (
+    <span className="email-verify" data-testid="email-unverified">
+      <span className="muted"> · 인증 안 됨</span>{' '}
+      <button type="button" className="btn btn-ghost btn-sm" onClick={send} disabled={state?.busy || Boolean(state?.ok)}>
+        인증 메일 보내기
+      </button>
+      {user.adminPending && <span className="field-note">관리자 이메일이에요. 인증해야 관리자 기능을 쓸 수 있어요.</span>}
+      <Notice state={state} />
+    </span>
+  );
+}
+
 function ProfileSection() {
   const { user, setUser } = useAuth();
   const [nickname, setNickname] = useState(user.nickname);
@@ -183,7 +209,9 @@ function ProfileSection() {
           </div>
           <div>
             <dt>이메일</dt>
-            <dd>{user.email}</dd>
+            <dd>
+              {user.email} <EmailVerify />
+            </dd>
           </div>
           <div>
             <dt>가입일</dt>

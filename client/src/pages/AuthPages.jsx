@@ -227,6 +227,19 @@ export function FindPasswordPage() {
   );
 }
 
+/** 메일의 이메일 인증 링크 (/verify-email?token=…) — 들어오면 바로 확인 */
+export function VerifyEmailPage() {
+  const { search } = useLocation();
+  const { user, refreshUser } = useAuth();
+  const token = new URLSearchParams(search).get('token') || '';
+  const r = useAsync(() => (token ? api.verifyEmail({ token }).then(async (x) => (await refreshUser?.(), x)) : Promise.resolve(null)), [token]);
+  if (!token) return <Shell title="잘못된 링크예요" desc="메일에 있는 링크로 다시 들어와 주세요." footer={<Link to="/mypage">마이페이지</Link>} />;
+  if (r.status === 'loading') return <Loading message="이메일을 확인하는 중이에요…" />;
+  if (r.status === 'error')
+    return <Shell title="인증하지 못했어요" desc={r.error?.message} footer={<Link to={user ? '/mypage' : '/login?next=%2Fmypage'}>마이페이지에서 다시 받기 →</Link>} />;
+  return <Shell title="이메일 인증을 마쳤어요" desc="이제 이 이메일이 본인 것으로 확인됐어요." footer={<Link to={user ? '/mypage' : '/'}>{user ? '마이페이지로 →' : '홈으로 →'}</Link>} />;
+}
+
 export function ResetPasswordPage() {
   const { search } = useLocation();
   const token = new URLSearchParams(search).get('token') || '';

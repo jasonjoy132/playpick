@@ -12,6 +12,11 @@ test('vercel.json: API·사진은 함수로, 나머지는 화면(index.html)', (
   assert.equal(dest('/submission-images/p1-0123456789abcdef.webp'), '/api/index');
   assert.equal(dest('/games/igdb-1'), '/index.html');
   assert.equal(v.outputDirectory, 'client/dist');
+  // 화면(정적 파일)에도 보안 헤더: 다른 사이트가 iframe 으로 감싸지 못하게(클릭재킹) 등
+  const h = Object.fromEntries(v.headers.find((x) => x.source === '/(.*)').headers.map((x) => [x.key, x.value]));
+  assert.equal(h['X-Frame-Options'], 'DENY');
+  assert.match(h['Content-Security-Policy'], /frame-ancestors 'none'/);
+  assert.equal(h['X-Content-Type-Options'], 'nosniff');
   assert.match(v.functions['api/index.js'].includeFiles, /server\/data/);
 });
 

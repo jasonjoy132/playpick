@@ -33,6 +33,7 @@ test('기여자 순위·홈 줄·내 기여 요약', async () => {
   const maker = await signedIn({ loginId: 'e2e_maker', nickname: '발굴왕', email: 'maker@example.com' });
   maker.on('pageerror', (e) => errors.push(e.message));
   const admin = await signedIn({ loginId: 'e2e_boss', nickname: '운영자', email: 'admin@example.com' });
+  await server.db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run('admin@example.com'); // 관리자는 이메일 인증한 계정만
   const fan = await signedIn({ loginId: 'e2e_fan', nickname: '찜팬', email: 'fan@example.com' });
 
   // 아직 아무도 없으면 빈 안내, 홈 줄은 숨김

@@ -80,6 +80,7 @@ test('사진 제보 → 승인 → 표지·칭호, 거절·취소·중복, 사�
 
   const admin = client();
   await admin('POST', '/api/auth/signup', { loginId: 'boss1', password: 'secret123', nickname: '운영자', email: 'boss@example.com' });
+  await server.db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run('boss@example.com'); // 관리자는 이메일 인증한 계정만
   const list = await admin('GET', '/api/admin/image-submissions?status=pending');
   assert.equal(list.body.counts.pending, 1);
   assert.equal(list.body.items[0].submitter, '찍사');

@@ -83,7 +83,9 @@ test('제보 → 관리자 승인 → 검색·상세·나만의 게임 찾기에
 
   const admin = client();
   const signed = await admin.call('POST', '/api/auth/signup', { loginId: 'boss_admin', password: 'secret123', nickname: '관리자', email: 'BOSS@example.com' });
-  assert.equal(signed.body.user.isAdmin, true, 'ADMIN_EMAILS 대소문자 무시');
+  assert.equal(signed.body.user.isAdmin, false, '이메일 인증 전에는 관리자 아님');
+  await server.db.prepare('UPDATE users SET email_verified = 1 WHERE email = ?').run('boss@example.com');
+  assert.equal((await admin.call('GET', '/api/auth/me')).body.user.isAdmin, true, 'ADMIN_EMAILS 대소문자 무시');
   const list = await admin.call('GET', '/api/admin/submissions?status=pending');
   assert.equal(list.body.counts.pending, 2);
   assert.equal(list.body.items[0].submitter, '제보자');
