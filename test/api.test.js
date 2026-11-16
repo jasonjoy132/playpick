@@ -85,3 +85,19 @@ test('GET /api/featured, /api/search (데모)', async () => {
   assert.deepEqual(s1.games.map((g) => g.id), ['demo-02']);
   assert.equal((await fetch(`${base}/api/search?q=`)).status, 400);
 });
+
+test('GET /api/featured: 홈 인기 순위는 인기순 앞 6개 그대로(앞을 슬라이드로 건너뛰지 않음), 슬라이드는 그다음 5개', async () => {
+  const list = Array.from({ length: 14 }, (_, i) => ({ id: `igdb-${i + 1}`, title: `게임 ${i + 1}`, source: 'IGDB', platforms: ['pc'], genres: ['action'], players: null, stores: [], imageUrl: null, altNames: [], globalRating: { avg: 4, count: 1000 - i } }));
+  const catalog = { meta: { dataSource: 'live', isDemo: false, sources: ['IGDB'] }, featured: async () => ({ games: list, warnings: [] }), getGame: async () => null };
+  const partySize = { configured: false, applyCached: (g) => g, fill: async (games) => ({ games, warning: null }) };
+  const s = createApp({ ...getConfig(), dataSource: 'demo', dbFile: ':memory:', rawg: {}, appStore: {} }, { catalog, partySize });
+  await new Promise((r) => s.listen(0, r));
+  try {
+    const f = await (await fetch(`http://127.0.0.1:${s.address().port}/api/featured`)).json();
+    assert.equal(f.popularCount, 6);
+    assert.equal(f.slideCount, 5);
+    assert.deepEqual(f.games.map((g) => g.id), list.map((g) => g.id), '순서 그대로');
+  } finally {
+    s.close();
+  }
+});

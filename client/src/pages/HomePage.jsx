@@ -15,7 +15,6 @@ import { Cover } from '../components/Cover.jsx';
 import { shortPlayers } from '../lib/format.js';
 import { BackdropTrailer, TrailerPeekProvider, canHls, usePeek } from '../components/TrailerPeek.jsx';
 
-const POPULAR_COUNT = 6; // 인기 게임: 1위 큰 그림 + 2~6위 목록
 
 // 사이트에 들어올 때(새로 열기·새로고침)마다 한 번 정하는 수 — 사이트 안에서 오가거나 뒤로 가기로 돌아오면 같은 게임 그대로
 const VISIT_SEED = Math.random();
@@ -227,9 +226,10 @@ export function HomePage({ options }) {
     );
   }
 
-  const { games, slideCount, warnings } = data;
-  const slides = games.slice(0, slideCount);
-  const rest = games.slice(slideCount);
+  // 서버가 인기순 그대로 줌: 앞 popularCount개 = 인기 순위(인기 게임 페이지 1~6위와 같음), 그다음 slideCount개 = 주목할 게임
+  const { games, popularCount = 0, slideCount, warnings } = data;
+  const popular = games.slice(0, popularCount);
+  const slides = games.slice(popularCount, popularCount + slideCount);
   const feature = pickFeature(games);
   // 첫 화면 큰 그림 게임은 아래 '주목할 게임'에서 빼서 같은 게임이 두 번 나오지 않게 (그것뿐이면 그대로)
   const spotlight = slides.filter((g) => g.id !== feature?.id);
@@ -240,7 +240,7 @@ export function HomePage({ options }) {
     <div className="home">
       <Warnings warnings={warnings} />
       <HeroFinder options={options} feature={feature} />
-      <PopularBand games={rest.slice(0, POPULAR_COUNT)} options={options} />
+      <PopularBand games={popular} options={options} />
       {slides.length > 0 && (
         <section className="row" aria-labelledby="row-spotlight">
           <header className="row-head">

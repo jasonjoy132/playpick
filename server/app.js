@@ -245,6 +245,7 @@ export function createApp(config, deps = {}) {
   const RESULT_PAGE = 24;
   const IGDB_SCAN = 48; // 추천 인원으로 다시 거르면 줄어드므로 한 번에 넉넉히 훑음
 const SLIDES = 5;
+const HOME_POPULAR = 6; // 홈 '인기 게임' 띠(1~6위) — 인기 게임 페이지와 같은 순서, 슬라이드는 그다음 게임
 const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하는 후보 수
   const distDir = path.join(config.root, 'client', 'dist');
 
@@ -854,11 +855,15 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
 
     if (p === '/api/featured') {
       const { games: all, warnings } = await catalog.featured();
-      const games = partySize.applyCached(all).filter((g) => listable(appArt.apply(g))); // 서비스 종료·출시 예정·상태 모름(게임위) 빼기
-      const slides = await withKoreanSummaries(translator, games.slice(0, SLIDES));
-      let out = [...slides, ...games.slice(SLIDES)];
+      // 인기순 그대로: 앞 HOME_POPULAR개 = 홈 인기 순위(인기 게임 페이지 1~6위와 같음), 그다음 SLIDES개 = '주목할 게임' 슬라이드(소개 번역)
+      // 회원 종료 제보 승인 등은 decorate 뒤에 걸러야 하므로 decorate 다음에 한 번 더 거름
+      const games = (await decorate(partySize.applyCached(all).filter((g) => listable(appArt.apply(g))), user)).filter((g) => listable(g) && !blockedReason(g));
+      const popularCount = Math.min(HOME_POPULAR, games.length);
+      const slideCount = Math.min(SLIDES, games.length - popularCount);
+      const slides = await withKoreanSummaries(translator, games.slice(popularCount, popularCount + slideCount));
+      let out = [...games.slice(0, popularCount), ...slides, ...games.slice(popularCount + slideCount)];
       if (steamTrailers) out = await steamTrailers.attach(out); // 홈 배경을 바로 재생할 Steam 트레일러
-      return sendJson(res, 200, { meta: meta(), games: await decorate(out, user), slideCount: Math.min(SLIDES, games.length), warnings });
+      return sendJson(res, 200, { meta: meta(), games: out, popularCount, slideCount, warnings });
     }
 
     // ── 메뉴별 목록 ──
