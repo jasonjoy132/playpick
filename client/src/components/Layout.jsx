@@ -329,8 +329,9 @@ function UserMenu() {
   if (!user) {
     const next = pathname === '/login' ? '' : `?next=${encodeURIComponent(pathname + search)}`;
     return (
-      <Link to={`/login${next}`} className="avatar avatar-ghost" aria-label="로그인" data-testid="header-login">
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0 2c-4.4 0-8 2.2-8 5v1.5h16V19c0-2.8-3.6-5-8-5z" /></svg>
+      <Link to={`/login${next}`} className="btn btn-ghost header-cta header-login" data-testid="header-login">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0 2c-4.4 0-8 2.2-8 5v1.5h16V19c0-2.8-3.6-5-8-5z" /></svg>
+        로그인
       </Link>
     );
   }

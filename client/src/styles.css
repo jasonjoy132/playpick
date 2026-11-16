@@ -198,6 +198,10 @@ img { max-width: 100%; }
 .searchbox input:focus { outline: 2px solid var(--gold); outline-offset: 1px; border-color: transparent; background: rgba(255, 255, 255, 0.22); }
 .searchbox-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-52%); color: rgba(255, 255, 255, 0.8); font-size: 1.05rem; }
 .header-cta { min-height: 38px; padding: 0 16px; font-size: 0.92rem; white-space: nowrap; flex-shrink: 0; }
+/* 헤더 로그인: 아이콘만 두면 잘 안 보여서 글자와 함께 (좁은 화면은 글자만) */
+.header-login { gap: 6px; background: transparent; border: 1px solid var(--line-strong, var(--line)); color: var(--text); }
+.header-login:hover { background: var(--surface-2); }
+@media (max-width: 640px) { .header-inner .header-cta { padding: 0 10px; } .header-inner .header-login { padding: 0 9px; font-size: 0.8rem; min-height: 34px; } .header-login svg { display: none; } }
 
 .demo-banner { background: var(--demo-soft); color: var(--demo); border-bottom: 1px solid var(--demo-line); font-size: 0.88rem; padding: 7px 0; }
 .demo-banner strong { display: inline-block; background: var(--demo); color: var(--surface-2); border-radius: 999px; padding: 0 8px; margin-right: 8px; font-size: 0.78rem; }
