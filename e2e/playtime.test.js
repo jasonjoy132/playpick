@@ -31,7 +31,7 @@ const fetchImpl = async (url) => {
 let server, base, browser;
 before(async () => {
   server = createApp(
-    { ...getConfig(), dataSource: 'demo', dbFile: ':memory:', appStore: {}, aiPlaytime: { apiKey: 'k', live: true, dailyLimit: 10 } },
+    { ...getConfig(), dataSource: 'demo', dbFile: ':memory:', appStore: {}, rawg: {}, aiPlaytime: { apiKey: 'k', live: true, dailyLimit: 10 } },
     { catalog, partySize, fetchImpl, mailer: { configured: false, devLog: false, send: async () => {} } },
   );
   await new Promise((r) => server.listen(0, r));

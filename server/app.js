@@ -29,6 +29,7 @@ import { createAppStoreProvider } from './providers/appStoreProvider.js';
 import { createGracNew, overlayEntries } from './services/gracNew.js';
 import { createSteamTrailers } from './services/steamTrailer.js';
 import { rankGames } from './services/ranking.js';
+import { buildProfile, rankForYou, ratingSignal, topGenres, MIN_SIGNALS } from './services/forYou.js';
 import { cached } from './community/cached.js';
 import { createAppArt, pickArt } from './services/appArt.js';
 
@@ -544,6 +545,34 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       return sendJson(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie('', 0) });
     }
     if (p === '/api/me/reviews' && method === 'GET') return sendJson(res, 200, { items: await withoutEnded(await community.myReviews(requireUser().id)) });
+    // 나를 위한 추천: 별점·찜·최근 본 게임으로 취향표 → 취향 장르 인기 게임에 점수 (server/services/forYou.js)
+    if (p === '/api/me/for-you' && method === 'GET') {
+      const u = requireUser();
+      const [mine, wishes, recent] = await Promise.all([community.myReviews(u.id), community.wishlist(u.id), community.recent(u.id)]);
+      const kinds = [
+        ...mine.filter((r) => !r.hidden).map((r) => ({ id: r.gameId, kind: ratingSignal(r.rating) })).filter((x) => x.kind),
+        ...wishes.map((w) => ({ id: w.gameId, kind: 'wish' })),
+        ...recent.slice(0, 20).map((r) => ({ id: r.gameId, kind: 'view' })),
+      ];
+      const ids = [...new Set(kinds.map((x) => x.id))];
+      const found = new Map((await catalog.getMany(ids.filter((id) => id.startsWith('igdb-')))).map((g) => [g.id, g]));
+      for (const id of ids.filter((x) => !found.has(x)).slice(0, 10)) {
+        const g = await getAnyGame(id).catch(() => null);
+        if (g) found.set(id, g);
+      }
+      const known = new Map((await decorate([...found.values()], u)).map((g) => [g.id, g]));
+      const profile = buildProfile(kinds.map((x) => ({ game: known.get(x.id), kind: x.kind })));
+      // 별점·찜만 한 게임도 다시 추천하지 않게(정보를 못 받은 게임 포함)
+      for (const x of kinds) if (x.kind !== 'view') profile.seen.add(x.id);
+      const genres = topGenres(profile, 3);
+      const pages = genres.length ? genres.flatMap((genre) => [0, 24].map((offset) => ({ genre, offset }))) : [{ offset: 0 }, { offset: 24 }];
+      const lists = await Promise.all(pages.map((o) => catalog.browse('popular', o).catch(() => ({ games: [] }))));
+      const pool = (await decorate(lists.flatMap((l) => l.games), u)).filter((g) => listable(g) && !blockedReason(g));
+      const labels = getOptions().genres;
+      const genreLabel = (v) => labels.find((o) => o.value === v)?.label ?? v;
+      const games = rankForYou(pool, profile, { limit: 24, genreLabel });
+      return sendJson(res, 200, { meta: meta(), games, signalCount: profile.signalCount, needMore: profile.signalCount < MIN_SIGNALS, topGenres: genres.map(genreLabel) });
+    }
     if (p === '/api/me/recent' && method === 'GET') return sendJson(res, 200, { items: await withoutEnded(await community.recent(requireUser().id)) });
     if (p === '/api/me/recent' && method === 'DELETE') {
       await community.clearRecent(requireUser().id);

@@ -87,6 +87,7 @@ export const api = {
   contributors: (period = 'month') => get(`/api/contributors?period=${period}`),
   myReviews: () => get('/api/me/reviews'),
   recent: () => get('/api/me/recent'),
+  forYou: () => get('/api/me/for-you'),
   removeRecent: (id) => request('DELETE', `/api/me/recent/${gid(id)}`),
   clearRecent: () => request('DELETE', '/api/me/recent'),
 

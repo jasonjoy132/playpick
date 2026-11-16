@@ -115,6 +115,9 @@ export function ProfilePanel() {
           <span>제보 승인</span>
         </Link>
       </div>
+      <Link to="/for-you" className="btn btn-gold btn-block pp-for-you" data-testid="pp-for-you">
+        나를 위한 추천 보기
+      </Link>
 
       <Link to="/mypage/badges" className="pp-title" data-testid="pp-title">
         <span className="pp-title-main">

@@ -350,6 +350,9 @@ function UserMenu() {
           <Link to="/mypage/profile" role="menuitem">
             마이페이지
           </Link>
+          <Link to="/for-you" role="menuitem" data-testid="menu-for-you">
+            나를 위한 추천
+          </Link>
           <Link to="/mypage/wishlist" role="menuitem">
             찜 목록
           </Link>

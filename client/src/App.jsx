@@ -16,6 +16,7 @@ import { LoginPage, SignupPage, SocialSignupPage, FindIdPage, FindPasswordPage, 
 import { MyPage } from './pages/MyPage.jsx';
 import { PopularPage, NewPage, RankingRedirect, GenrePage, HallOfFamePage } from './pages/BrowsePages.jsx';
 import { SubmitPage } from './pages/SubmitPage.jsx';
+import { ForYouPage } from './pages/ForYouPage.jsx';
 import { AdminPage } from './pages/AdminPage.jsx';
 import { PrivacyPage, TermsPage, SourcesPage } from './pages/InfoPages.jsx';
 
@@ -49,6 +50,7 @@ function route(pathname, options) {
   if (pathname === '/new') return <NewPage options={options} />;
   if (pathname === '/ranking') return <RankingRedirect />; // 예전 '평점 랭킹' → 인기 게임(평점 높은 순)
   if (pathname === '/hall-of-fame') return <HallOfFamePage />;
+  if (pathname === '/for-you') return <ForYouPage options={options} />;
   if (pathname === '/genres') return <GenrePage options={options} />;
   if (pathname === '/submit') return <SubmitPage options={options} />;
   if (pathname === '/admin') return <AdminPage options={options} />;

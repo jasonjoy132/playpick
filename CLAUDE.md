@@ -90,6 +90,7 @@
 
 - 문의 연락처: `InfoPages.jsx`의 `CONTACT_EMAIL`(개인정보처리방침·이용약관에 표시)
 - 계정·세션·비밀번호 재설정(메일: Brevo), 찜, 별점·리뷰(1인 1리뷰, 수정 불가·삭제 후 재작성), 최근 본 게임
+- **나를 위한 추천**(회원 전용 `/for-you`, `GET /api/me/for-you`, `server/services/forYou.js`): 규칙 기반 콘텐츠 추천(머신러닝 없음). 별점 4~5점 +3·찜 +2·최근 본 +1·별점 1~2점 −2로 장르·플랫폼·인원 취향표 → 취향 장르 위 3개의 인기 게임(장르별 2쪽)을 후보로 점수 = 4×장르 몫 + 인원(여럿/혼자 취향) + 0.7×인기, 내 플랫폼 아니거나 별점·찜한 게임은 뺌. 카드마다 이유 한 줄(`forYouReason`). 활동 3개 미만이면 안내(`needMore`). 들어가는 곳: 헤더 계정 메뉴·홈 프로필 패널. 추천 인원·플레이 시간은 비회원도 다 보이고 **AI에게 새로 물을 때만** 로그인 필요(아래 Gemini 예외)
 - **이메일 인증**(`users.email_verified`): 아이디 가입 때 인증 메일(`/verify-email?token=`, 24시간, `email_verifications`), 마이페이지 '인증 메일 보내기'(`POST /api/me/verify-email`). 비밀번호 재설정 링크를 쓰거나 같은 이메일의 소셜 계정을 연결해도 인증됨. 소셜 가입은 처음부터 인증
 - **시도 제한**: 로그인·메일·가입·소셜 로그인은 DB `rate_hits`(`createDbRateLimiter`, 서버리스 인스턴스끼리 공유), 글쓰기·AI 질문은 메모리
 - 보안 헤더: API는 `app.js`, 화면(정적 파일)은 `vercel.json` `headers`(X-Frame-Options·frame-ancestors 등)
