@@ -828,20 +828,27 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       const cut = url.searchParams.has('cut') && !Number.isNaN(cutParam) ? cutParam : Infinity; // 앞 페이지까지 보여 준 점수
       const gracLimit = gracTo === 'full' ? (more === 'full' && url.searchParams.get('igdbDone') === '1' ? RESULT_PAGE : 6) : RESULT_PAGE;
       // 1) 모든 조건 일치: IGDB 전체에서 필터 검색  2) 일부 일치: 인기 후보에서 판정(첫 요청만)  3) IGDB에 없는 게임위 게임
-      const [paged, pool, grac] = await Promise.all([
-        wantIgdb && !igdbDoneParam ? timed('IGDB+AI', () => igdbRounds(criteria, offset)) : Promise.resolve({ games: [], total: null, hasMore: false, skipped: true }),
-        !more ? timed('인기 후보', () => catalog.listGames(criteria)) : Promise.resolve(null),
-        // 게임위 게임 AI 추천 인원도 IGDB 쪽과 동시에 물음 (기다리는 시간이 겹치게)
-        wantGrac
-          ? timed('게임위+AI', async () => {
-              const fixes = await reports.patcher(); // 관리자·회원 제보로 고친 플랫폼·장르로 고름
-              const r = await catalog.gracMatches(criteria, { offset: goffset, limit: gracLimit, keep: listableRaw, patch: fixes.patch, patchKey: fixes.key });
-              if (!r.items?.length) return r;
-              const f = await partySize.fill(r.items.map((x) => x.game));
-              return { ...r, games: f.games, aiWarning: f.warning };
-            }).catch((e) => ({ status: 'error', error: e.message }))
-          : Promise.resolve(null),
-      ]);
+      // 셋을 동시에 시작하되, '비슷한 게임' 후보와 게관위 게임은 IGDB가 이번에 끝날 때만 기다림
+      // (IGDB가 더 있으면 어차피 이번 응답에 안 쓰므로 기다리지 않고 캐시만 데워 둠 → 첫 화면이 빨라짐)
+      const igdbP = wantIgdb && !igdbDoneParam ? timed('IGDB+AI', () => igdbRounds(criteria, offset)) : Promise.resolve({ games: [], total: null, hasMore: false, skipped: true });
+      // 첫 요청, 또는 '더 보기'로 IGDB가 이번에 끝나는 요청(첫 요청에서 미뤘던 후보를 이때 붙임)
+      const wantPool = !more || (more === 'full' && !igdbDoneParam);
+      const poolP = wantPool ? timed('인기 후보', () => catalog.listGames(criteria)) : null;
+      // 게임위 게임 AI 추천 인원도 IGDB 쪽과 동시에 물음 (기다리는 시간이 겹치게)
+      const gracP = wantGrac
+        ? timed('게임위+AI', async () => {
+            const fixes = await reports.patcher(); // 관리자·회원 제보로 고친 플랫폼·장르로 고름
+            const r = await catalog.gracMatches(criteria, { offset: goffset, limit: gracLimit, keep: listableRaw, patch: fixes.patch, patchKey: fixes.key });
+            if (!r.items?.length) return r;
+            const f = await partySize.fill(r.items.map((x) => x.game));
+            return { ...r, games: f.games, aiWarning: f.warning };
+          }).catch((e) => ({ status: 'error', error: e.message }))
+        : null;
+      poolP?.catch(() => {}); // 기다리지 않을 때 오류로 서버가 멈추지 않게
+      const paged = await igdbP;
+      const igdbEnds = !paged || paged.failed || paged.skipped || !paged.hasMore;
+      const pool = poolP && igdbEnds ? await poolP.catch(() => null) : null;
+      const grac = gracP && igdbEnds ? await gracP : null;
       log(`[timing] /api/recommendations ${more ? `more=${more}` : '첫 요청'} 전체 ${Date.now() - started}ms`);
       if (paged && !paged.failed) {
         const warnings = [...(pool?.warnings ?? [])];
@@ -870,7 +877,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
         const gPartial = gResults.filter((x) => !x.evaluation.isFullMatch);
         const poolPartial = pool ? recommend((await decorate(pool.games, user)).filter(listable), criteria).partialMatches : [];
         const fullMatches = [...mergeByPopularity(igdbFull, extras), ...gFull];
-        const partialMatches = (more ? gPartial : [...poolPartial, ...gPartial]).sort(compareSimilar);
+        const partialMatches = [...poolPartial, ...gPartial].sort(compareSimilar);
         const gracHasMore = useGrac ? !!grac.hasMore : true; // 아직 안 받았으면 남은 것으로
         return sendJson(res, 200, {
           meta: meta(), warnings, criteria, paged: true, gracTo,
@@ -882,7 +889,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
           next: { offset: paged.skipped ? offset : paged.nextOffset, goffset: useGrac ? grac.nextOffset ?? goffset : goffset, cut: igdbHasMore ? lo : '-Infinity' },
         });
       }
-      const { games: listed, warnings } = pool ?? (await catalog.listGames(criteria));
+      const { games: listed, warnings } = pool ?? (await (poolP ?? catalog.listGames(criteria)));
       const games = [...await submissions.approvedGames(), ...listed];
       const found = recommend((await decorate(games, user)).filter(listable), criteria);
       const fullMatches = byPopularity(found.fullMatches);

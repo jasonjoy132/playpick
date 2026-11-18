@@ -60,7 +60,7 @@
   --track: #e6e8eb;
   --mine-bg: #e6f1fb;
   --star: #f5a623;
-  --star-empty: #d9dbde;
+  --star-empty: #767b83; /* 별점 표시 빈 별: 바탕(흰·옅은 회색)과 3:1 이상 */
   --star-input-empty: #7d828a; /* 별점 입력 빈 별: 바탕과 3:1 이상 (누르는 요소) */
   --member-ink: #121314;
   --member-soft: #e9eaec;
@@ -138,7 +138,7 @@
   --track: #2b2c30;
   --mine-bg: #0b2236;
   --star: #ffce21;
-  --star-empty: #3a3c42;
+  --star-empty: #6b7079; /* 다크: 검정 바탕과 3:1 이상 */
   --star-input-empty: #6b7079;
   --member-ink: #f5f5f5;
   --member-soft: #2b2c30;
@@ -248,7 +248,7 @@ img { max-width: 100%; }
 
 /* ── cover ── */
 .cover { display: block; width: 100%; height: 100%; object-fit: cover; }
-.cover-empty { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; padding: 12px; color: #fff; background: linear-gradient(160deg, hsl(var(--h) 30% 42%), hsl(calc(var(--h) + 30) 35% 22%)); }
+.cover-empty { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; padding: 12px; color: #fff; background: linear-gradient(160deg, hsl(var(--h) 24% 38%), hsl(calc(var(--h) + 6) 30% 18%)); }
 .cover-empty-title { display: none; }
 .cover-empty-note { font-size: 0.75rem; opacity: 0.8; border: 1px solid rgba(255,255,255,0.4); border-radius: 999px; padding: 1px 10px; }
 .slide-bg .cover-empty-note { display: none; }
@@ -2041,4 +2041,4 @@ h3 { letter-spacing: -0.01em; }
 @media (prefers-reduced-motion: reduce) { .skeleton-block, .skeleton-line { animation: none; } }
 
 /* 긴 제목이 한 글자만 다음 줄로 넘어가지 않게 */
-h1, h2, .page-head h1 { text-wrap: balance; }
+h1, h2, h3, .tile-title { text-wrap: balance; }
