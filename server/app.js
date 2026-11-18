@@ -1,4 +1,5 @@
 // Node.js(http 모듈) 기반 API 서버 + 빌드된 React 정적 파일 제공
+import { PAGE_CSP } from './csp.js';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -173,6 +174,8 @@ export function createApp(config, deps = {}) {
   const limits = {
     // 무차별 대입을 막아야 하는 곳은 DB에 기록(서버리스 인스턴스끼리 공유)
     login: createDbRateLimiter(db, { name: 'login', limit: 5, windowMs: 10 * 60e3 }),
+    // 한 IP에서 아이디를 바꿔 가며 흔한 비밀번호를 대입하는 것(password spraying) 막기 — 실패만 셈(학교 와이파이처럼 여럿이 같은 IP여도 정상 로그인은 안 막힘)
+    loginIp: createDbRateLimiter(db, { name: 'login-ip', limit: 30, windowMs: 10 * 60e3 }),
     mail: createDbRateLimiter(db, { name: 'mail', limit: 5, windowMs: 10 * 60e3 }),
     signup: createDbRateLimiter(db, { name: 'signup', limit: 10, windowMs: 60 * 60e3 }),
     oauth: createDbRateLimiter(db, { name: 'oauth', limit: 30, windowMs: 10 * 60e3 }),
@@ -380,7 +383,14 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     // 상태를 바꾸는 요청: 다른 사이트에서 보낸 요청(CSRF) 차단
     if (method !== 'GET') {
       const origin = req.headers.origin;
-      if (origin && new URL(origin).host !== req.headers.host) throw apiError('FORBIDDEN', '허용되지 않은 요청입니다.', 403);
+      // Origin 이 'null'(샌드박스 iframe·file:// 등)이거나 주소가 아니면 다른 곳에서 온 요청으로 보고 거절
+      let originHost = null;
+      try {
+        originHost = origin ? new URL(origin).host : null;
+      } catch {
+        originHost = '';
+      }
+      if (origin && originHost !== req.headers.host) throw apiError('FORBIDDEN', '허용되지 않은 요청입니다.', 403);
       if (req.headers['x-requested-with'] !== 'playpick') throw apiError('FORBIDDEN', '허용되지 않은 요청입니다.', 403);
     }
     const requireUser = () => {
@@ -410,8 +420,16 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     if (p === '/api/auth/login' && method === 'POST') {
       const body = await readJson(req);
       const key = `${ip}|${String(body.loginId || '').toLowerCase()}`;
+      if (await limits.loginIp.over(ip)) throw apiError('RATE_LIMIT', '로그인 시도가 너무 많습니다. 10분 뒤 다시 시도해 주세요.', 429);
       if (!(await limits.login.hit(key))) throw apiError('RATE_LIMIT', '로그인 시도가 너무 많습니다. 10분 뒤 다시 시도해 주세요.', 429);
-      const { user: u, session } = await accounts.login(body);
+      let result;
+      try {
+        result = await accounts.login(body);
+      } catch (e) {
+        if (e.code === 'INVALID_LOGIN') await limits.loginIp.hit(ip); // 아이디·비밀번호가 틀린 경우만 IP 실패로 셈
+        throw e;
+      }
+      const { user: u, session } = result;
       await limits.login.reset(key);
       return sendJson(res, 200, { user: await meOut(u) }, { 'Set-Cookie': sessionCookie(session.token, session.maxAgeSec) });
     }
@@ -1095,6 +1113,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('X-Frame-Options', 'DENY');
     const url = new URL(req.url, 'http://localhost');
+    if (!url.pathname.startsWith('/api/')) res.setHeader('Content-Security-Policy', PAGE_CSP); // 로컬도 배포(vercel.json)와 같게 (사진 주소는 아래에서 더 엄격하게 덮어씀)
     try {
       if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
       if (req.method !== 'GET' && req.method !== 'HEAD') return sendJson(res, 405, { error: { code: 'METHOD', message: '허용되지 않은 요청입니다.' } });

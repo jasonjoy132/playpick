@@ -43,5 +43,10 @@ export function createDbRateLimiter(db, { name, limit, windowMs, now = () => Dat
     async reset(key) {
       await db.prepare('DELETE FROM rate_hits WHERE key = ?').run(`${name}|${key}`);
     },
+    /** 기록하지 않고 지금 한도를 넘었는지만 (실패만 세는 곳에서: 먼저 over → 실패하면 hit) */
+    async over(key) {
+      const r = await db.prepare('SELECT COUNT(*) AS n FROM rate_hits WHERE key = ? AND at > ?').get(`${name}|${key}`, now() - windowMs);
+      return Number(r?.n ?? 0) >= limit;
+    },
   };
 }
