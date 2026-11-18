@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
+import { useDocumentTitle } from '../lib/useDocumentTitle.js';
 import { useAsync } from '../lib/useAsync.js';
 import { recall, remember, usePageState } from '../lib/pageMemory.js';
 import { useLocation } from '../lib/router.jsx';
@@ -8,7 +9,7 @@ import { criteriaFromSearch, criteriaToSearch, hasAnyCriteria } from '../lib/cri
 import { criteriaLabels } from '../lib/format.js';
 import { GameTile } from '../components/GameTile.jsx';
 import { AutoMore } from '../components/AutoMore.jsx';
-import { EmptyState, ErrorState, Loading, Warnings } from '../components/Status.jsx';
+import { EmptyState, ErrorState, SkeletonGrid, Warnings } from '../components/Status.jsx';
 
 export function ResultsPage({ options }) {
   const { search } = useLocation();
@@ -20,6 +21,7 @@ export function ResultsPage({ options }) {
     [qs],
     'results', // 뒤로 가기로 돌아오면 다시 받지 않음
   );
+  useDocumentTitle('추천 게임 목록');
 
   if (!hasAnyCriteria(criteria)) {
     return <ErrorState title="선택된 조건이 없어요" error={{ message: '‘나만의 게임 찾기’에서 인원·플랫폼·장르를 선택해 주세요.' }} editCriteria={criteria} />;
@@ -41,7 +43,7 @@ export function ResultsPage({ options }) {
         </div>
       </section>
 
-      {status === 'loading' && <Loading message="조건에 맞는 게임을 찾는 중이에요…" />}
+      {status === 'loading' && <SkeletonGrid message="조건에 맞는 게임을 찾는 중이에요…" />}
       {status === 'error' && <ErrorState error={error} onRetry={retry} editCriteria={criteria} />}
       {status === 'success' && <Results data={data} options={options} qs={qs} criteria={criteria} />}
     </>

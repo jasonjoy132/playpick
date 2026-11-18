@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
+import { useDocumentTitle } from '../lib/useDocumentTitle.js';
 import { useAsync } from '../lib/useAsync.js';
-import { Link, goBackTo, useLocation } from '../lib/router.jsx';
+import { Link, goBackTo, navigate, useLocation } from '../lib/router.jsx';
 import { criteriaFromSearch, criteriaToSearch, hasAnyCriteria } from '../lib/criteria.js';
 import { formatList, formatPlayers, orNoInfo, statusKo, NO_INFO, PARTY_SOURCE } from '../lib/format.js';
 import { Cover } from '../components/Cover.jsx';
@@ -22,6 +23,7 @@ export function GamePage({ id, options }) {
   const qs = hasAnyCriteria(criteria) ? criteriaToSearch(criteria) : '';
   const { status, data, error, retry, reload } = useAsync(() => api.game(id, qs), [id, qs]);
   const back = qs ? `/results?${qs}` : null;
+  useDocumentTitle(data?.game?.title ?? null);
 
   return (
     <>
@@ -41,10 +43,11 @@ export function GamePage({ id, options }) {
           <a
             href="/"
             onClick={(e) => {
-              if (window.history.length > 1) {
-                e.preventDefault();
-                window.history.back();
-              }
+              if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              e.preventDefault();
+              // 사이트 안에서 왔을 때만 뒤로(외부 링크로 바로 들어왔으면 사이트 밖으로 나가지 않게 홈으로)
+              if (window.history.state?.from) window.history.back();
+              else navigate('/');
             }}
           >
             <Arrow dir="left" /> 뒤로
@@ -346,10 +349,16 @@ function GameDetail({ data, options, reload }) {
             <h1>{game.title}</h1>
             {game.originalTitle && <p className="detail-original">{game.originalTitle}</p>}
             <p className="detail-publisher">{game.publisher || `업체 ${NO_INFO}`}</p>
+            <KeyFacts game={game} options={options} />
             <div className="detail-actions">
               <GlobalBadge rating={game.globalRating} />
               <RatingBadge rating={rating} />
               <WishButton game={game} variant="label" />
+              {game.stores.length > 0 && (
+                <button type="button" className="btn btn-ghost btn-sm store-jump" onClick={() => document.getElementById('store-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} data-testid="store-jump">
+                  구매처 보기
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -439,7 +448,7 @@ function GameDetail({ data, options, reload }) {
             </section>
           )}
 
-          <section className="panel">
+          <section className="panel" id="detail-info">
             <h2>상세 정보</h2>
             <dl className="info-table">
               {rows.map(([k, v]) => (
@@ -490,6 +499,57 @@ function GameDetail({ data, options, reload }) {
         </aside>
       </div>
     </article>
+  );
+}
+
+/**
+ * 제목 아래 핵심 정보 줄 — 같이 할 사람 수·시간·기기를 첫 화면에서 (자세한 출처는 아래 '상세 정보')
+ * AI에게 새로 물어야 하는 값은 아래 칸에서 채우므로 여기선 '아래에서 확인'
+ */
+function KeyFacts({ game, options }) {
+  const rec = game.recommendedPlayers;
+  const toInfo = (label) => (
+    <button type="button" className="link-btn" onClick={() => document.getElementById('detail-info')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+      {label}
+    </button>
+  );
+  const players = rec ? (
+    <>
+      {formatPlayers(rec)}
+      {rec.source === 'ai' && <> <span className="pill pill-ai" title="AI(Google Gemini)가 추정한 값이에요. 틀릴 수 있어요.">AI 추정</span></>}
+    </>
+  ) : game.players ? (
+    <>최대 {formatPlayers(game.players)}</>
+  ) : game.playersAsk ? (
+    toInfo('아래에서 확인')
+  ) : (
+    NO_INFO
+  );
+  const pt = game.playtime;
+  const playtime = pt?.hours != null ? (
+    <>
+      약 {pt.hours}시간
+      {pt.source === 'ai' && <> <span className="pill pill-ai" title="AI(Google Gemini)가 추정한 값이에요. 틀릴 수 있어요.">AI 추정</span></>}
+    </>
+  ) : game.playtimeAsk ? (
+    toInfo('아래에서 확인')
+  ) : (
+    NO_INFO
+  );
+  const facts = [
+    ['추천 인원', players, 'players'],
+    ['플레이 시간', playtime, 'playtime'],
+    ['플랫폼', formatList(game.platforms, game.platformsRaw, options.platforms), 'platforms'],
+  ];
+  return (
+    <dl className="key-facts" data-testid="key-facts">
+      {facts.map(([k, v, id]) => (
+        <div key={k} data-testid={`key-${id}`}>
+          <dt>{k}</dt>
+          <dd>{v}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

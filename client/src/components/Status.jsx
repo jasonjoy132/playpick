@@ -10,6 +10,26 @@ export function Loading({ message = '불러오는 중…' }) {
   );
 }
 
+/** 목록 불러오는 동안 카드 모양 뼈대 (빈 화면 + 스피너보다 기다림이 짧게 느껴짐) */
+export function SkeletonGrid({ message = '불러오는 중…', count = 8 }) {
+  return (
+    <div className="skeleton-wrap" role="status" aria-live="polite" data-testid="state-loading">
+      <p className="muted small skeleton-msg">{message}</p>
+      <div className="card-grid" aria-hidden="true">
+        {Array.from({ length: count }, (_, i) => (
+          <div key={i} className="tile skeleton-tile">
+            <div className="tile-cover skeleton-block" />
+            <div className="tile-body">
+              <span className="skeleton-line" />
+              <span className="skeleton-line is-short" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ErrorState({ error, onRetry, title = '데이터를 불러오지 못했어요', editCriteria }) {
   const { openFinder } = useFinder();
   return (

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
+import { useDocumentTitle } from '../lib/useDocumentTitle.js';
 import { useAsync } from '../lib/useAsync.js';
+import { usePageState } from '../lib/pageMemory.js';
 import { useAuth } from '../lib/auth.jsx';
 import { Link, navigate, useLocation } from '../lib/router.jsx';
 import { toAvatarDataUrl } from '../lib/image.js';
@@ -16,7 +18,7 @@ import { PROVIDER_LABEL, ProviderMark, oauthErrorText, oauthStartUrl } from '../
 
 const MENU = [
   { group: '내 정보', items: [['profile', '프로필 설정'], ['accounts', '연결된 계정'], ['password', '비밀번호 변경'], ['delete', '회원 탈퇴']] },
-  { group: '게임', items: [['wishlist', '찜 목록'], ['reviews', '내 리뷰']] },
+  { group: '게임', items: [['wishlist', '찜 목록'], ['reviews', '내 리뷰']], extra: [['/for-you', '나를 위한 추천']] },
   { group: '활동', items: [['recent', '최근 본 게임'], ['submissions', '내 제보'], ['badges', '뱃지·칭호']] },
 ];
 const TITLES = Object.fromEntries(MENU.flatMap((m) => m.items));
@@ -30,6 +32,7 @@ export function MyPage({ section = 'profile', options }) {
     if (user) refreshUser();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [section, user?.id]);
+  useDocumentTitle(TITLES[section] ? `마이페이지 · ${TITLES[section]}` : '마이페이지');
   if (!ready) return <Loading />;
   if (!user) {
     return (
@@ -73,6 +76,11 @@ export function MyPage({ section = 'profile', options }) {
             <p className="mypage-group">{m.group}</p>
             {m.items.map(([key, label]) => (
               <Link key={key} to={`/mypage/${key}`} className={`${key === section ? 'is-active' : ''}${key === 'delete' ? ' mypage-danger' : ''}`} aria-current={key === section ? 'page' : undefined}>
+                {label}
+              </Link>
+            ))}
+            {m.extra?.map(([to, label]) => (
+              <Link key={to} to={to} data-testid="mypage-for-you">
                 {label}
               </Link>
             ))}
@@ -441,8 +449,9 @@ function GameRow({ gameId, title, imageUrl, isDemo, children, meta }) {
 
 export function WishlistSection({ options }) {
   const { refreshWishCount } = useAuth();
-  const { status, data, error, retry } = useAsync(() => api.wishlist(), []);
-  const [removed, setRemoved] = useState(new Set());
+  const { status, data, error, retry } = useAsync(() => api.wishlist(), [], 'my-wishlist');
+  // 뒤로 가기로 돌아와도 지운 게임이 다시 보이지 않게 지운 목록도 같은 기록 항목에 저장
+  const [removed, setRemoved] = usePageState('my-wishlist:removed', () => new Set());
   if (status === 'loading') return <Loading message="찜 목록을 불러오는 중이에요…" />;
   if (status === 'error') return <ErrorState error={error} onRetry={retry} />;
   const items = data.items.filter((i) => !removed.has(i.gameId));
@@ -478,8 +487,8 @@ export function WishlistSection({ options }) {
 }
 
 function ReviewsSection() {
-  const { status, data, error, retry } = useAsync(() => api.myReviews(), []);
-  const [removed, setRemoved] = useState(new Set());
+  const { status, data, error, retry } = useAsync(() => api.myReviews(), [], 'my-reviews');
+  const [removed, setRemoved] = usePageState('my-reviews:removed', () => new Set());
   const [err, setErr] = useState(null);
   if (status === 'loading') return <Loading message="리뷰 내역을 불러오는 중이에요…" />;
   if (status === 'error') return <ErrorState error={error} onRetry={retry} />;
@@ -527,8 +536,8 @@ function ReviewsSection() {
 }
 
 function RecentSection() {
-  const { status, data, error, retry } = useAsync(() => api.recent(), []);
-  const [items, setItems] = useState(null);
+  const { status, data, error, retry } = useAsync(() => api.recent(), [], 'my-recent');
+  const [items, setItems] = usePageState('my-recent:items', null);
   if (status === 'loading') return <Loading message="최근 본 게임을 불러오는 중이에요…" />;
   if (status === 'error') return <ErrorState error={error} onRetry={retry} />;
   const list = items ?? data.items;

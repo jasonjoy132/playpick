@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '../lib/useDocumentTitle.js';
 // 상단 메뉴: 인기 게임(평가 많은 순·평점 높은 순) · 신작·출시 예정 · 명예의 전당 · 장르별 게임
 import { useEffect, useRef, useState } from 'react';
 import { usePageState } from '../lib/pageMemory.js';
@@ -143,6 +144,7 @@ function PageScene({ state, label, rankPrefix }) {
 }
 
 function PageHead({ title, desc, scene, children }) {
+  useDocumentTitle(title);
   return (
     <section className="page-head browse-head">
       {scene}

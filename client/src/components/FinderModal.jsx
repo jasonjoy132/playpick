@@ -83,8 +83,10 @@ export function FinderModal({ options }) {
   const submit = (e) => {
     e.preventDefault();
     if (!ready) return;
-    closeFinder();
-    navigate(`/results?${criteriaToSearch(criteria)}`);
+    // 창을 열 때 쌓은 기록을 결과 화면으로 바꿔 씀 → 결과에서 뒤로 가면 창을 연 화면으로
+    const replace = Boolean(window.history.state?.ppFinder);
+    closeFinder({ keepHistory: true });
+    navigate(`/results?${criteriaToSearch(criteria)}`, { replace });
   };
 
   return (

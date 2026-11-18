@@ -89,6 +89,9 @@ async function readJson(req, limit = 16 * 1024) {
 
 export function createApp(config, deps = {}) {
   const catalog = deps.catalog ?? createCatalog(config, deps);
+  // 나를 위한 추천 결과 (회원별, 활동이 같을 때만 재사용)
+  const forYouCache = new Map();
+  const FOR_YOU_TTL = 2 * 60 * 1000;
   const translator = deps.translator ?? createTranslator(config.deepl ?? {}, deps);
   // RAWG 평균 플레이 시간: 미리 받아 둔 파일만 읽음 (npm run prefill:playtime)
   const rawgTimes = deps.rawgPlaytime ?? createRawgPlaytime(config.rawg?.dataFile ?? null);
@@ -554,16 +557,19 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
         ...wishes.map((w) => ({ id: w.gameId, kind: 'wish' })),
         ...recent.slice(0, 20).map((r) => ({ id: r.gameId, kind: 'view' })),
       ];
+      // 활동이 그대로면 2분 동안 같은 결과(IGDB 장르별 조회를 줄임) — 별점·찜·본 게임이 바뀌면 키가 달라져 새로 계산
+      const sig = `${mine.map((r) => `${r.gameId}:${r.rating}`).join(',')}|${kinds.map((x) => `${x.id}:${x.kind}`).join(',')}`;
+      const hit = forYouCache.get(u.id);
+      if (hit && hit.sig === sig && Date.now() - hit.at < FOR_YOU_TTL) return sendJson(res, 200, { meta: meta(), ...hit.body });
       const ids = [...new Set(kinds.map((x) => x.id))];
       const found = new Map((await catalog.getMany(ids.filter((id) => id.startsWith('igdb-')))).map((g) => [g.id, g]));
-      for (const id of ids.filter((x) => !found.has(x)).slice(0, 10)) {
-        const g = await getAnyGame(id).catch(() => null);
-        if (g) found.set(id, g);
-      }
+      const others = await Promise.all(ids.filter((x) => !found.has(x)).slice(0, 10).map((id) => getAnyGame(id).catch(() => null)));
+      for (const g of others) if (g) found.set(g.id, g);
       const known = new Map((await decorate([...found.values()], u)).map((g) => [g.id, g]));
       const profile = buildProfile(kinds.map((x) => ({ game: known.get(x.id), kind: x.kind })));
-      // 별점·찜만 한 게임도 다시 추천하지 않게(정보를 못 받은 게임 포함)
+      // 별점·찜한 게임은 다시 추천하지 않게(정보를 못 받은 게임, 별점 3점·숨겨진 리뷰 포함)
       for (const x of kinds) if (x.kind !== 'view') profile.seen.add(x.id);
+      for (const r of mine) profile.seen.add(r.gameId);
       const genres = topGenres(profile, 3);
       const pages = genres.length ? genres.flatMap((genre) => [0, 24].map((offset) => ({ genre, offset }))) : [{ offset: 0 }, { offset: 24 }];
       const lists = await Promise.all(pages.map((o) => catalog.browse('popular', o).catch(() => ({ games: [] }))));
@@ -571,7 +577,10 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       const labels = getOptions().genres;
       const genreLabel = (v) => labels.find((o) => o.value === v)?.label ?? v;
       const games = rankForYou(pool, profile, { limit: 24, genreLabel });
-      return sendJson(res, 200, { meta: meta(), games, signalCount: profile.signalCount, needMore: profile.signalCount < MIN_SIGNALS, topGenres: genres.map(genreLabel) });
+      const body = { games, signalCount: profile.signalCount, needMore: profile.signalCount < MIN_SIGNALS, topGenres: genres.map(genreLabel) };
+      if (forYouCache.size > 500) forYouCache.clear();
+      forYouCache.set(u.id, { sig, at: Date.now(), body });
+      return sendJson(res, 200, { meta: meta(), ...body });
     }
     if (p === '/api/me/recent' && method === 'GET') return sendJson(res, 200, { items: await withoutEnded(await community.recent(requireUser().id)) });
     if (p === '/api/me/recent' && method === 'DELETE') {

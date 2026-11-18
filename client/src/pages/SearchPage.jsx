@@ -1,4 +1,5 @@
 import { api } from '../lib/api.js';
+import { useDocumentTitle } from '../lib/useDocumentTitle.js';
 import { useAsync } from '../lib/useAsync.js';
 import { usePageState } from '../lib/pageMemory.js';
 import { Link, useLocation } from '../lib/router.jsx';
@@ -13,6 +14,7 @@ export function SearchPage({ options }) {
   const q = (new URLSearchParams(search).get('q') || '').trim();
   const { status, data, error, retry } = useAsync(() => (q ? api.search(q) : Promise.resolve(null)), [q], 'search');
   const [shown, setShown] = usePageState(`search:${q}:shown`, PAGE); // 뒤로 가기로 돌아오면 펼친 만큼 그대로
+  useDocumentTitle(q ? `‘${q}’ 검색 결과` : '검색');
 
   if (!q) return <EmptyState title="검색어를 입력해 주세요"><p>상단 검색창에 게임 이름을 입력하면 찾아 드려요.</p></EmptyState>;
   return (
@@ -38,6 +40,7 @@ export function SearchPage({ options }) {
                 {data.games.length}개 게임
                 {data.alsoSearched && <span className="muted small"> · ‘{data.alsoSearched}’(으)로도 함께 찾았어요</span>}
               </p>
+              <h2 className="sr-only">검색된 게임</h2>
               <div className="card-grid">
                 {data.games.slice(0, shown).map((g) => (
                   <GameTile key={g.id} game={g} options={options} showOriginal />

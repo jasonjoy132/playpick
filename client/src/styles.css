@@ -2020,3 +2020,25 @@ h3 { letter-spacing: -0.01em; }
 .report-more[open] > summary { margin-bottom: 8px; }
 .report-more .chips { flex-wrap: wrap; }
 .check-line { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; overflow-wrap: anywhere; }
+
+/* 상세 제목 아래 핵심 정보 줄: 같이 할 사람 수·시간·기기를 첫 화면에서 */
+.key-facts { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 14px 0 0; padding: 12px 0 0; border-top: 1px solid var(--line); }
+.key-facts > div { min-width: 0; }
+.key-facts dt { font-size: 0.75rem; color: var(--muted); margin: 0 0 2px; }
+.key-facts dd { margin: 0; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.key-facts .link-btn { font-weight: 500; }
+.store-jump { display: none; }
+@media (max-width: 860px) { .store-jump { display: inline-flex; } }
+#store-title, #detail-info { scroll-margin-top: 140px; }
+
+/* 목록 불러오는 동안 카드 뼈대 — 은은한 깜빡임만(움직임 없음) */
+.skeleton-msg { margin: 0 0 12px; }
+.skeleton-tile { pointer-events: none; box-shadow: none; }
+.skeleton-block, .skeleton-line { background: var(--placeholder, var(--surface-2)); animation: skeleton-pulse 1.4s ease-in-out infinite; }
+.skeleton-line { display: block; height: 12px; border-radius: 6px; width: 80%; }
+.skeleton-line.is-short { width: 45%; }
+@keyframes skeleton-pulse { 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .skeleton-block, .skeleton-line { animation: none; } }
+
+/* 긴 제목이 한 글자만 다음 줄로 넘어가지 않게 */
+h1, h2, .page-head h1 { text-wrap: balance; }

@@ -107,4 +107,15 @@ test('GET /api/me/for-you: 로그인 필요, 활동 없으면 안내 + 인기 �
   assert.deepEqual(r.games.map((g) => g.id), ['igdb-2', 'igdb-4'], '퍼즐만, 별점 준 게임은 빼고, 평가 많은 순');
   assert.match(r.games[0].forYouReason, /「좋아한 퍼즐」처럼 퍼즐/);
   assert.ok(browseCalls.some((c) => c.genre === 'puzzle'), '취향 장르의 인기 게임을 후보로');
+
+  // 활동이 그대로면 다시 계산하지 않음(IGDB 조회 줄이기)
+  const before = browseCalls.length;
+  assert.deepEqual((await me('GET', '/api/me/for-you')).body.games.map((g) => g.id), ['igdb-2', 'igdb-4']);
+  assert.equal(browseCalls.length, before, '같은 활동이면 캐시');
+
+  // 별점 3점(취향에는 안 넣음)을 준 게임도 이미 평가한 게임이라 다시 추천하지 않음
+  await me('PUT', '/api/games/igdb-2/reviews/mine', { rating: 3, content: '보통' });
+  const after = (await me('GET', '/api/me/for-you')).body;
+  assert.deepEqual(after.games.map((g) => g.id), ['igdb-4']);
+  assert.ok(browseCalls.length > before, '활동이 바뀌면 새로 계산');
 });

@@ -1,5 +1,6 @@
 // 나를 위한 추천(회원 전용): 별점·찜·최근 본 게임으로 만든 취향에 맞는 게임 — 카드마다 추천 이유 한 줄
 import { api } from '../lib/api.js';
+import { useDocumentTitle } from '../lib/useDocumentTitle.js';
 import { useAsync } from '../lib/useAsync.js';
 import { useAuth } from '../lib/auth.jsx';
 import { Link } from '../lib/router.jsx';
@@ -8,6 +9,7 @@ import { ErrorState, Loading } from '../components/Status.jsx';
 
 export function ForYouPage({ options }) {
   const { user, ready } = useAuth();
+  useDocumentTitle('나를 위한 추천');
   if (!ready) return <Loading />;
   if (!user) {
     return (
@@ -36,7 +38,19 @@ function ForYouList({ options, userId }) {
         </p>
       </section>
       {status === 'loading' && <Loading message="취향에 맞는 게임을 고르는 중이에요…" />}
-      {status === 'error' && <ErrorState error={error} onRetry={retry} />}
+      {status === 'error' &&
+        (error.code === 'LOGIN_REQUIRED' ? (
+          // 로그인이 풀린 채로 들어온 경우: 다시 시도 대신 로그인 안내
+          <div className="state" data-testid="for-you-login">
+            <h2>로그인이 풀렸어요</h2>
+            <p className="muted">다시 로그인하면 취향에 맞는 게임을 골라 드려요.</p>
+            <Link to={`/login?next=${encodeURIComponent('/for-you')}`} className="btn btn-gold">
+              로그인
+            </Link>
+          </div>
+        ) : (
+          <ErrorState error={error} onRetry={retry} />
+        ))}
       {status === 'success' && (
         <>
           {data.needMore && (
