@@ -272,6 +272,7 @@ function GameDetail({ data, options, reload }) {
   }, [game.id]);
   const storeClick = (s) => () => track('store_click', { gameId: game.id, store: s.appStore ? 'App Store' : s.name });
   const fromIgdb = game.source === 'IGDB';
+  const fromSteam = game.source === 'Steam';
   const hasGrac = Boolean(game.ratingNo);
   // 회원 제보(관리자 확인)로 고친 칸은 출처 표시
   const fixed = new Set(game.userFixed ?? []);
@@ -282,13 +283,14 @@ function GameDetail({ data, options, reload }) {
     ['장르', byUser('genres', formatList(game.genres, game.genresRaw, options.genres))],
     ['국내 이용 등급', game.rating ? `${game.rating}${game.ratingSource && game.ratingSource !== '게임물관리위원회' ? ` (${game.ratingSource})` : ''}` : '국내 등급분류 정보 없음'],
     ['개발·유통사', byUser('publisher', orNoInfo(game.publisher))],
-    ...(fromIgdb || fixed.has('releaseDate') ? [['출시일', byUser('releaseDate', orNoInfo(game.releaseDate))]] : []),
+    ...(fromSteam && game.features?.length ? [['게임 기능 (Steam)', game.features.join(', ')]] : []),
+    ...(fromIgdb || fromSteam || fixed.has('releaseDate') ? [['출시일', byUser('releaseDate', orNoInfo(game.releaseDate))]] : []),
     [
       '평균 플레이 시간',
       <Playtime key={game.id} game={game} />,
     ],
     ['유료·무료', game.price ? <PriceCell price={game.price} detail /> : NO_INFO],
-    ...(hasGrac || (!fromIgdb && game.source !== '사용자 제보')
+    ...(hasGrac || (!fromIgdb && !fromSteam && game.source !== '사용자 제보')
       ? [
           ['등급분류일', orNoInfo(game.ratingDate)],
           ['등급분류번호', orNoInfo(game.ratingNo)],
@@ -306,7 +308,7 @@ function GameDetail({ data, options, reload }) {
           ],
         ]
       : []),
-    ['데이터 출처', fromIgdb && hasGrac ? 'IGDB (국내 등급: 게임물관리위원회)' : game.source === '사용자 제보' ? '사용자 제보 · 관리자 확인' : game.source],
+    ['데이터 출처', fromIgdb && hasGrac ? 'IGDB (국내 등급: 게임물관리위원회)' : game.source === '사용자 제보' ? '사용자 제보 · 관리자 확인' : fromSteam ? `Steam 상점${game.steamReviews ? ` (리뷰 ${game.steamReviews.toLocaleString('ko-KR')}개)` : ''}` : game.source],
   ];
   // 상단 큰 그림: 글자 없는 실제 게임 장면(IGDB 스크린샷)을 먼저, 없으면 아트워크
   const scene = game.screenshotSource === 'IGDB' && game.screenshots?.[0] ? game.screenshots[0].replace('/t_screenshot_big/', '/t_1080p/') : game.bannerUrl?.replace('/t_screenshot_big/', '/t_1080p/');
@@ -446,7 +448,8 @@ function GameDetail({ data, options, reload }) {
             {game.source === '사용자 제보' && (
               <p className="muted small">회원이 제보하고 관리자가 확인한 게임이에요. 정보는 제보 내용을 바탕으로 해요.</p>
             )}
-            {!fromIgdb && !game.isDemo && game.source !== '사용자 제보' && (
+            {fromSteam && <p className="muted small">IGDB·게임물관리위원회에 없는 Steam 게임이라 Steam 상점 정보로 표시합니다. 국내 등급분류 정보는 없어요.</p>}
+            {!fromIgdb && !fromSteam && !game.isDemo && game.source !== '사용자 제보' && (
               <p className="muted small">
                 IGDB에 없는 게임이라 게임물관리위원회 정보로 표시합니다.{' '}
                 {game.appStoreUrl ? '아이콘과 App Store 링크는 App Store에서 이름·개발사가 같은 앱을 찾아 보완했어요. 인원 정보는 없습니다.' : game.imageSource === '사용자 제보' ? '표지 사진은 회원이 제보하고 관리자가 확인했어요. 인원·구매처 정보는 없습니다.' : '인원·이미지·구매처 정보가 없습니다.'}

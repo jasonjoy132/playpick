@@ -28,6 +28,7 @@ export const PARTY_SOURCE = {
   igdb: 'IGDB',
   ai: 'AI 추정',
   user: '사용자 제보',
+  steam: 'Steam 기능 · 싱글 플레이만',
 };
 
 /** 표준 값 → 라벨. 분류되지 않은 원본 문자열만 있으면 원본을 그대로 보여줌 */

@@ -21,6 +21,7 @@
     "prefill:images": "node scripts/prefill-images.mjs",
     "prefill:playtime": "node scripts/prefill-playtime.mjs",
     "prefill:price": "node scripts/prefill-price.mjs",
+    "import:steam": "node scripts/import-steam.mjs",
     "import:status": "node scripts/import-status.mjs",
     "import:players": "node scripts/import-players.mjs",
     "prefill:ended": "node scripts/prefill-ended.mjs",

@@ -31,6 +31,7 @@ import { createAppStoreProvider } from './providers/appStoreProvider.js';
 import { createGracNew, overlayEntries } from './services/gracNew.js';
 import { createSteamTrailers } from './services/steamTrailer.js';
 import { createPricing, createSteamPrice } from './services/pricing.js';
+import { createSteamGames } from './services/steamGames.js';
 import { rankGames } from './services/ranking.js';
 import { buildProfile, rankForYou, ratingSignal, topGenres, MIN_SIGNALS } from './services/forYou.js';
 import { cached } from './community/cached.js';
@@ -103,6 +104,8 @@ export function createApp(config, deps = {}) {
   const appStore = deps.appStore ?? createAppStoreProvider(config.appStore ?? { enabled: config.dataSource === 'live' }, deps);
   // 홈 배경용 Steam 공식 트레일러(영상 파일) — live 모드만
   const pricing = deps.pricing ?? createPricing(config.pricing?.dataFile ?? null);
+  // IGDB·게관위에 없는 Steam 게임(미리 받은 파일, 데모 모드에서는 안 씀)
+  const steamGames = deps.steamGames ?? createSteamGames(config.dataSource === 'live' ? config.steamGames?.dataFile ?? null : null);
   const steamPrice = deps.steamPrice ?? (config.dataSource === 'live' ? createSteamPrice({ fetchImpl: deps.steamFetch ?? deps.fetchImpl ?? globalThis.fetch }) : null);
   const steamTrailers = deps.steamTrailers ?? (config.dataSource === 'live' ? createSteamTrailers({ fetchImpl: deps.steamFetch ?? deps.fetchImpl ?? globalThis.fetch }) : null);
   // 회원 DB: 테스트는 메모리, 배포는 Turso(TURSO_DATABASE_URL), 로컬은 파일(.data/playpick.db)
@@ -141,7 +144,7 @@ export function createApp(config, deps = {}) {
   /** 화면에 돌려주는 내 정보: 관리자 여부(+ 인증하면 관리자가 되는지) + 닉네임 옆 대표 뱃지 */
   const meOut = async (u) => (u ? { ...withRole(u), adminPending: adminEmail(u) && !u.emailVerified, badge: await badges.displayFor(u.id), newBadges: await badges.newBadges(u.id) } : u);
   /** 일반 게임 + 승인된 제보 게임(user-…) */
-  const getAnyGame = async (id) => (String(id).startsWith('user-') ? await submissions.getGame(id) : catalog.getGame(id));
+  const getAnyGame = async (id) => (String(id).startsWith('user-') ? await submissions.getGame(id) : String(id).startsWith('steam-') ? steamGames.getGame(id) : catalog.getGame(id));
   /** 리뷰 집계 행(id·제목·표지·userRating) → 게임 정보 채우기 (IGDB 한 번에, 제보 게임은 DB에서, 못 찾으면 리뷰에 저장된 제목·표지) */
   const reviewedAsGames = async (rows) => {
     const extra = new Map((await catalog.getMany(rows.map((g) => g.id))).map((g) => [g.id, g]));
@@ -908,9 +911,9 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
         // 게관위·회원 제보 게임: AI 추천 인원을 붙인 뒤 판정 → 모두 일치면 위 섹션(맨 뒤), 아니면 아래 섹션
         const gGames = useGrac ? grac.games ?? (grac.items ?? []).map((x) => x.game) : [];
         if (useGrac && grac.aiWarning && !warnings.includes(grac.aiWarning)) warnings.push(grac.aiWarning);
-        const userGames = useGrac && goffset === 0 ? await submissions.approvedGames() : [];
+        const userGames = useGrac && goffset === 0 ? [...(await submissions.approvedGames()), ...steamGames.games()] : [];
         const gResults = (await judge([...userGames, ...gGames])) // 서비스 종료·출시 예정·상태 모름(게임위) 게임 빼기
-          .filter((x) => x.evaluation.matchedCount > 0 || x.game.source !== '사용자 제보');
+          .filter((x) => x.evaluation.matchedCount > 0 || (x.game.source !== '사용자 제보' && x.game.source !== 'Steam'));
         const gFull = gResults.filter((x) => x.evaluation.isFullMatch && !reviewedIds.has(x.game.id));
         const gPartial = gResults.filter((x) => !x.evaluation.isFullMatch);
         const poolPartial = pool ? recommend((await decorate(pool.games, user)).filter(listable), criteria).partialMatches : [];
@@ -928,7 +931,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
         });
       }
       const { games: listed, warnings } = pool ?? (await (poolP ?? catalog.listGames(criteria)));
-      const games = [...await submissions.approvedGames(), ...listed];
+      const games = [...await submissions.approvedGames(), ...steamGames.games(), ...listed];
       const found = recommend((await decorate(games, user)).filter(listable), criteria);
       const fullMatches = byPopularity(found.fullMatches);
       const partialMatches = found.partialMatches.sort(compareSimilar);
@@ -1020,6 +1023,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       const translate = translator.translateTitles ? (texts, target) => translator.translateTitles(texts, target) : undefined;
       const found = await catalog.search(q, { translate });
       const mine = [...await submissions.search(q), ...(found.translatedQuery ? await submissions.search(found.translatedQuery) : [])];
+      mine.push(...steamGames.search(q), ...(found.translatedQuery ? steamGames.search(found.translatedQuery) : [])); // IGDB·게관위에 없는 Steam 게임
       const ids = new Set(mine.map((g) => g.id));
       const games = [...mine, ...found.games.filter((g) => !ids.has(g.id))];
       // AI가 서비스 종료라고 판단한 게임위 게임은 숨김

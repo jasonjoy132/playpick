@@ -85,6 +85,10 @@ export function getConfig() {
       artFile: path.join(root, 'server', 'data', 'app-store.json'),
     },
     // 유료·무료 구분 (npm run prefill:price 로 만듦). 서버는 파일만 읽고, 상세에서 Steam 주소가 있으면 Steam에 바로 물음
+    // IGDB·게관위에 없는 Steam 게임 (npm run import:steam 으로 만듦, 서버는 읽기만)
+    steamGames: {
+      dataFile: path.join(root, 'server', 'data', 'steam-games.json'),
+    },
     pricing: {
       dataFile: path.join(root, 'server', 'data', 'price.json'),
     },
