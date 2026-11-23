@@ -183,6 +183,9 @@ export function createApp(config, deps = {}) {
     oauth: createDbRateLimiter(db, { name: 'oauth', limit: 30, windowMs: 10 * 60e3 }),
     write: createRateLimiter({ limit: 60, windowMs: 60e3 }),
     events: createRateLimiter({ limit: 60, windowMs: 60e3 }), // 익명 이용 기록(방문자·IP당 분당)
+    // 무작위 키를 바꿔 가며 가짜 기록을 쏟아붓는 것 막기: IP 하나 기준(학교 와이파이처럼 여럿이 같은 IP여도 넉넉하게)
+    eventsIp: createRateLimiter({ limit: 120, windowMs: 60e3 }),
+    eventsIpHour: createDbRateLimiter(db, { name: 'events-ip', limit: 1500, windowMs: 60 * 60e3 }), // 서버 여러 대가 함께 셈
     aiPlaytime: createRateLimiter({ limit: 30, windowMs: 60 * 60e3 }), // 회원 한 명이 AI 플레이 시간을 새로 물을 수 있는 수(시간당)
     aiPlayers: createRateLimiter({ limit: 30, windowMs: 60 * 60e3 }), // 회원 한 명이 AI 추천 인원을 새로 물을 수 있는 수(시간당)
   };
@@ -405,7 +408,8 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     if (p === '/api/events' && method === 'POST') {
       const ev = cleanEvent(await readJson(req, 2048));
       if (!ev) throw apiError('BAD_REQUEST', '올바르지 않은 기록입니다.', 400);
-      if (!isBot(req.headers['user-agent']) && !user?.isAdmin && limits.events.hit(`${ev.vid}|${ip}`)) await metrics.record(ev);
+      const keep = !isBot(req.headers['user-agent']) && !user?.isAdmin && limits.events.hit(`${ev.vid}|${ip}`) && limits.eventsIp.hit(ip) && (await limits.eventsIpHour.hit(ip));
+      if (keep) await metrics.record(ev);
       res.writeHead(204, { 'Cache-Control': 'no-store' });
       return res.end();
     }

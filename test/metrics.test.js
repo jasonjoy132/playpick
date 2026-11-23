@@ -107,3 +107,12 @@ test('성과는 관리자만, 관리자 본인 기록은 안 셈, 지난 기간�
   assert.equal(body.previous.visitors, 1, '8일 전 방문은 앞 기간');
   assert.equal((await admin('GET', '/api/admin/metrics?days=30')).body.current.visitors, 2);
 });
+
+test('무작위 키를 바꿔 가며 쏟아부어도 IP 하나는 분당 120개까지만 저장', async () => {
+  const c = client();
+  const before = (await server.db.prepare('SELECT COUNT(*) AS n FROM events').get()).n;
+  for (let i = 0; i < 130; i++) assert.equal((await ev(c, 'visit', {}, `spam${String(i).padStart(6, '0')}`)).status, 204, '화면엔 항상 204');
+  const added = (await server.db.prepare('SELECT COUNT(*) AS n FROM events').get()).n - before;
+  assert.ok(added > 0 && added <= 120, `저장 ${added}개`);
+  assert.ok(added < 130);
+});
