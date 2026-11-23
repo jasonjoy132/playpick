@@ -1529,10 +1529,10 @@ input[type='text'], input[type='search'], input[type='email'], input[type='passw
 }
 
 /* 구매처 버튼: 주황(구매에만 쓰는 색) */
-:root { --buy: #d53b00; --buy-hover: #aa2f00; }
+:root { --buy: #d53b00; --buy-hover: #aa2f00; --buy-active: #8a2600; }
 .btn-buy { background: var(--buy); color: #fff; }
 .btn-buy:hover { background: var(--buy-hover); }
-.btn-buy:active { background: #8a2600; }
+.btn-buy:active { background: var(--buy-active); }
 .community-more { margin-top: 24px; }
 
 /* 이달의 기여자(회원 띠 안): 같은 크기 상자 대신 인기 게임처럼 번호 목록 */
@@ -1671,12 +1671,16 @@ input[type='text'], input[type='search'], input[type='email'], input[type='passw
 .store-list { gap: 0; margin-bottom: 16px; }
 .store-list li:first-child { margin-bottom: 10px; }
 .store-list .btn-buy { gap: 8px; }
-.store-alt { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 2px; border-top: 1px solid var(--line); color: var(--text); font-weight: 600; text-decoration: none; transition: color 160ms ease; }
+.store-alt { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 12px 2px; border-top: 1px solid var(--line); color: var(--text); font-weight: 600; text-decoration: none; transition: color 160ms ease; }
 .store-list li:last-child .store-alt { border-bottom: 1px solid var(--line); }
 .store-alt:hover { color: var(--primary); }
 .store-alt:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.store-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.store-src { font-size: 0.78rem; font-weight: 400; color: var(--muted); }
+.store-src-main { margin: 8px 0 0; text-align: center; }
+.store-igdb { display: inline-flex; align-items: center; gap: 4px; }
 .store-arrow { flex-shrink: 0; transition: transform 160ms var(--ease-out, ease-out); }
-@media (hover: hover) and (pointer: fine) { .store-alt:hover .store-arrow, .btn-buy:hover .store-arrow { transform: translate(2px, -2px); } }
+@media (hover: hover) and (pointer: fine) { .store-alt:hover .store-arrow, .btn-buy:hover .store-arrow, .store-igdb:hover .store-arrow { transform: translate(2px, -2px); } }
 @media (max-width: 900px) {
   .detail-grid { gap: 8px; }
   .detail-scene { aspect-ratio: 16 / 9; border-radius: var(--radius); }

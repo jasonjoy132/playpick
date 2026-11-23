@@ -14,7 +14,8 @@ import { Reviews } from '../components/Reviews.jsx';
 import { NameBadge } from '../components/Badge.jsx';
 import { useAuth } from '../lib/auth.jsx';
 import { toCoverDataUrl } from '../lib/image.js';
-import { Arrow } from '../components/Arrow.jsx';
+import { Arrow, ExternalArrow } from '../components/Arrow.jsx';
+import { sortStores, storeLabel } from '../lib/stores.js';
 import { ChipGroup } from '../components/FinderModal.jsx';
 
 export function GamePage({ id, options }) {
@@ -472,25 +473,28 @@ function GameDetail({ data, options, reload }) {
               </p>
             ) : (
               <ul className="store-list">
-                {/* 주황은 첫 구매처 하나만, 나머지는 테두리 목록 */}
-                {game.stores.map((s, i) => (
+                {/* 주요 스토어 순서(lib/stores.js). 주황은 첫 구매처 하나만, 나머지는 줄 목록 */}
+                {sortStores(game.stores).map((s, i) => (
                   <li key={s.url}>
                     <a className={i === 0 ? 'btn btn-buy btn-block' : 'store-alt'} href={s.url} target="_blank" rel="noopener noreferrer" data-testid="store-link">
-                      <span>{s.appStore ? 'App Store에서 다운로드' : `${s.name}에서 보기`}</span>
-                      <svg className="store-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M7 17L17 7M9 7h8v8" />
-                      </svg>
+                      <span className="store-name">
+                        {storeLabel(s)}
+                        {i > 0 && s.userReported && <small className="store-src">사용자 제보 · 관리자 확인</small>}
+                      </span>
+                      <ExternalArrow className="store-arrow" />
                     </a>
+                    {i === 0 && s.userReported && <p className="store-src store-src-main">사용자 제보 · 관리자 확인</p>}
                     {s.isDemo && <p className="store-note">데모 구매처 안내 페이지로 이동합니다. 실제 판매처가 아닙니다.</p>}
                   </li>
                 ))}
               </ul>
             )}
-            <p className="store-foot muted">외부 구매처는 새 창으로 열립니다. 가격·판매 여부는 구매처에서 확인해 주세요.</p>
+            <p className="store-foot muted">새 창으로 열려요. 가격·판매 여부는 구매처에서 확인해 주세요.</p>
             {game.igdbUrl && (
               <p className="store-foot">
-                <a href={game.igdbUrl} target="_blank" rel="noopener noreferrer">
-                  IGDB에서 게임 정보 보기 ↗
+                <a className="store-igdb" href={game.igdbUrl} target="_blank" rel="noopener noreferrer">
+                  IGDB에서 게임 정보 보기
+                  <ExternalArrow className="store-arrow" size={14} />
                 </a>
               </p>
             )}
