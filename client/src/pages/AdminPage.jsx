@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth.jsx';
 import { Link } from '../lib/router.jsx';
 import { ErrorState, Loading } from '../components/Status.jsx';
 import { EditedList, FixEditForm, SubmissionEditForm } from '../components/AdminEdit.jsx';
+import { MetricsPanel } from '../components/MetricsPanel.jsx';
 
 const TABS = [
   ['pending', '검토 중'],
@@ -22,6 +23,7 @@ const KINDS = [
   ['fix', '정보 수정 제보'],
   ['reviews', '리뷰 신고'],
   ['grac', '게관위 새 게임'],
+  ['metrics', '성과'],
 ];
 const REVIEW_TABS = [
   ['pending', '검토 중'],
@@ -43,6 +45,7 @@ const loaders = {
   fix: (tab) => api.adminReports('fix', tab),
   reviews: (tab) => api.adminReviewReports(tab),
   grac: () => Promise.resolve(null), // GracNewPanel 이 직접 불러옴
+  metrics: () => Promise.resolve(null), // MetricsPanel 이 직접 불러옴
 };
 
 export function AdminPage({ options }) {
@@ -60,6 +63,18 @@ export function AdminPage({ options }) {
         <Link to="/" className="btn btn-primary">
           홈으로
         </Link>
+      </div>
+    );
+  }
+  if (kind === 'metrics') {
+    return (
+      <div className="admin-page">
+        <section className="page-head">
+          <h1>성과 분석</h1>
+          <p className="muted">원페이저 ‘성과 확인 방법’의 지표예요. 이름·IP 없이 브라우저마다 만든 무작위 키로만 세고, 관리자 본인 기록과 검색 로봇은 빼요. 기록은 90일 동안 남아요.</p>
+        </section>
+        <KindChips kind={kind} onKind={(k) => (setKind(k), setTab('pending'))} />
+        <MetricsPanel />
       </div>
     );
   }

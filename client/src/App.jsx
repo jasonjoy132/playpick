@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { api } from './lib/api.js';
+import { trackVisit } from './lib/track.js';
 import { useAsync } from './lib/useAsync.js';
 import { matchPath, useLocation, Link } from './lib/router.jsx';
 import { FinderProvider } from './lib/finder.jsx';
@@ -24,6 +26,7 @@ export function App() {
   const { pathname } = useLocation();
   const opts = useAsync(() => api.options(), []);
   const meta = opts.data?.meta;
+  useEffect(() => trackVisit(), []); // 익명 방문 기록(하루 한 번, 성과 분석)
 
   let content;
   if (opts.status === 'loading') content = <Loading />;

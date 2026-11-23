@@ -10,6 +10,8 @@ import { criteriaLabels } from '../lib/format.js';
 import { GameTile } from '../components/GameTile.jsx';
 import { AutoMore } from '../components/AutoMore.jsx';
 import { EmptyState, ErrorState, SkeletonGrid, Warnings } from '../components/Status.jsx';
+import { RecFeedback } from '../components/RecFeedback.jsx';
+import { track } from '../lib/track.js';
 
 export function ResultsPage({ options }) {
   const { search } = useLocation();
@@ -65,6 +67,8 @@ function Results({ data, options, qs, criteria }) {
   useEffect(() => {
     if (recall(`${m}:data`) === data) return; // 뒤로 가기로 돌아온 같은 데이터면 저장해 둔 상태 그대로
     remember(`${m}:data`, data);
+    // 익명 이용 기록(성과 분석): 새로 받은 추천 목록 한 번, '모든 조건 일치' 0개였는지
+    track('results', { q: qs, zero: data.fullMatches.length === 0 && !data.hasMoreFull });
     setFull(data.fullMatches);
     setPartial(data.partialMatches);
     setCursor({ ...(data.next ?? {}), igdbDone: !!data.igdbDone });
@@ -107,6 +111,7 @@ function Results({ data, options, qs, criteria }) {
       <>
         <Warnings warnings={warnings} />
         <EmptyState criteria={criteria} />
+        <RecFeedback qs={qs} />
       </>
     );
   const remote = (section) =>
@@ -136,6 +141,8 @@ function Results({ data, options, qs, criteria }) {
           </>
         )}
       </p>
+      {/* 목록은 스크롤하면 계속 불러와서 맨 아래엔 닿기 어려움 → 개수 안내 바로 아래 한 줄 */}
+      <RecFeedback qs={qs} />
       {!noFull && (
         <ResultSection
           id="full" title="모든 조건 일치" desc="선택한 조건을 모두 만족하는 게임" items={full}

@@ -2046,3 +2046,44 @@ h3 { letter-spacing: -0.01em; }
 
 /* 긴 제목이 한 글자만 다음 줄로 넘어가지 않게 */
 h1, h2, h3, .tile-title { text-wrap: balance; }
+
+/* 추천 만족도 한 줄 (ResultsPage → RecFeedback) */
+.rec-feedback { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 6px 0 24px; color: var(--muted); font-size: 0.92rem; }
+.rec-feedback p { margin: 0; }
+.rec-feedback-btns { display: flex; gap: 8px; }
+.rec-feedback .btn-sm { min-height: 40px; padding: 0 14px; }
+
+/* 관리자 '성과' 탭 (MetricsPanel) */
+.metrics { display: grid; gap: 20px; }
+.metrics-range { margin: 0; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.metrics-body { display: grid; gap: 20px; transition: opacity 160ms ease-out; }
+.metrics-body.is-busy { opacity: 0.55; }
+.delta b { font-weight: 700; }
+.delta .is-good { color: var(--ok); }
+.delta .is-bad { color: var(--bad); }
+.delta .is-flat { color: var(--muted); }
+.funnel-flag { display: block; margin-top: 2px; font-size: 0.75rem; font-weight: 700; color: var(--bad); }
+.funnel li.is-worst .funnel-bar span { background: var(--bad); }
+.metrics-block { border-top: 1px solid var(--line); padding-top: 18px; min-width: 0; }
+.metrics-block h2 { font-size: 1.1rem; font-weight: 600; margin: 0 0 12px; }
+.metrics-block > .muted.small { margin: -6px 0 12px; }
+.kpi-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px 28px; margin: 0; }
+.kpi { margin: 0; min-width: 0; }
+.kpi dt { font-weight: 600; }
+.kpi dd { margin: 0; }
+.kpi-value { font-size: 2rem; font-weight: 300; line-height: 1.2; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
+.kpi-diff { font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; margin: 0; }
+.kpi-def { font-size: 0.8rem; color: var(--muted); margin: 6px 0 0 !important; max-width: 36ch; }
+.funnel { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.funnel li { display: grid; grid-template-columns: 7.5em minmax(0, 1fr) 11em; align-items: center; gap: 12px; }
+.funnel-label { font-weight: 600; }
+.funnel-bar { display: block; height: 12px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.funnel-bar span { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+.funnel-n { font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.metrics-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px 28px; }
+.rank-list { list-style: none; padding: 0; margin: 0; }
+.rank-list li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) {
+  .funnel li { grid-template-columns: 1fr auto; row-gap: 6px; }
+  .funnel-bar { grid-column: 1 / -1; grid-row: 2; }
+}

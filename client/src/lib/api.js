@@ -71,6 +71,7 @@ export const api = {
   identities: () => get('/api/me/identities'),
   // 게관위 새 게임(관리자)
   adminGracNew: () => get('/api/admin/grac-new'),
+  adminMetrics: (days) => get(`/api/admin/metrics?days=${days}`),
   adminGracNewRun: () => request('POST', '/api/admin/grac-new/run', {}),
   unlinkIdentity: (provider) => request('DELETE', `/api/me/identities/${provider}`),
 

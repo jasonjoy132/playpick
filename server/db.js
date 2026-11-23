@@ -168,6 +168,18 @@ CREATE TABLE IF NOT EXISTS game_views (
   views INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (game_id, day)
 );
+-- 익명 이용 통계(성과 분석): 브라우저마다 무작위 방문자 키만, IP·회원 정보 없음. 90일 지나면 지움 (services/metrics.js)
+CREATE TABLE IF NOT EXISTS events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vid TEXT NOT NULL,
+  day TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  game_id TEXT,
+  store TEXT,
+  meta TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_events_day ON events(day, kind);
 -- 기여자 이정표 알림(찜 5명·조회 100회·첫 리뷰 등)을 보낸 기록: 같은 알림은 한 번만
 CREATE TABLE IF NOT EXISTS contrib_milestones (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

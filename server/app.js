@@ -21,6 +21,7 @@ import { createBadges } from './community/badges.js';
 import { createImageSubmissions } from './community/imageSubmissions.js';
 import { createReports } from './community/reports.js';
 import { createContributors } from './community/contributors.js';
+import { cleanEvent, createMetrics, isBot } from './services/metrics.js';
 import { createNotifications } from './community/notifications.js';
 import { createRawgPlaytime } from './services/rawgPlaytime.js';
 import { createAiPlaytime, canAskPlaytime } from './services/aiPlaytime.js';
@@ -129,6 +130,7 @@ export function createApp(config, deps = {}) {
     return { ...out, reviews: out.reviews.map((r) => (mine.has(r.id) ? { ...r, reported: true } : r)) };
   };
   const admins = new Set((config.adminEmails ?? []).map((e) => String(e).toLowerCase()));
+  const metrics = createMetrics(db, { now: deps.now });
   const contributors = createContributors(db, { adminEmails: admins, badgeOf: async (id) => await badges.displayFor(id), notify: async (uid, n) => await notes.add(uid, n) });
   // 관리자: ADMIN_EMAILS 의 이메일 + 그 이메일을 인증한 계정만 (남이 관리자 이메일로 먼저 가입해도 관리자가 되지 않게)
   const adminEmail = (u) => admins.has(String(u.email).toLowerCase());
@@ -180,6 +182,7 @@ export function createApp(config, deps = {}) {
     signup: createDbRateLimiter(db, { name: 'signup', limit: 10, windowMs: 60 * 60e3 }),
     oauth: createDbRateLimiter(db, { name: 'oauth', limit: 30, windowMs: 10 * 60e3 }),
     write: createRateLimiter({ limit: 60, windowMs: 60e3 }),
+    events: createRateLimiter({ limit: 60, windowMs: 60e3 }), // 익명 이용 기록(방문자·IP당 분당)
     aiPlaytime: createRateLimiter({ limit: 30, windowMs: 60 * 60e3 }), // 회원 한 명이 AI 플레이 시간을 새로 물을 수 있는 수(시간당)
     aiPlayers: createRateLimiter({ limit: 30, windowMs: 60 * 60e3 }), // 회원 한 명이 AI 추천 인원을 새로 물을 수 있는 수(시간당)
   };
@@ -398,6 +401,14 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       return user;
     };
 
+    // ── 익명 이용 기록(성과 분석) — 봇·관리자 본인 기록은 버림, 화면엔 영향 없게 저장 여부와 상관없이 204 ──
+    if (p === '/api/events' && method === 'POST') {
+      const ev = cleanEvent(await readJson(req, 2048));
+      if (!ev) throw apiError('BAD_REQUEST', '올바르지 않은 기록입니다.', 400);
+      if (!isBot(req.headers['user-agent']) && !user?.isAdmin && limits.events.hit(`${ev.vid}|${ip}`)) await metrics.record(ev);
+      res.writeHead(204, { 'Cache-Control': 'no-store' });
+      return res.end();
+    }
     // ── 계정 ──
     if (p === '/api/auth/me' && method === 'GET') return sendJson(res, 200, { user: await meOut(user) });
     // ── 뱃지·칭호 ──
@@ -718,6 +729,8 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     if (p.startsWith('/api/admin/')) {
       const u = requireUser();
       if (!u.isAdmin) throw apiError('FORBIDDEN', '관리자만 볼 수 있어요.', 403);
+      // 성과(원페이저 지표): 최근 7·30일과 그 앞 기간
+      if (p === '/api/admin/metrics' && method === 'GET') return sendJson(res, 200, await metrics.summary(Number(url.searchParams.get('days')) || 7));
       // 게관위 새 게임: 최근 목록·판단 / 지금 받기
       if (p === '/api/admin/grac-new' && method === 'GET') {
         if (!gracNew) return sendJson(res, 200, { available: false, items: [], lastRun: null });

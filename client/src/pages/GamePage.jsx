@@ -16,6 +16,7 @@ import { useAuth } from '../lib/auth.jsx';
 import { toCoverDataUrl } from '../lib/image.js';
 import { Arrow, ExternalArrow } from '../components/Arrow.jsx';
 import { sortStores, storeLabel } from '../lib/stores.js';
+import { detailFrom, track } from '../lib/track.js';
 import { ChipGroup } from '../components/FinderModal.jsx';
 
 export function GamePage({ id, options }) {
@@ -256,10 +257,20 @@ function Trailer({ game }) {
   );
 }
 
+const tracked = new Set();
+
 function GameDetail({ data, options, reload }) {
   const { game, evaluation } = data;
   const [rating, setRating] = useState(game.userRating);
   const [photoOpen, setPhotoOpen] = useState(false);
+  // 익명 이용 기록(성과 분석): 상세를 연 기록 항목마다 한 번, 들어온 곳과 함께
+  useEffect(() => {
+    const key = window.history.state?.ppKey ?? 'none';
+    if (tracked.has(`${key}|${game.id}`)) return;
+    tracked.add(`${key}|${game.id}`);
+    track('detail', { gameId: game.id, from: detailFrom(window.history.state?.from) });
+  }, [game.id]);
+  const storeClick = (s) => () => track('store_click', { gameId: game.id, store: s.appStore ? 'App Store' : s.name });
   const fromIgdb = game.source === 'IGDB';
   const hasGrac = Boolean(game.ratingNo);
   // 회원 제보(관리자 확인)로 고친 칸은 출처 표시
@@ -313,7 +324,7 @@ function GameDetail({ data, options, reload }) {
               <Cover game={game.iconUrl ? { ...game, imageUrl: game.iconUrl } : game} className={game.iconUrl ? 'cover-icon' : ''} />
             </div>
             {game.appStoreUrl && (
-              <a className="appstore-link" href={game.appStoreUrl} target="_blank" rel="noopener noreferrer" data-testid="appstore-link">
+              <a className="appstore-link" href={game.appStoreUrl} target="_blank" rel="noopener noreferrer" onClick={storeClick({ appStore: true })} data-testid="appstore-link">
                 App Store에서 다운로드 ↗
               </a>
             )}
@@ -476,7 +487,7 @@ function GameDetail({ data, options, reload }) {
                 {/* 주요 스토어 순서(lib/stores.js). 주황은 첫 구매처 하나만, 나머지는 줄 목록 */}
                 {sortStores(game.stores).map((s, i) => (
                   <li key={s.url}>
-                    <a className={i === 0 ? 'btn btn-buy btn-block' : 'store-alt'} href={s.url} target="_blank" rel="noopener noreferrer" data-testid="store-link">
+                    <a className={i === 0 ? 'btn btn-buy btn-block' : 'store-alt'} href={s.url} target="_blank" rel="noopener noreferrer" onClick={storeClick(s)} data-testid="store-link">
                       <span className="store-name">
                         {storeLabel(s)}
                         {i > 0 && s.userReported && <small className="store-src">사용자 제보 · 관리자 확인</small>}
