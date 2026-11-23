@@ -30,6 +30,7 @@ import { createPartySize } from './services/partySize.js';
 import { createAppStoreProvider } from './providers/appStoreProvider.js';
 import { createGracNew, overlayEntries } from './services/gracNew.js';
 import { createSteamTrailers } from './services/steamTrailer.js';
+import { createPricing, createSteamPrice } from './services/pricing.js';
 import { rankGames } from './services/ranking.js';
 import { buildProfile, rankForYou, ratingSignal, topGenres, MIN_SIGNALS } from './services/forYou.js';
 import { cached } from './community/cached.js';
@@ -101,6 +102,8 @@ export function createApp(config, deps = {}) {
   const appArt = deps.appArt ?? createAppArt(config.appStore?.artFile ?? null);
   const appStore = deps.appStore ?? createAppStoreProvider(config.appStore ?? { enabled: config.dataSource === 'live' }, deps);
   // 홈 배경용 Steam 공식 트레일러(영상 파일) — live 모드만
+  const pricing = deps.pricing ?? createPricing(config.pricing?.dataFile ?? null);
+  const steamPrice = deps.steamPrice ?? (config.dataSource === 'live' ? createSteamPrice({ fetchImpl: deps.steamFetch ?? deps.fetchImpl ?? globalThis.fetch }) : null);
   const steamTrailers = deps.steamTrailers ?? (config.dataSource === 'live' ? createSteamTrailers({ fetchImpl: deps.steamFetch ?? deps.fetchImpl ?? globalThis.fetch }) : null);
   // 회원 DB: 테스트는 메모리, 배포는 Turso(TURSO_DATABASE_URL), 로컬은 파일(.data/playpick.db)
   const dbTarget = config.dbFile === ':memory:' || !config.dbFile ? config.dbFile ?? ':memory:' : config.turso?.url || config.dbFile;
@@ -312,7 +315,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
   async function decorate(games, user) {
     const stats = await community.statsAll();
     const wished = user ? await community.wishedIds(user.id) : new Set();
-    return (await reports.applyAll(await imageSubs.applyAll(appArt.applyAll(partySize.applyCached(games))))).map(({ submittedById, ...g }) => ({ ...g, userRating: stats.get(g.id) ?? { count: 0, avg: null }, wished: wished.has(g.id) }));
+    return pricing.applyAll(await reports.applyAll(await imageSubs.applyAll(appArt.applyAll(partySize.applyCached(games))))).map(({ submittedById, ...g }) => ({ ...g, userRating: stats.get(g.id) ?? { count: 0, avg: null }, wished: wished.has(g.id) }));
   }
 
   /**
@@ -1069,6 +1072,8 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
           /* App Store 조회 실패: 기존 정보로 표시 */
         }
       }
+      if (!game.price && game.appStoreUrl) game = pricing.applyAll([game])[0]; // 방금 App Store를 찾은 게관위 게임
+      if (steamPrice) game = await steamPrice.attach(game); // Steam 주소가 있으면 Steam 근거 유료·무료
       game.canSubmitImage = imageSubs.canTake(game); // 사진이 끝내 없으면 '표지 사진 제보' 버튼
       if (user) await community.recordView(user.id, game); // 최근 본 게임
       await contributors.recordView(game.id, user ? `u${user.id}` : `ip${ip}`, user?.id ?? null, Boolean(user?.isAdmin)); // 기여한 게임 조회 수

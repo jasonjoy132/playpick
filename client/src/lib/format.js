@@ -13,6 +13,16 @@ export function shortPlayers(game) {
   return game.players ? formatPlayers(game.players) : null;
 }
 
+/** 카드용 유료·무료 짧은 글자 ('무료'·'유료', AI면 '(AI)'), 모르면 null */
+export function shortPrice(game) {
+  const p = game?.price;
+  if (!p || typeof p.free !== 'boolean') return null;
+  return `${p.free ? '무료' : '유료'}${p.source === 'ai' ? ' (AI)' : ''}`;
+}
+
+/** 유료·무료 출처 글자 (AI는 'AI 추정' 표시를 따로 붙임) */
+export const PRICE_SOURCE = { steam: 'Steam 기준', appstore: 'App Store 기준' };
+
 export const PARTY_SOURCE = {
   'igdb-coop': 'IGDB 협동 플레이 인원',
   igdb: 'IGDB',

@@ -84,6 +84,10 @@ export function getConfig() {
       // 미리 받아 둔 아이콘 (npm run prefill:images)
       artFile: path.join(root, 'server', 'data', 'app-store.json'),
     },
+    // 유료·무료 구분 (npm run prefill:price 로 만듦). 서버는 파일만 읽고, 상세에서 Steam 주소가 있으면 Steam에 바로 물음
+    pricing: {
+      dataFile: path.join(root, 'server', 'data', 'price.json'),
+    },
     rawg: {
       // 키는 npm run prefill:playtime 을 돌릴 때만 필요. 서버는 아래 파일만 읽음
       apiKey: env('RAWG_API_KEY'),

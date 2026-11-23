@@ -50,6 +50,7 @@
 | `npm run prefill:ended -- --export --recheck-alive [--limit N]` | **서버가 필요한 온라인 게임**(MMO·배틀로얄·멀티 전용, 모드·플랫폼 정보 없는 PC·모바일) 중 외부 AI로 아직 확인 안 한 게임을 다시 내보냄(Gemini가 '서비스 중'이라 한 것 포함 — 최근 종료는 Gemini가 모름). 웹 검색 AI → `import:status` |
 | `npm run prefill:images` | 게관위 모바일 게임 App Store 아이콘·스크린샷 저장 |
 | `npm run prefill:playtime -- [--limit N] [--pages N] [--dry] [--retry]` | RAWG 평균 플레이 시간 저장(인기·랭킹·신작·장르별 IGDB 게임, 기본 500개). RAWG 월 2만 건·게임당 최대 2건 |
+| `npm run prefill:price -- [--ai] [--only steam|appstore|ai] [--pages N] [--limit N] [--recheck] [--dry]` | 유료·무료 저장 → `server/data/price.json`. Steam `is_free`(IGDB 인기 후보, 1.6초 간격) · App Store 가격 0원(게관위 모바일, `app-store.json`에서 찾은 앱) · `--ai`면 스토어 근거 없는 IGDB 게임만 Gemini('모름' 저장) |
 | `npm run recheck:grac-igdb -- [--limit N] [--dry]` | **화면에 보이는** 게관위 게임(종료·모름 제외, 약 9천 개, 동시 6묶음)이 IGDB에 있는지 새 방식(괄호 안 이름·플랫폼 표기 제거·전각 정리·slug, 꺼낸 이름은 플랫폼도 일치)으로 다시 확인 → `.cache/grac-igdb-check.json`(v2). 이어서 실행 가능 |
 | `npm run refresh:grac -- [--incremental] [--skip-grac]` | **배포용 데이터 갱신**: 게관위 전체 목록 → `server/data/grac-index.json`, `.cache`의 IGDB 존재 확인·번역 캐시 → `server/data/`로 합쳐 복사. 돌린 뒤 커밋 |
 | `npm run import:status -- <결과.csv>` | 외부 AI 결과(게관위 '모름'·IGDB 종료) 반영. `--dry`, `--force` |
@@ -72,6 +73,7 @@
   - **예외: 상세 화면 AI 추천 인원**(`server/services/aiPlayers.js`) — 플레이 시간과 같은 방식. 추천 인원이 아무 데도 없는 게임(IGDB 협동 인원 없음 + `party-size.json`에 인원 숫자 없음 — 파일에서 '모름'이었던 게임도 한 번 더 물음)을 **로그인한 회원**이 열면 `POST /api/games/:id/players`로 그 게임 하나만 물어 DB `ai_players`(키 `partySize.cacheKey`)에 저장('모름'도). 저장된 값은 서버가 60초마다 읽어 `partySize.setAsked`로 **목록·추천에도** 'AI 추정'으로 붙임. 하루 상한 `AI_PLAYERS_DAILY_LIMIT`(기본 300), 회원당 시간당 30번, `AI_PLAYERS_ASK=off`로 끔(`AI_PLAYERS_LIVE`는 목록에서 묻는 예전 기능, 계속 끔)
   - **예외: 게관위 새 게임**(`server/services/gracNew.js`) — Vercel Cron(`vercel.json`, 매일 한국 시간 4시, `GET /api/cron/grac` + `Authorization: Bearer CRON_SECRET`) 또는 관리자 '게관위 새 게임' 탭 '지금 받기'로: 시드(`grac-index.json`)에 없는 새 등급분류 게임을 DB `grac_new`에 받고 → **스토어 근거**로 상태 판단(PC: Steam 검색·appdetails의 `coming_soon`, 모바일: App Store 이름+개발사 일치) → 찾은 게임만 스토어 설명·Steam 기능을 주고 Gemini가 추천 인원·플레이 시간(웹 검색 없음, Steam 기능이 싱글뿐이면 1~1, 멀티 기능인데 1명이면 모름 `fixByFeatures`) → DB `ai_grac`. 못 찾으면 7일마다 최대 4번 다시, 등급분류 180일 안이면 '새 등급분류'(`aiRecent`)로 보임. 아케이드·교육용·체험판·취소·`party-size.json`에 이미 있는 게임은 안 봄. 한 번에 최대 40개. 서버가 60초마다 DB를 읽어 색인(`gracIndex.setExtra`)·`partySize.setOverlay`에 덧붙임(파일 판단이 우선). `AI_GRAC_LIVE=off`면 스토어 근거만. 로컬 개발 서버는 켤 때 하루 지났으면 한 번 실행. (무료 Gemini 키는 Google 검색 연결이 막혀 스토어 근거 방식)
   - 플레이 시간 우선순위: 회원 정보 수정 제보 → **IGDB 이용자 기록(Time To Beat, 기록 3명 이상, 상세에서 실시간 조회·1000시간 넘는 값 버림)** → RAWG 파일 → AI 파일(`party-size.json`) → AI DB(`ai_playtime`) → 정보 없음 (`app.js`의 `playtimeOf`·`IGDB_TTB_MIN`)
+- **유료·무료**(`server/services/pricing.js`, 금액은 안 보여 줌): 무료 = 시작이 무료(인앱 결제 있어도), 유료 = 사거나 구독. 순서 스토어 근거(Steam·App Store) → 미리 저장한 AI(`price.json`, 'AI 추정') → 정보 없음. 상세는 Steam 주소가 있고 파일에 스토어 근거가 없으면 Steam에 바로 물음(`createSteamPrice`, 하루 저장·2.5초, live만). 카드 아래 줄 '무료'/'유료'('(AI)'), 상세 핵심 정보·상세 정보 표. 조건 고르기 거르기는 아직 없음
 - 서버가 켜져 있으면 데이터 파일 변경을 30초 안에 다시 읽음
 
 ### 목록에서 숨기는 규칙 (`server/app.js`의 `listable`)
@@ -119,7 +121,7 @@
   - 새 칭호 알림(토스트), 대표 칭호 고르기(`BadgePicker.jsx`: 마이페이지·홈 프로필 패널)
 - **기여자 순위·내 기여** `contributors.js`(저장 없이 계산): 영향력 점수 = 승인 점수(게임 3·사진 2·정보 1) + 승인 뒤 다른 회원 반응(찜 1·리뷰 2·조회 10회당 1) × 내 몫(게임 100%·사진 50%·정보 25%, 종료 0), 게임당 한 달 20점 상한, 관리자 제외. 화면: 상단 메뉴 '명예의 전당'(`/hall-of-fame`, 이번 달/전체), 홈 'N월의 기여자' 줄, 내 제보 '내 기여가 만든 변화'(`/api/me/impact`)
   - 조회 수 `game_views`(한국 날짜별, 기여자가 있는 게임만, 같은 사람 하루 1번, 기여자 본인·관리자 제외). 이정표 알림(찜 5·10·50·100, 조회 50~1000, 첫 리뷰)은 `contrib_milestones`로 한 번만
-- **성과 분석**(원페이저 지표, 관리자 `/admin` '성과' 탭 `MetricsPanel.jsx`, `GET /api/admin/metrics?days=7|30`): 화면이 `lib/track.js`로 익명 기록(`POST /api/events`, 무작위 키 `pp_vid`만, IP·회원 정보 없음) — 하루 한 번 `visit`, 새 추천 목록 `results`(0개 여부), 상세 `detail`(들어온 곳 = `history.state.from`), 구매처 링크 `store_click`, 추천 목록 '이 추천이 도움이 됐나요?' `feedback`(`RecFeedback.jsx`, 조건마다 한 번). 봇·관리자 본인 기록 버림, 키를 바꿔 쏟아붓기 막으려 IP당 분당 120(메모리)·시간당 1500(DB `rate_hits`). DB `events`, 90일 뒤 삭제. 지표 정의는 `services/metrics.js` 맨 위·README
+- **성과 분석**(원페이저 지표, 관리자 `/admin/metrics` `MetricsPanel.jsx`, `GET /api/admin/metrics?days=7|30`): 화면이 `lib/track.js`로 익명 기록(`POST /api/events`, 무작위 키 `pp_vid`만, IP·회원 정보 없음) — 하루 한 번 `visit`, 새 추천 목록 `results`(0개 여부), 상세 `detail`(들어온 곳 = `history.state.from`), 구매처 링크 `store_click`, 추천 목록 '이 추천이 도움이 됐나요?' `feedback`(`RecFeedback.jsx`, 조건마다 한 번). 봇·관리자 본인 기록 버림, 키를 바꿔 쏟아붓기 막으려 IP당 분당 120(메모리)·시간당 1500(DB `rate_hits`). DB `events`, 90일 뒤 삭제. 지표 정의는 `services/metrics.js` 맨 위·README
 - **알림** `notifications.js`(DB `notifications`, 회원당 최근 100개): 제보 승인·거절(사유)·승인 취소, 새 칭호, 리뷰 숨김·다시 보임, 찜한 게임 서비스 종료 승인, 가입 환영. 관리자 처리 라우트(`app.js`)에서 `beforeReview`→처리→`afterReview`로 넣음(본인 제보는 알림 없음). 화면 헤더 종 `NotificationBell.jsx`(화면 이동·60초마다 숫자만 받음), 관리자는 '검토 대기 N건' 줄
 - **내 제보**(`MyPage.jsx` `SubmissionsSection`): 게임·표지 사진·종료·정보 수정 제보를 한 목록으로(상태 요약 카드·종류 칩으로 거르기)
 

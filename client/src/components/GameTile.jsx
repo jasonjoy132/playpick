@@ -1,5 +1,5 @@
 import { Link } from '../lib/router.jsx';
-import { shortPlayers } from '../lib/format.js';
+import { shortPlayers, shortPrice } from '../lib/format.js';
 import { Cover } from './Cover.jsx';
 import { MatchBadges, MatchSummary } from './MatchBadges.jsx';
 import { WishButton } from './WishButton.jsx';
@@ -25,6 +25,7 @@ export function GameTile({ game, options, search, evaluation, size = 'md', rank,
   const m = game.userRating?.count ? game.userRating : null;
   const foot = [
     platforms?.length ? `${platforms[0]}${platforms.length > 1 ? ` +${platforms.length - 1}` : ''}` : null,
+    shortPrice(game),
     game.rating && !game.isDemo ? game.rating : null,
     game.releaseDate ? game.releaseDate.slice(0, 4) : null,
   ].filter(Boolean);

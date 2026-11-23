@@ -4,7 +4,7 @@ import { useDocumentTitle } from '../lib/useDocumentTitle.js';
 import { useAsync } from '../lib/useAsync.js';
 import { Link, goBackTo, navigate, useLocation } from '../lib/router.jsx';
 import { criteriaFromSearch, criteriaToSearch, hasAnyCriteria } from '../lib/criteria.js';
-import { formatList, formatPlayers, orNoInfo, statusKo, NO_INFO, PARTY_SOURCE } from '../lib/format.js';
+import { formatList, formatPlayers, orNoInfo, statusKo, NO_INFO, PARTY_SOURCE, PRICE_SOURCE } from '../lib/format.js';
 import { Cover } from '../components/Cover.jsx';
 import { MatchBadges, MatchSummary } from '../components/MatchBadges.jsx';
 import { ErrorState, Loading } from '../components/Status.jsx';
@@ -287,6 +287,7 @@ function GameDetail({ data, options, reload }) {
       '평균 플레이 시간',
       <Playtime key={game.id} game={game} />,
     ],
+    ['유료·무료', game.price ? <PriceCell price={game.price} detail /> : NO_INFO],
     ...(hasGrac || (!fromIgdb && game.source !== '사용자 제보')
       ? [
           ['등급분류일', orNoInfo(game.ratingDate)],
@@ -555,6 +556,7 @@ function KeyFacts({ game, options }) {
     ['추천 인원', players, 'players'],
     ['플레이 시간', playtime, 'playtime'],
     ['플랫폼', formatList(game.platforms, game.platformsRaw, options.platforms), 'platforms'],
+    ['유료·무료', game.price ? <PriceCell price={game.price} /> : NO_INFO, 'price'],
   ];
   return (
     <dl className="key-facts" data-testid="key-facts">
@@ -565,6 +567,24 @@ function KeyFacts({ game, options }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+/**
+ * 유료·무료 — 스토어 근거면 'Steam 기준' 등, AI면 'AI 추정'. detail: 상세 정보 표에서는 기준·뜻을 함께
+ * (금액은 할인으로 자주 바뀌어 보여 주지 않음)
+ */
+function PriceCell({ price, detail = false }) {
+  return (
+    <span data-testid="price">
+      {price.free ? '무료' : '유료'}
+      {price.source === 'ai' ? (
+        <> <span className="pill pill-ai" title="AI(Google Gemini)가 판단한 값이에요. 틀릴 수 있어요.">AI 추정</span></>
+      ) : (
+        detail && PRICE_SOURCE[price.source] && <span className="muted small"> ({PRICE_SOURCE[price.source]})</span>
+      )}
+      {detail && <span className="muted small"> · {price.free ? '시작은 무료, 게임 안 결제가 있을 수 있어요' : '사거나 구독해야 시작할 수 있어요'}</span>}
+    </span>
   );
 }
 
