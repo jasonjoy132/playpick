@@ -19,7 +19,8 @@ import { MyPage } from './pages/MyPage.jsx';
 import { PopularPage, NewPage, RankingRedirect, GenrePage, HallOfFamePage } from './pages/BrowsePages.jsx';
 import { SubmitPage } from './pages/SubmitPage.jsx';
 import { ForYouPage } from './pages/ForYouPage.jsx';
-import { AdminPage } from './pages/AdminPage.jsx';
+import { AdminPage, MetricsPage } from './pages/AdminPage.jsx';
+import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { PrivacyPage, TermsPage, SourcesPage } from './pages/InfoPages.jsx';
 
 export function App() {
@@ -36,7 +37,10 @@ export function App() {
   return (
     <AuthProvider>
       <FinderProvider>
-        <Layout meta={meta}>{content}</Layout>
+        <Layout meta={meta}>
+          {/* 화면 하나에서 오류가 나도 흰 화면 대신 안내(화면을 옮기면 다시 그림) */}
+          <ErrorBoundary key={pathname}>{content}</ErrorBoundary>
+        </Layout>
         <FinderModal options={opts.data} />
         <BadgeToast />
       </FinderProvider>
@@ -57,6 +61,7 @@ function route(pathname, options) {
   if (pathname === '/genres') return <GenrePage options={options} />;
   if (pathname === '/submit') return <SubmitPage options={options} />;
   if (pathname === '/admin') return <AdminPage options={options} />;
+  if (pathname === '/admin/metrics') return <MetricsPage />;
   if (pathname === '/privacy') return <PrivacyPage />;
   if (pathname === '/terms') return <TermsPage />;
   if (pathname === '/sources') return <SourcesPage />;

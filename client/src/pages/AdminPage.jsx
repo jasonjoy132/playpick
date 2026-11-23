@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
 import { useAuth } from '../lib/auth.jsx';
-import { Link } from '../lib/router.jsx';
+import { Link, useLocation } from '../lib/router.jsx';
 import { ErrorState, Loading } from '../components/Status.jsx';
 import { EditedList, FixEditForm, SubmissionEditForm } from '../components/AdminEdit.jsx';
 import { MetricsPanel } from '../components/MetricsPanel.jsx';
@@ -23,7 +23,6 @@ const KINDS = [
   ['fix', '정보 수정 제보'],
   ['reviews', '리뷰 신고'],
   ['grac', '게관위 새 게임'],
-  ['metrics', '성과'],
 ];
 const REVIEW_TABS = [
   ['pending', '검토 중'],
@@ -45,15 +44,28 @@ const loaders = {
   fix: (tab) => api.adminReports('fix', tab),
   reviews: (tab) => api.adminReviewReports(tab),
   grac: () => Promise.resolve(null), // GracNewPanel 이 직접 불러옴
-  metrics: () => Promise.resolve(null), // MetricsPanel 이 직접 불러옴
 };
 
-export function AdminPage({ options }) {
-  const { user, ready } = useAuth();
-  const [kind, setKind] = useState('games');
-  const [tab, setTab] = useState('pending');
-  const list = useAsync(() => (user?.isAdmin ? loaders[kind](tab) : Promise.resolve(null)), [tab, kind, user?.isAdmin]);
+/** 관리자 화면 위: 제보 관리 / 성과 분석 */
+function AdminNav() {
+  const { pathname } = useLocation();
+  const items = [
+    ['/admin', '제보 관리'],
+    ['/admin/metrics', '성과 분석'],
+  ];
+  return (
+    <nav className="admin-nav" aria-label="관리자 메뉴">
+      {items.map(([to, name]) => (
+        <Link key={to} to={to} className={pathname === to ? 'is-on' : ''} aria-current={pathname === to ? 'page' : undefined} data-testid={`admin-nav-${to === '/admin' ? 'reports' : 'metrics'}`}>
+          {name}
+        </Link>
+      ))}
+    </nav>
+  );
+}
 
+function AdminOnly({ children }) {
+  const { user, ready } = useAuth();
   if (!ready) return <Loading />;
   if (!user?.isAdmin) {
     return (
@@ -66,21 +78,45 @@ export function AdminPage({ options }) {
       </div>
     );
   }
-  if (kind === 'metrics') {
-    return (
+  return children;
+}
+
+/** 성과 분석 (/admin/metrics) */
+export function MetricsPage() {
+  return (
+    <AdminOnly>
       <div className="admin-page">
+        <AdminNav />
         <section className="page-head">
           <h1>성과 분석</h1>
           <p className="muted">원페이저 ‘성과 확인 방법’의 지표예요. 이름·IP 없이 브라우저마다 만든 무작위 키로만 세고, 관리자 본인 기록과 검색 로봇은 빼요. 기록은 90일 동안 남아요.</p>
         </section>
-        <KindChips kind={kind} onKind={(k) => (setKind(k), setTab('pending'))} />
         <MetricsPanel />
       </div>
-    );
-  }
+    </AdminOnly>
+  );
+}
+
+export function AdminPage({ options }) {
+  return (
+    <AdminOnly>
+      <ReportsAdmin options={options} />
+    </AdminOnly>
+  );
+}
+
+function ReportsAdmin({ options }) {
+  const [kind, setKind] = useState('games');
+  const [tab, setTab] = useState('pending');
+  // 받은 목록에 '어느 종류·상태 목록인지' 꼬리표 → 종류를 바꾼 직후 이전 목록을 새 카드 모양으로 그리다 오류 나서 흰 화면이 되지 않게
+  const want = `${kind}|${tab}`;
+  const res = useAsync(() => loaders[kind](tab).then((data) => ({ for: want, data })), [want]);
+  const list = res.status === 'success' && res.data.for !== want ? { ...res, status: 'loading' } : { ...res, data: res.data?.data ?? null };
+
   if (kind === 'grac') {
     return (
       <div className="admin-page">
+        <AdminNav />
         <section className="page-head">
           <h1>제보 관리</h1>
           <p className="muted">{HELP.grac}</p>
@@ -100,6 +136,7 @@ export function AdminPage({ options }) {
   };
   return (
     <div className="admin-page">
+      <AdminNav />
       <section className="page-head">
         <h1>제보 관리</h1>
         <p className="muted">

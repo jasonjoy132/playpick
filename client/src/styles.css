@@ -2087,3 +2087,11 @@ h1, h2, h3, .tile-title { text-wrap: balance; }
   .funnel li { grid-template-columns: 1fr auto; row-gap: 6px; }
   .funnel-bar { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* 관리자 화면 위 메뉴: 제보 관리 / 성과 분석 (AdminPage AdminNav) */
+.admin-nav { display: flex; gap: 24px; border-bottom: 1px solid var(--line); margin-bottom: 4px; overflow-x: auto; }
+.admin-nav a { position: relative; padding: 10px 0 12px; color: var(--muted); font-weight: 600; text-decoration: none; white-space: nowrap; transition: color 160ms ease; }
+.admin-nav a:hover { color: var(--text); }
+.admin-nav a.is-on { color: var(--text); }
+.admin-nav a.is-on::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--primary); }
+.admin-nav a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 2px; }

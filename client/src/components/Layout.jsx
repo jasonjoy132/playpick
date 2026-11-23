@@ -370,6 +370,11 @@ function UserMenu() {
               제보 관리 (관리자)
             </Link>
           )}
+          {user.isAdmin && (
+            <Link to="/admin/metrics" role="menuitem" data-testid="menu-metrics">
+              성과 분석 (관리자)
+            </Link>
+          )}
           <button type="button" role="menuitem" onClick={logout}>
             로그아웃
           </button>
