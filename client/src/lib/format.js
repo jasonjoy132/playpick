@@ -53,6 +53,7 @@ export function criteriaLabels(criteria, options) {
   const lab = (vals, opts) => vals.map((v) => opts.find((o) => o.value === v)?.label || v).join(', ');
   if (criteria.platforms.length) out.push({ key: 'platforms', label: '플랫폼', value: lab(criteria.platforms, options.platforms) });
   if (criteria.genres.length) out.push({ key: 'genres', label: '장르', value: lab(criteria.genres, options.genres) });
+  if (criteria.price) out.push({ key: 'price', label: '유료·무료', value: criteria.price === 'free' ? '무료' : '유료' });
   return out;
 }
 

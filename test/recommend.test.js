@@ -7,7 +7,7 @@ const game = (o) => ({ id: 'x', title: 'x', players: null, platforms: null, genr
 
 test('조건 파싱: 유효/무효 값', () => {
   assert.deepEqual(parseCriteria({ players: '2', platforms: 'pc,console', genres: 'rpg' }).criteria, {
-    players: 2, platforms: ['pc', 'console'], genres: ['rpg'],
+    players: 2, platforms: ['pc', 'console'], genres: ['rpg'], price: null,
   });
   assert.ok(parseCriteria({}).errors.length > 0, '조건이 없으면 오류');
   assert.ok(parseCriteria({ players: '0' }).errors.length > 0);
@@ -74,7 +74,7 @@ test('아케이드: 고를 수 없음(예전 링크의 arcade는 조용히 뺌),
   const { parseCriteria } = await import('../server/services/recommend.js');
   const { getOptions, isArcadeOnly } = await import('../server/services/taxonomy.js');
   assert.ok(!getOptions().platforms.some((p) => p.value === 'arcade'));
-  assert.deepEqual(parseCriteria({ platforms: 'arcade,pc' }), { criteria: { players: null, platforms: ['pc'], genres: [] }, errors: [] });
+  assert.deepEqual(parseCriteria({ platforms: 'arcade,pc' }), { criteria: { players: null, platforms: ['pc'], genres: [], price: null }, errors: [] });
   assert.ok(parseCriteria({ platforms: 'arcade' }).errors.length, '아케이드만 고른 예전 링크는 조건 없음 안내');
   assert.equal(isArcadeOnly({ platforms: ['arcade'] }), true);
   assert.equal(isArcadeOnly({ platforms: ['arcade', 'pc'] }), false, '다른 플랫폼도 있으면 보임');
@@ -92,4 +92,20 @@ test('목적과 안 맞는 게임 빼기: 교육용(게임위 장르)·체험판
   for (const t of ['Demon Slayer', 'Demolition Derby', '데몬 헌터']) assert.equal(isDemoVersion({ title: t }), false, t);
   assert.equal(isOffTopic({ title: '보통 게임', platforms: ['pc'], genresRaw: '액션' }), false);
   assert.equal(isOffTopic({ title: '인형뽑기', platforms: ['arcade'] }), true);
+});
+
+test('유료·무료 조건: 스토어·AI 값으로 판정, 모르면 정보 없음(비슷한 게임), 혼자서는 조건 아님', () => {
+  assert.equal(parseCriteria({ genres: 'rpg', price: 'free' }).criteria.price, 'free');
+  assert.ok(parseCriteria({ genres: 'rpg', price: 'cheap' }).errors.length > 0);
+  assert.ok(parseCriteria({ price: 'free' }).errors.length > 0, '유료·무료만으로는 찾지 않음');
+  const crit = { players: null, platforms: [], genres: ['rpg'], price: 'free' };
+  const free = game({ id: 'f', genres: ['rpg'], price: { free: true, source: 'steam' } });
+  const paid = game({ id: 'p', genres: ['rpg'], price: { free: false, source: 'steam' } });
+  const ai = game({ id: 'a', genres: ['rpg'], price: { free: true, source: 'ai' } });
+  const none = game({ id: 'n', genres: ['rpg'] });
+  const r = recommend([free, paid, ai, none], crit);
+  assert.deepEqual(r.fullMatches.map((x) => x.game.id).sort(), ['a', 'f']);
+  assert.deepEqual(r.partialMatches.map((x) => x.game.id), ['n', 'p'], '정보 없음이 불일치보다 앞');
+  assert.equal(evaluateGame(ai, crit).checks.at(-1).ai, true, "화면에 'AI 추정'");
+  assert.equal(evaluateGame(paid, { ...crit, price: 'paid' }).isFullMatch, true);
 });

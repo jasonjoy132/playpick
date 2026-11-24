@@ -14,6 +14,12 @@ export const PLAYER_OPTIONS = [
   { value: 5, label: '5명 이상' },
 ];
 
+/** 나만의 게임 찾기 '유료·무료' (금액은 보여 주지 않음) */
+export const PRICE_OPTIONS = [
+  { value: 'free', label: '무료' },
+  { value: 'paid', label: '유료' },
+];
+
 export const PLATFORMS = [
   { value: 'pc', label: 'PC', grac: ['PC/온라인 게임'] },
   { value: 'mobile', label: '모바일', grac: ['모바일 게임'] },
@@ -59,7 +65,7 @@ export function mapGracValue(raw, list) {
 
 export function getOptions() {
   const strip = (list) => list.filter((o) => !o.hidden).map(({ value, label }) => ({ value, label }));
-  return { players: PLAYER_OPTIONS, platforms: strip(PLATFORMS), genres: strip(GENRES) };
+  return { players: PLAYER_OPTIONS, platforms: strip(PLATFORMS), genres: strip(GENRES), prices: PRICE_OPTIONS };
 }
 
 /** 고를 수 있는 플랫폼 값 (아케이드 제외) */

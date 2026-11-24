@@ -4,6 +4,13 @@ import { PLATFORM_MAP, GENRE_MAP, PLATFORMS, GENRES, SELECTABLE_PLATFORMS } from
 
 const PLATFORM_VALUES = new Set(PLATFORMS.map((p) => p.value));
 const GENRE_VALUES = new Set(GENRES.map((g) => g.value));
+const PRICE_VALUES = new Set(['free', 'paid']);
+
+/** 유료·무료: 게임에 붙은 price(스토어·AI 추정)로 판정, 없으면 정보 없음 */
+function priceStatus(game, want) {
+  if (typeof game.price?.free !== 'boolean') return 'unknown';
+  return game.price.free === (want === 'free') ? 'match' : 'mismatch';
+}
 
 /** 쿼리 문자열 → 검증된 조건 객체. 잘못된 값은 오류로 반환 */
 export function parseCriteria(query) {
@@ -25,10 +32,16 @@ export function parseCriteria(query) {
   const genres = [...new Set(list(query.genres))];
   for (const p of platforms) if (!PLATFORM_VALUES.has(p)) errors.push(`알 수 없는 플랫폼: ${p}`);
   for (const g of genres) if (!GENRE_VALUES.has(g)) errors.push(`알 수 없는 장르: ${g}`);
+  // 유료·무료(free | paid): 혼자서는 조건이 되지 않음(인원·플랫폼·장르와 함께)
+  let price = null;
+  if (query.price != null && query.price !== '') {
+    if (PRICE_VALUES.has(query.price)) price = query.price;
+    else errors.push('price 값은 free 또는 paid 여야 합니다.');
+  }
   if (players == null && platforms.length === 0 && genres.length === 0) {
     errors.push('인원수, 플랫폼, 장르 중 최소 한 가지 조건을 선택해 주세요.');
   }
-  return { criteria: { players, platforms, genres }, errors };
+  return { criteria: { players, platforms, genres, price }, errors };
 }
 
 function playersStatus(game, n) {
@@ -59,6 +72,9 @@ export function evaluateGame(game, criteria) {
     const status = listStatus(game.genres, criteria.genres);
     const matched = status === 'match' ? criteria.genres.filter((v) => game.genres.includes(v)) : [];
     checks.push({ key: 'genres', label: '장르', status, matched: matched.map((v) => GENRE_MAP[v].label) });
+  }
+  if (criteria.price) {
+    checks.push({ key: 'price', label: '유료·무료', status: priceStatus(game, criteria.price), ...(game.price?.source === 'ai' ? { ai: true } : {}) });
   }
   const count = (s) => checks.filter((c) => c.status === s).length;
   const matchedCount = count('match');

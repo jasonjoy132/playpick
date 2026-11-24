@@ -14,6 +14,7 @@ export function MatchBadges({ evaluation, compact = false }) {
           <li key={c.key} className={`match-badge is-${c.status}`} data-status={c.status} data-key={c.key}>
             <span aria-hidden="true">{t.icon}</span> {c.label} {t.suffix}
             {!compact && c.status === 'match' && c.matched?.length ? <span className="match-detail"> ({c.matched.join(', ')})</span> : null}
+            {c.ai && c.status !== 'unknown' ? <span className="match-detail"> (AI 추정)</span> : null}
           </li>
         );
       })}

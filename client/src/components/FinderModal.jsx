@@ -3,7 +3,12 @@ import { navigate } from '../lib/router.jsx';
 import { criteriaToSearch, hasAnyCriteria } from '../lib/criteria.js';
 import { useFinder } from '../lib/finder.jsx';
 
-const EMPTY = { players: null, platforms: [], genres: [] };
+const EMPTY = { players: null, platforms: [], genres: [], price: null };
+const PRICES = [
+  { value: 'any', label: '상관없음' },
+  { value: 'free', label: '무료' },
+  { value: 'paid', label: '유료' },
+];
 
 export function ChipGroup({ legend, hint, name, type, options, isChecked, onToggle }) {
   return (
@@ -48,7 +53,7 @@ export function FinderModal({ options }) {
 
   useEffect(() => {
     if (!open) return undefined;
-    setCriteria(initial ?? EMPTY);
+    setCriteria({ ...EMPTY, ...initial });
     lastFocus.current = document.activeElement;
     document.body.classList.add('no-scroll');
     const t = setTimeout(() => dialogRef.current?.querySelector('input')?.focus(), 0);
@@ -95,7 +100,7 @@ export function FinderModal({ options }) {
         <header className="modal-head">
           <div>
             <h2 id="finder-title">나만의 게임 찾기</h2>
-            <p className="muted">함께할 인원·플랫폼·장르를 고르면 조건에 맞는 게임을 추천해 드려요.</p>
+            <p className="muted">함께할 인원·플랫폼·장르, 유료·무료를 고르면 조건에 맞는 게임을 추천해 드려요.</p>
           </div>
           <button type="button" className="icon-btn" onClick={closeFinder} aria-label="닫기">
             ✕
@@ -113,6 +118,15 @@ export function FinderModal({ options }) {
           />
           <ChipGroup legend="플랫폼" hint="여러 개 선택 가능" name="platforms" type="checkbox" options={options.platforms} isChecked={(v) => criteria.platforms.includes(v)} onToggle={toggleIn('platforms')} />
           <ChipGroup legend="선호 장르" hint="여러 개 선택 가능" name="genres" type="checkbox" options={options.genres} isChecked={(v) => criteria.genres.includes(v)} onToggle={toggleIn('genres')} />
+          <ChipGroup
+            legend="유료·무료"
+            hint="처음 시작할 때 기준 · 인앱 결제가 있어도 무료"
+            name="price"
+            type="radio"
+            options={options.prices ? [PRICES[0], ...options.prices] : PRICES}
+            isChecked={(v) => (v === 'any' ? !criteria.price : criteria.price === v)}
+            onToggle={(v) => setCriteria((c) => ({ ...c, price: v === 'any' ? null : v }))}
+          />
           <div className="form-footer">
             <p className="form-help" aria-live="polite">
               {ready ? '선택한 조건으로 게임을 찾아볼게요.' : '인원·플랫폼·장르 중 최소 한 가지를 선택해 주세요.'}

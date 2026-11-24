@@ -289,12 +289,12 @@ export function createCatalog(config, deps = {}) {
       const keys = ['platforms', 'genres'].filter((k) => criteria[k].length);
       if (!keys.length) return { status: 'ready', items: [], total: 0, hasMore: false, nextOffset: 0, reason: 'NEED_PLATFORM_OR_GENRE' };
 
-      const fkey = JSON.stringify([snap.updatedAt, criteria.platforms, criteria.genres, patchKey]);
+      const fkey = JSON.stringify([snap.updatedAt, criteria.platforms, criteria.genres, patchKey]); // 인원·유료무료는 여기서 안 거름(나중에 판정)
       let list = filtered.get(fkey);
       if (!list) {
         list = snap.games
           .map((game) => ({ game, evaluation: evaluateGame(patch ? patch(game) : game, criteria) })) // 고친 플랫폼·장르로 판정(게임 정보는 원래대로 — 반영은 decorate 에서)
-          .filter(({ evaluation }) => evaluation.checks.every((c) => c.key === 'players' || c.status === 'match'))
+          .filter(({ evaluation }) => evaluation.checks.every((c) => c.key === 'players' || c.key === 'price' || c.status === 'match'))
           .sort((a, b) => String(b.game.ratingDate || '').localeCompare(String(a.game.ratingDate || '')));
         if (filtered.size > 50) filtered.clear();
         filtered.set(fkey, list);

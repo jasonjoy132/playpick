@@ -341,7 +341,8 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     let pos = offset;
     let games = [];
     let warning = null;
-    for (let round = 0; round < 2; round++) {
+    // 유료·무료는 IGDB 검색으로 못 거르고 받은 뒤 거름 → 더 많이 훑음
+    for (let round = 0; round < (criteria.price ? 4 : 2); round++) {
       const r = await catalog.findMatches(criteria, { offset: pos, limit: IGDB_SCAN });
       if (!r || r.failed) return round ? { games, total, hasMore: true, nextOffset: pos, warning } : r;
       if (round === 0) total = r.total;
@@ -350,7 +351,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       if (f.late) return { games: [...games, ...f.games], total, hasMore: r.hasMore, nextOffset: pos + IGDB_SCAN, warning };
       games = [...games, ...f.games];
       pos += IGDB_SCAN;
-      const matched = recommend(games, criteria).fullMatches.length;
+      const matched = recommend(criteria.price ? pricing.applyAll(games) : games, criteria).fullMatches.length;
       if (!r.hasMore || matched >= 12 || pos >= 5000) return { games, total, hasMore: r.hasMore && pos < 5000, nextOffset: pos, warning };
     }
     return { games, total, hasMore: true, nextOffset: pos, warning };
@@ -923,7 +924,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
         return sendJson(res, 200, {
           meta: meta(), warnings, criteria, paged: true, gracTo,
           fullMatches, partialMatches,
-          totalFull: paged.total, // IGDB 기준 개수(첫 요청만)
+          totalFull: criteria.price ? null : paged.total, // 유료·무료는 IGDB가 못 세어 '여러 개' // IGDB 기준 개수(첫 요청만)
           igdbDone: !igdbHasMore,
           hasMoreFull: igdbHasMore || (gracTo === 'full' && gracHasMore),
           hasMorePartial: gracTo === 'partial' && gracHasMore,

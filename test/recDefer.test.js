@@ -36,6 +36,7 @@ before(async () => {
   server = createApp({ ...getConfig(), dataSource: 'demo', dbFile: ':memory:', rawg: {}, appStore: {} }, { catalog, partySize });
   await new Promise((r) => server.listen(0, r));
   base = `http://127.0.0.1:${server.address().port}`;
+  await fetch(`${base}/api/health`); // 첫 요청의 DB 준비 시간이 시간 재기에 섞이지 않게
 });
 after(() => server.close());
 

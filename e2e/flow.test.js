@@ -561,3 +561,22 @@ test('게임위 전용 게임 상세: App Store에서 같은 앱을 찾으면 �
     live.close();
   }
 });
+
+test('유료·무료 조건: 창에서 고르면 주소에 남고, 값을 모르는 게임은 비슷한 게임에 정보 없음으로', async () => {
+  const page = await browser.newPage();
+  await page.goto(base);
+  await page.getByTestId('open-finder').click();
+  const finder = page.getByTestId('finder');
+  await finder.getByLabel('롤플레잉').check();
+  await finder.getByLabel('무료', { exact: true }).check();
+  await finder.getByRole('button', { name: '추천 게임 찾기' }).click();
+  await page.waitForURL(/\/results\?genres=rpg&price=free/);
+  await page.getByTestId('result-count').waitFor();
+  assert.match(await page.locator('main').innerText(), /유료·무료\s*무료/);
+  // 데모 게임에는 유료·무료 정보가 없음 → 모두 '비슷한 게임'
+  const badge = page.getByTestId('section-partial').locator('[data-key="price"]').first();
+  assert.equal(await badge.getAttribute('data-status'), 'unknown');
+  await page.getByTestId('edit-criteria').click();
+  assert.equal(await page.getByTestId('finder').getByLabel('무료', { exact: true }).isChecked(), true, '조건 변경 창에도 남음');
+  await page.close();
+});
