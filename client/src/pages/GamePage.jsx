@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../lib/api.js';
 import { useDocumentTitle } from '../lib/useDocumentTitle.js';
 import { useAsync } from '../lib/useAsync.js';
@@ -753,8 +754,12 @@ const sorted = (arr) => [...arr].sort();
 
 /**
  * 정보가 틀렸나요? — 서비스 종료 제보·정보 수정 제보 (관리자 확인 후 반영, 관리자는 바로 반영)
+ * 버튼을 누르면 화면 가운데 창: 왼쪽 '지금 정보'(읽기 전용) · 오른쪽 제보 칸 → 비교하며 고침
  * 정보 수정 칸에는 지금 값이 채워져 있고, 바꾼 칸만 보냄(안 바꾼 칸이 '사용자 제보' 값으로 덮이지 않게)
  */
+const PLAYTIME_SOURCE = { igdb: 'IGDB 이용자 기록', rawg: 'RAWG', ai: 'AI 추정', user: '사용자 제보' };
+const FIELD_LABEL = { players: '추천 인원', hours: '플레이 시간', storeUrl: '구매처 추가', title: '제목', summary: '소개', releaseDate: '출시일', publisher: '개발·유통사', platforms: '플랫폼', genres: '장르', removeStores: '구매처 빼기' };
+
 function ReportBox({ game, options, onChanged }) {
   const { user } = useAuth();
   const admin = Boolean(user?.isAdmin);
@@ -775,11 +780,13 @@ function ReportBox({ game, options, onChanged }) {
   const [state, setState] = useState({});
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
   const toggle = (k) => (v) => setF((x) => ({ ...x, [k]: x[k].includes(v) ? x[k].filter((y) => y !== v) : [...x[k], v] }));
+  const reset = (...keys) => setF((x) => ({ ...x, ...Object.fromEntries(keys.map((k) => [k, current[k]])) }));
   const open = (k) => {
     setKind(k);
     setState({});
     setF({ sourceUrl: '', note: '', storeUrl: '', removeStores: [], ...current });
   };
+  const close = () => !state.busy && setKind(null);
   /** 지금 값과 다른 칸만 */
   const changes = () => {
     const out = {};
@@ -810,6 +817,31 @@ function ReportBox({ game, options, onChanged }) {
       setState({ error: err.message });
     }
   };
+
+  // 선택지 순서대로(왼쪽 '지금 정보'와 같은 순서)
+  const labelsOf = (vals, opts) => (vals.length ? [...vals].sort((a, b) => (opts?.findIndex((o) => o.value === a) ?? 0) - (opts?.findIndex((o) => o.value === b) ?? 0)).map((v) => opts?.find((o) => o.value === v)?.label || v).join(', ') : NO_INFO);
+  const changed = kind === 'fix' ? Object.keys(changes()).map((k) => (k === 'playersMin' || k === 'playersMax' ? 'players' : k)) : [];
+  const changedNames = [...new Set(changed)].map((k) => FIELD_LABEL[k]).filter(Boolean);
+  const isChanged = (k) => changed.includes(k);
+  /** 칸 아래 한 줄: 지금 값 · 바꿨으면 '되돌리기' */
+  const Now = ({ field, keys, text }) => (
+    <span className="report-now">
+      {isChanged(field) && <span className="report-changed-tag">바뀜</span>}
+      지금: {text}
+      {isChanged(field) && (
+        <>
+          {' · '}
+          <button type="button" className="link-btn" onClick={() => reset(...keys)}>
+            되돌리기
+          </button>
+        </>
+      )}
+    </span>
+  );
+  const playersNow = game.recommendedPlayers ? `${formatPlayers(game.recommendedPlayers)}${PARTY_SOURCE[game.recommendedPlayers.source] ? ` (${PARTY_SOURCE[game.recommendedPlayers.source]})` : ''}` : NO_INFO;
+  const hoursNow = game.playtime?.hours != null ? `약 ${game.playtime.hours}시간${PLAYTIME_SOURCE[game.playtime.source] ? ` (${PLAYTIME_SOURCE[game.playtime.source]})` : ''}` : NO_INFO;
+  const title = kind === 'ended' ? (admin ? '서비스 종료 처리' : '서비스 종료 제보') : admin ? '정보 바로 수정' : '정보 수정 제보';
+
   return (
     <section className="panel report-box" aria-labelledby="report-title" data-testid="report-box">
       <h2 id="report-title">{admin ? '관리자 · 정보 바로 수정' : '정보가 틀렸나요?'}</h2>
@@ -823,7 +855,7 @@ function ReportBox({ game, options, onChanged }) {
         <p className="small">
           <Link to={`/login?next=${encodeURIComponent(pathname + search)}`}>로그인</Link>하면 제보할 수 있어요.
         </p>
-      ) : !kind ? (
+      ) : (
         <div className="report-actions">
           {!game.userEnded && (
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => open('ended')} data-testid="open-report-ended">
@@ -834,93 +866,222 @@ function ReportBox({ game, options, onChanged }) {
             {admin ? '추천 인원·플레이 시간·구매처 고치기' : '정보 수정 제보'}
           </button>
         </div>
-      ) : (
-        <form onSubmit={submit} data-testid={`report-form-${kind}`}>
-          <p className="small">
-            <b>{kind === 'ended' ? (admin ? '서비스 종료 처리' : '서비스 종료 제보') : admin ? '정보 바로 수정 — 지금 값이 채워져 있어요. 바꾼 칸만 반영돼요.' : '정보 수정 제보'}</b>
-          </p>
-          {kind === 'fix' && (
-            <>
-              <div className="row2">
-                <label className="field">
-                  추천 인원 최소
-                  <input type="number" min={1} max={100} value={f.playersMin} onChange={set('playersMin')} />
-                </label>
-                <label className="field">
-                  추천 인원 최대
-                  <input type="number" min={1} max={100} value={f.playersMax} onChange={set('playersMax')} />
-                </label>
-              </div>
-              <label className="field">
-                메인 스토리 플레이 시간(시간)
-                <input type="number" min={1} max={1000} value={f.hours} onChange={set('hours')} />
-              </label>
-              <label className="field">
-                구매처 추가(공식 스토어 주소)
-                <input type="url" value={f.storeUrl} onChange={set('storeUrl')} placeholder="https://store.steampowered.com/app/…" />
-              </label>
-              <details className="report-more" data-testid="report-more">
-                <summary>제목·소개·출시일·개발사·플랫폼·장르·구매처 빼기</summary>
-                <label className="field">
-                  제목
-                  <input type="text" value={f.title} onChange={set('title')} maxLength={80} />
-                </label>
-                <label className="field">
-                  소개
-                  <textarea rows={4} maxLength={2000} value={f.summary} onChange={set('summary')} />
-                </label>
-                <div className="row2">
-                  <label className="field">
-                    출시일
-                    <input type="text" value={f.releaseDate} onChange={set('releaseDate')} placeholder="2024-05-01 또는 2024" maxLength={10} />
-                  </label>
-                  <label className="field">
-                    개발·유통사
-                    <input type="text" value={f.publisher} onChange={set('publisher')} maxLength={60} />
-                  </label>
-                </div>
-                {options && (
+      )}
+      {user && kind && (
+        <ReportModal title={title} game={game} onClose={close}>
+          <div className="report-compare">
+            <aside className="report-current" aria-label="지금 정보" data-testid="report-current">
+              <h3>지금 정보</h3>
+              <dl>
+                {kind === 'ended' && (
                   <>
-                    <ChipGroup legend="플랫폼" hint="검색 조건과 같은 목록" name="fix-pf" type="checkbox" options={options.platforms.filter((o) => !o.hidden)} isChecked={(v) => f.platforms.includes(v)} onToggle={toggle('platforms')} />
-                    <ChipGroup legend="장르" hint="검색 조건과 같은 목록" name="fix-gn" type="checkbox" options={options.genres} isChecked={(v) => f.genres.includes(v)} onToggle={toggle('genres')} />
+                    <dt>상태</dt>
+                    <dd>{statusKo(game.status) || NO_INFO}</dd>
                   </>
                 )}
-                {game.stores?.length > 0 && (
-                  <fieldset className="field">
-                    <legend>틀린 구매처 빼기</legend>
-                    {game.stores.map((st) => (
-                      <label key={st.url} className="check-line">
-                        <input type="checkbox" checked={f.removeStores.includes(st.url)} onChange={() => toggle('removeStores')(st.url)} /> {st.name} <span className="muted small">{st.url}</span>
-                      </label>
-                    ))}
-                  </fieldset>
+                <dt className={isChanged('players') ? 'is-changed' : undefined}>추천 인원</dt>
+                <dd className={isChanged('players') ? 'is-changed' : undefined}>{playersNow}</dd>
+                <dt className={isChanged('hours') ? 'is-changed' : undefined}>플레이 시간</dt>
+                <dd className={isChanged('hours') ? 'is-changed' : undefined}>{hoursNow}</dd>
+                <dt className={isChanged('releaseDate') ? 'is-changed' : undefined}>출시일</dt>
+                <dd className={isChanged('releaseDate') ? 'is-changed' : undefined}>{orNoInfo(game.releaseDate)}</dd>
+                <dt className={isChanged('publisher') ? 'is-changed' : undefined}>개발·유통사</dt>
+                <dd className={isChanged('publisher') ? 'is-changed' : undefined}>{orNoInfo(game.publisher)}</dd>
+                <dt className={isChanged('platforms') ? 'is-changed' : undefined}>플랫폼</dt>
+                <dd className={isChanged('platforms') ? 'is-changed' : undefined}>{labelsOf(game.platforms ?? [], options?.platforms)}</dd>
+                <dt className={isChanged('genres') ? 'is-changed' : undefined}>장르</dt>
+                <dd className={isChanged('genres') ? 'is-changed' : undefined}>{labelsOf(game.genres ?? [], options?.genres)}</dd>
+                <dt>구매처</dt>
+                <dd>
+                  {game.stores?.length ? (
+                    <ul className="report-stores">
+                      {game.stores.map((st) => (
+                        <li key={st.url}>
+                          <a href={st.url} target="_blank" rel="noopener noreferrer">
+                            {st.name} <ExternalArrow />
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    NO_INFO
+                  )}
+                </dd>
+                {kind === 'fix' && current.summary && (
+                  <>
+                    <dt>소개</dt>
+                    <dd className="report-summary">{current.summary}</dd>
+                  </>
                 )}
-              </details>
-            </>
-          )}
-          <label className="field">
-            {kind === 'ended' ? '근거 주소 (종료 공지·기사 등, 필수)' : '근거 주소 (선택)'}
-            <input type="url" value={f.sourceUrl} onChange={set('sourceUrl')} placeholder="https://…" required={kind === 'ended'} />
-          </label>
-          <label className="field">
-            {kind === 'ended' ? '설명 (선택)' : '설명 (다른 정보가 틀렸다면 여기에)'}
-            <textarea rows={2} maxLength={500} value={f.note} onChange={set('note')} placeholder={kind === 'ended' ? '예: 2023년 6월 서비스 종료' : '예: 플랫폼에 PS5도 있어요'} />
-          </label>
-          {state.error && (
-            <p className="form-error" role="alert">
-              {state.error}
-            </p>
-          )}
-          <div className="form-actions">
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setKind(null)} disabled={state.busy}>
-              취소
-            </button>
-            <button type="submit" className="btn btn-gold btn-sm" disabled={state.busy} data-testid="submit-report">
-              {user.isAdmin ? '바로 반영' : '제보하기'}
-            </button>
+              </dl>
+              {kind === 'ended' && <p className="muted small">구매처를 눌러 지금도 팔거나 서비스 중인지 확인해 보세요.</p>}
+            </aside>
+
+            <form onSubmit={submit} className="report-form" data-testid={`report-form-${kind}`}>
+              {kind === 'fix' && (
+                <>
+                  <p className="muted small">지금 값이 채워져 있어요. 틀린 칸만 바꾸면 그 칸만 {admin ? '반영돼요' : '제보돼요'}.</p>
+                  <div className={`report-field${isChanged('players') ? ' is-changed' : ''}`}>
+                    <div className="row2">
+                      <label className="field">
+                        추천 인원 최소
+                        <input type="number" min={1} max={100} value={f.playersMin} onChange={set('playersMin')} />
+                      </label>
+                      <label className="field">
+                        추천 인원 최대
+                        <input type="number" min={1} max={100} value={f.playersMax} onChange={set('playersMax')} />
+                      </label>
+                    </div>
+                    <Now field="players" keys={['playersMin', 'playersMax']} text={playersNow} />
+                  </div>
+                  <div className={`report-field${isChanged('hours') ? ' is-changed' : ''}`}>
+                    <label className="field">
+                      메인 스토리 플레이 시간(시간)
+                      <input type="number" min={1} max={1000} value={f.hours} onChange={set('hours')} />
+                    </label>
+                    <Now field="hours" keys={['hours']} text={hoursNow} />
+                  </div>
+                  <div className={`report-field${f.storeUrl.trim() ? ' is-changed' : ''}`}>
+                    <label className="field">
+                      구매처 추가(공식 스토어 주소)
+                      <input type="url" value={f.storeUrl} onChange={set('storeUrl')} placeholder="https://store.steampowered.com/app/…" />
+                    </label>
+                  </div>
+                  <details className="report-more" data-testid="report-more">
+                    <summary>제목·소개·출시일·개발사·플랫폼·장르·구매처 빼기</summary>
+                    {[
+                      ['title', '제목', 'text', 80],
+                      ['releaseDate', '출시일', 'text', 10, '2024-05-01 또는 2024'],
+                      ['publisher', '개발·유통사', 'text', 60],
+                    ].map(([k, label, type, max, ph]) => (
+                      <div key={k} className={`report-field${isChanged(k) ? ' is-changed' : ''}`}>
+                        <label className="field">
+                          {label}
+                          <input type={type} value={f[k]} onChange={set(k)} maxLength={max} placeholder={ph} />
+                        </label>
+                        <Now field={k} keys={[k]} text={orNoInfo(current[k])} />
+                      </div>
+                    ))}
+                    <div className={`report-field${isChanged('summary') ? ' is-changed' : ''}`}>
+                      <label className="field">
+                        소개
+                        <textarea rows={4} maxLength={2000} value={f.summary} onChange={set('summary')} />
+                      </label>
+                      {isChanged('summary') && <Now field="summary" keys={['summary']} text="왼쪽 '지금 정보'의 소개" />}
+                    </div>
+                    {options && (
+                      <>
+                        <div className={`report-field${isChanged('platforms') ? ' is-changed' : ''}`}>
+                          <ChipGroup legend="플랫폼" hint="검색 조건과 같은 목록" name="fix-pf" type="checkbox" options={options.platforms.filter((o) => !o.hidden)} isChecked={(v) => f.platforms.includes(v)} onToggle={toggle('platforms')} />
+                          <Now field="platforms" keys={['platforms']} text={labelsOf(current.platforms, options.platforms)} />
+                        </div>
+                        <div className={`report-field${isChanged('genres') ? ' is-changed' : ''}`}>
+                          <ChipGroup legend="장르" hint="검색 조건과 같은 목록" name="fix-gn" type="checkbox" options={options.genres} isChecked={(v) => f.genres.includes(v)} onToggle={toggle('genres')} />
+                          <Now field="genres" keys={['genres']} text={labelsOf(current.genres, options.genres)} />
+                        </div>
+                      </>
+                    )}
+                    {game.stores?.length > 0 && (
+                      <fieldset className={`field report-field${f.removeStores.length ? ' is-changed' : ''}`}>
+                        <legend>틀린 구매처 빼기</legend>
+                        {game.stores.map((st) => (
+                          <label key={st.url} className="check-line">
+                            <input type="checkbox" checked={f.removeStores.includes(st.url)} onChange={() => toggle('removeStores')(st.url)} /> <span className="report-store-name">{st.name}</span> <span className="muted small report-store-url">{st.url}</span>
+                          </label>
+                        ))}
+                      </fieldset>
+                    )}
+                  </details>
+                </>
+              )}
+              <label className="field">
+                {kind === 'ended' ? '근거 주소 (종료 공지·기사 등, 필수)' : '근거 주소 (선택)'}
+                <input type="url" value={f.sourceUrl} onChange={set('sourceUrl')} placeholder="https://…" required={kind === 'ended'} />
+              </label>
+              <label className="field">
+                {kind === 'ended' ? '설명 (선택)' : '설명 (다른 정보가 틀렸다면 여기에)'}
+                <textarea rows={2} maxLength={500} value={f.note} onChange={set('note')} placeholder={kind === 'ended' ? '예: 2023년 6월 서비스 종료' : '예: 플랫폼에 PS5도 있어요'} />
+              </label>
+              {state.error && (
+                <p className="form-error" role="alert">
+                  {state.error}
+                </p>
+              )}
+              <div className="report-foot">
+                {kind === 'fix' && (
+                  <p className="small" aria-live="polite" data-testid="report-changed">
+                    {changedNames.length ? (
+                      <>
+                        바꾼 칸 <b>{changedNames.length}개</b>: {changedNames.join(', ')}
+                      </>
+                    ) : (
+                      <span className="muted">아직 바꾼 칸이 없어요.</span>
+                    )}
+                  </p>
+                )}
+                <div className="form-actions">
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={close} disabled={state.busy}>
+                    취소
+                  </button>
+                  <button type="submit" className="btn btn-gold btn-sm" disabled={state.busy} data-testid="submit-report">
+                    {admin ? '바로 반영' : '제보하기'}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
-        </form>
+        </ReportModal>
       )}
     </section>
+  );
+}
+
+/** 화면 가운데 창 (Esc·바깥 누르면 닫힘, 창 안에서만 Tab 이동, 닫으면 누른 버튼으로 포커스) */
+function ReportModal({ title, game, onClose, children }) {
+  const ref = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    const last = document.activeElement;
+    document.body.classList.add('no-scroll');
+    const t = setTimeout(() => ref.current?.querySelector('form input, form textarea')?.focus(), 0);
+    const onKey = (e) => {
+      if (e.key === 'Escape') closeRef.current();
+      if (e.key === 'Tab' && ref.current) {
+        const f = [...ref.current.querySelectorAll('a[href], input, textarea, summary, button:not([disabled])')].filter((el) => el.offsetParent !== null);
+        if (!f.length) return;
+        if (e.shiftKey && document.activeElement === f[0]) {
+          e.preventDefault();
+          f.at(-1).focus();
+        } else if (!e.shiftKey && document.activeElement === f.at(-1)) {
+          e.preventDefault();
+          f[0].focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('keydown', onKey);
+      document.body.classList.remove('no-scroll');
+      last?.focus?.();
+    };
+  }, []);
+  return createPortal(
+    <div className="modal-backdrop" data-state="open" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal report-modal" role="dialog" aria-modal="true" aria-labelledby="report-modal-title" ref={ref} data-testid="report-modal">
+        <header className="modal-head">
+          <div>
+            <h2 id="report-modal-title">{title}</h2>
+            <p className="muted">{game.title}</p>
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="닫기">
+            ✕
+          </button>
+        </header>
+        {children}
+      </div>
+    </div>,
+    document.body,
   );
 }

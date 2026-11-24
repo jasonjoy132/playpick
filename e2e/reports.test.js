@@ -150,9 +150,14 @@ test('관리자: 상세에서 정보 바로 수정(지금 값 채워짐, 새로�
   const nums = form.locator('input[type="number"]');
   await nums.nth(0).fill('2');
   await nums.nth(1).fill('6');
-  if (SHOTS) await box.screenshot({ path: `${SHOTS}/admin-fix.png` });
+  // 가운데 창: 왼쪽 '지금 정보'와 비교, 바꾼 칸이 표시됨
+  await admin.getByTestId('report-modal').waitFor();
+  assert.match(await admin.getByTestId('report-current').innerText(), /추천 인원/);
+  assert.match(await admin.getByTestId('report-changed').innerText(), /바꾼 칸 1개: 추천 인원/);
+  if (SHOTS) await admin.screenshot({ path: `${SHOTS}/admin-fix.png` });
   await admin.getByTestId('submit-report').click();
   await admin.getByTestId('report-done').waitFor();
+  await admin.getByTestId('report-modal').waitFor({ state: 'detached' }); // 보내면 창 닫힘
   await admin.getByText('2~6명').first().waitFor(); // 새로고침 없이 반영
   // 다시 열면 바뀐 값이 채워져 있음
   await admin.getByTestId('open-report-fix').click();
@@ -161,7 +166,7 @@ test('관리자: 상세에서 정보 바로 수정(지금 값 채워짐, 새로�
   // 더 고칠 칸: 장르를 목록에서 골라 바꾸면 장르 칸·태그가 바로 바뀌고 출처가 붙음
   await form.getByTestId('report-more').locator('summary').click();
   await form.getByTestId('report-more').locator('label.chip', { hasText: '퍼즐' }).click();
-  if (SHOTS) await box.screenshot({ path: `${SHOTS}/admin-fix-more.png` });
+  if (SHOTS) await admin.screenshot({ path: `${SHOTS}/admin-fix-more.png` });
   await admin.getByTestId('submit-report').click();
   await admin.getByTestId('report-done').waitFor();
   await admin.locator('.info-table', { hasText: '퍼즐' }).getByText('사용자 제보 · 관리자 확인').first().waitFor();

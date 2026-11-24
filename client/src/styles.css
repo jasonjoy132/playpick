@@ -969,14 +969,13 @@ img { max-width: 100%; }
 .report-review { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); display: grid; gap: 8px; }
 .report-review p { margin: 0; }
 .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
-.report-review .chip span, .report-box .chip span { min-height: 32px; padding: 0 12px; font-size: 0.88rem; }
-.report-note, .report-box input[type="url"], .report-box input[type="number"], .report-box input[type="text"], .report-box textarea { width: 100%; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 12px; font: inherit; background: var(--field); color: var(--text); min-width: 0; }
-.report-box textarea { resize: vertical; }
+.report-review .chip span, .report-box .chip span, .report-modal .chip span { min-height: 32px; padding: 0 12px; font-size: 0.88rem; }
+.report-note, .report-modal input[type="url"], .report-modal input[type="number"], .report-modal input[type="text"], .report-modal textarea { width: 100%; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 12px; font: inherit; background: var(--field); color: var(--text); min-width: 0; }
+.report-modal textarea { resize: vertical; }
 .report-box h2 { margin: 0 0 4px; font-size: 1.05rem; }
 .report-box .report-actions { display: grid; gap: 8px; margin-top: 10px; }
-.report-box form { display: grid; gap: 8px; margin-top: 10px; }
-.report-box label.field { display: grid; gap: 4px; font-size: 0.9rem; font-weight: 600; }
-.report-box .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.report-modal label.field { display: grid; gap: 4px; font-size: 0.9rem; font-weight: 600; }
+.report-modal .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .admin-fix { margin: 6px 0; padding-left: 18px; }
 .admin-review-quote { margin: 8px 0; padding: 10px 12px; border-left: 3px solid var(--line); background: var(--surface); border-radius: var(--radius-sm); white-space: pre-wrap; }
 .admin-reports-list { margin: 6px 0; padding-left: 18px; font-size: 0.9rem; }
@@ -2095,3 +2094,40 @@ h1, h2, h3, .tile-title { text-wrap: balance; }
 .admin-nav a.is-on { color: var(--text); }
 .admin-nav a.is-on::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--primary); }
 .admin-nav a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
+
+/* 제보 창: 왼쪽 지금 정보 · 오른쪽 제보 칸 */
+.report-modal { width: min(940px, 100%); padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.report-modal .modal-head { padding: 20px 24px 0; margin-bottom: 14px; }
+.report-compare { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 0; min-height: 0; flex: 1; border-top: 1px solid var(--line); }
+.report-current { padding: 18px 22px; background: var(--surface); border-right: 1px solid var(--line); overflow-y: auto; }
+.report-current h3 { margin: 0 0 10px; font-size: 0.95rem; }
+.report-current dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 0; font-size: 0.9rem; }
+.report-current dt { color: var(--muted); white-space: nowrap; }
+.report-current dd { margin: 0; overflow-wrap: anywhere; }
+.report-summary { max-height: 9.5em; overflow-y: auto; color: var(--muted); font-size: 0.86rem; line-height: 1.55; }
+.report-stores { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.report-stores a { display: inline-flex; align-items: center; gap: 4px; }
+.report-form { display: grid; gap: 10px; align-content: start; padding: 18px 22px 0; overflow-y: auto; }
+.report-form > .muted { margin: 0; }
+.report-field { display: grid; gap: 4px; padding: 8px 10px; margin: 0 -10px; border-radius: var(--radius-sm); transition: background-color 160ms ease; }
+.report-field.is-changed { background: var(--primary-soft); }
+.report-changed-tag { display: inline-block; margin-right: 6px; padding: 0 7px; border-radius: 999px; background: var(--primary); color: var(--primary-ink); font-size: 0.72rem; font-weight: 600; line-height: 1.6; vertical-align: 1px; }
+.report-current dt.is-changed, .report-current dd.is-changed { color: var(--primary-strong); font-weight: 600; }
+.report-current dd.is-changed::after { content: ' → 바꾸는 중'; font-weight: 400; font-size: 0.78rem; color: var(--primary); }
+.report-now { font-size: 0.82rem; color: var(--muted); }
+.report-now .link-btn { font-size: inherit; }
+.report-foot { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; padding: 12px 0 16px; margin-top: 4px; background: var(--surface-2); border-top: 1px solid var(--line); }
+.report-foot p { margin: 0; }
+.report-foot .form-actions { margin-left: auto; }
+@media (max-width: 760px) {
+  .report-modal { max-height: calc(100vh - 16px); overflow-y: auto; }
+  .report-compare { grid-template-columns: 1fr; }
+  .report-current { border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
+  .report-form { overflow: visible; }
+  .report-modal .modal-head { padding: 16px 16px 0; }
+  .report-current, .report-form { padding-left: 16px; padding-right: 16px; }
+}
+.report-modal .report-more[open] { display: grid; gap: 6px; }
+.report-modal .report-more > fieldset { margin-top: 6px; }
+.report-store-name { white-space: nowrap; font-weight: 600; }
+.report-store-url { min-width: 0; overflow-wrap: anywhere; }
