@@ -1,0 +1,301 @@
+id,known,free,evidence
+1,true,paid,https://www.xbox.com/en-us/games/store/max-payne/9NTGH3ZZ3PX3 Xbox Store 14.99 USD
+2,true,paid,https://www.gog.com/en/game/mafia GOG 14.99 USD
+3,true,paid,https://store.playstation.com/en-us/concept/205132 PlayStation Store 19.99 USD
+4,true,paid,https://www.nintendo.com/us/store/products/nintendo-entertainment-system-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+5,true,paid,"https://store.steampowered.com/app/1064220/ Steam 구매 ₩ 3,220"
+6,true,paid,https://www.xbox.com/en-us/games/store/crysis-2/BQBTGDT4P54J Xbox Store 19.99 USD
+7,true,paid,https://www.xbox.com/en-us/games/store/metal-gear-rising-revengeance/BR6HQDNQT004 Xbox Store 19.99 USD
+8,true,paid,https://www.xbox.com/en-us/games/store/gears-of-war/BPN08ZDRPSFK Microsoft Store 구매 가격 표시
+9,true,paid,"https://store.steampowered.com/app/1064273/ Steam 구매 ₩ 3,220"
+10,false,,
+11,true,paid,https://store.steampowered.com/app/2280/DOOM__DOOM_II/ Steam DOOM II 포함 유료판
+12,false,,
+13,true,paid,https://store.playstation.com/en-us/concept/202943 PlayStation Store 19.99 USD
+14,true,free,https://store.playstation.com/en-us/concept/231987 PlayStation Store 무료 플레이
+15,true,paid,https://www.nintendo.com/us/store/products/s-t-a-l-k-e-r-shadow-of-chornobyl-switch/ Nintendo 19.99 USD
+16,true,paid,https://www.xbox.com/en-us/games/store/gears-of-war-2/C1SDBNRFXT1D Microsoft Store 구매 가격 표시
+17,false,,
+18,true,paid,https://www.nintendo.com/us/store/products/doom-3-switch/ Nintendo 9.99 USD
+19,true,free,https://www.xbox.com/en-us/games/store/overwatch-2/C1C4DZJPBC2V Microsoft Store 무료 플레이
+20,true,paid,https://www.nintendo.com/us/store/products/nintendo-64-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+21,true,paid,https://store.playstation.com/en-us/concept/221705 PlayStation Store 14.99 USD
+22,true,paid,https://community.telltale.com/discussion/87773/game-of-thrones-a-telltale-games-series-season-premiere-available-now 원 출시판 판매 가격 자료
+23,true,paid,https://blog.playstation.com/?p=142506 PlayStation Store 당시 판매 가격
+24,true,paid,"https://store.steampowered.com/app/1064272/ Steam 구매 ₩ 1,720"
+25,false,,
+26,true,paid,https://www.nintendo.com/en-gb/News/2017/October/Three-new-Nintendo-3DS-titles-join-the-Nintendo-Selects-range--1292296.html Nintendo 3DS eShop 판매 £15.99
+27,true,paid,https://blog.playstation.com/2012/08/21/playstation-store-update-253/comment-page-5/ PlayStation Store PS3 당시 판매 가격
+28,false,,
+29,false,,
+30,true,paid,https://store.playstation.com/en-us/concept/200477 PlayStation Store 14.99 USD
+31,false,,
+32,false,,
+33,false,,
+34,false,,
+35,false,,
+36,false,,
+37,true,paid,https://www.gog.com/en/game/medal_of_honor_allied_assault_war_chest GOG 본편 포함 유료판
+38,true,paid,https://www.xbox.com/en-us/games/store/mortal-kombat-11/BTC0L0BW6LWC Microsoft Store 구매 가격 표시
+39,false,,
+40,true,paid,https://www.nintendo.com/us/store/products/game-dev-tycoon-switch/ Nintendo 14.99 USD
+41,false,,
+42,false,,
+43,true,paid,https://blog.playstation.com/?p=151819 PlayStation Store 당시 판매 가격
+44,true,paid,"https://store.steampowered.com/app/2320/ Steam 구매 ₩ 4,400"
+45,true,free,https://heroesofthestorm.blizzard.com/en-us/ Blizzard 공식 무료 플레이
+46,true,paid,https://www.xbox.com/en-us/games/store/call-of-duty-3/C2N2L6MHMV34 Microsoft Store 구매 가격 표시
+47,true,free,https://store.playstation.com/en-us/concept/10000229 PlayStation Store 무료 플레이
+48,false,,
+49,true,paid,https://www.nintendo.com/us/store/products/game-boy-advance-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+50,true,paid,https://www.nintendo.com/us/store/products/game-boy-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+51,false,,
+52,false,,
+53,false,,
+54,true,paid,https://www.nintendo.com/us/store/products/nintendo-entertainment-system-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+55,false,,
+56,false,,
+57,true,paid,https://www.gog.com/en/game/silent_hill_4_the_room%2B GOG 구매 가격 표시
+58,false,,
+59,true,paid,https://www.nintendo.com/us/store/products/nintendo-64-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+60,false,,
+61,false,,
+62,false,,
+63,true,paid,"https://store.steampowered.com/app/41700/ Steam 구매 ₩ 22,000"
+64,false,,
+65,false,,
+66,true,paid,https://www.nintendo.com/us/store/products/nintendo-64-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+67,false,,
+68,true,paid,https://www.xbox.com/en-US/games/store/Fable-II/C2WKJJ9F5936 Xbox Store 구매 가격 표시
+69,false,,
+70,true,paid,https://blog.playstation.com/?p=151819 PlayStation Store 당시 판매 가격
+71,true,paid,https://www.xbox.com/en-US/games/store/gears-of-war-4/9nblggh4pbbm Xbox Store 구매 가격 표시
+72,false,,
+73,true,paid,https://www.nintendo.com/us/store/products/nintendo-gamecube-nintendo-classics-switch-2/ Nintendo Switch Online + Expansion Pack 구독 필요
+74,true,paid,https://www.xbox.com/en-US/games/store/halo-5-guardians/BRRC2BP0G9P0 Xbox Store 본편 구매 가격 표시
+75,false,,
+76,true,paid,https://store.playstation.com/en-us/concept/205041 PlayStation Store 19.99 USD
+77,true,paid,https://www.xbox.com/en-us/games/store/prototype2/C3H56C11VWHM Microsoft Store 구매 가격 표시
+78,true,paid,https://www.nintendo.com/us/store/products/nintendo-entertainment-system-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+79,true,paid,https://www.nintendo.com/us/store/products/final-fantasy-switch/ Nintendo 11.99 USD
+80,false,,
+81,false,,
+82,false,,
+83,false,,
+84,false,,
+85,false,,
+86,false,,
+87,true,paid,https://www.xbox.com/en-us/games/store/kingdom-hearts-%E2%85%B2/C08MW8XHQN9G Microsoft Store 구매 가격 표시
+88,false,,
+89,false,,
+90,false,,
+91,true,paid,https://www.nintendo.com/us/store/products/s-t-a-l-k-e-r-clear-sky-switch/ Nintendo 19.99 USD
+92,false,,
+93,true,paid,https://www.nintendo.com/us/store/products/super-nintendo-entertainment-system-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+94,true,paid,https://na.finalfantasyxiv.com/product 정식판 구매 및 구독 필요
+95,false,,
+96,true,paid,https://www.nintendo.com/us/store/products/pokemon-shield-switch/ Nintendo 59.99 USD
+97,false,,
+98,false,,
+99,true,paid,https://www.xbox.com/en-us/games/store/dante's-inferno/C0X6N5963CTW Xbox Store 14.99 USD
+100,false,,
+101,false,,
+102,false,,
+103,true,paid,https://www.xbox.com/en-us/games/store/castlevania-lords-of-shadow/BRL99QVV2BF3 Xbox Store 19.99 USD
+104,true,paid,https://www.nintendo.com/us/store/products/luigis-mansion-3-switch/ Nintendo 59.99 USD
+105,false,,
+106,false,,
+107,true,paid,https://store.epicgames.com/p/monument-valley-1d99d3?lang=en-US Epic Games Store 구매 가격 표시
+108,false,,
+109,true,free,https://osu.ppy.sh/ 공식 사이트 무료 다운로드
+110,true,paid,https://store.playstation.com/en-us/concept/202185 PlayStation Store 14.99 USD
+111,true,paid,https://www.nintendo.com/us/store/products/pokemon-legends-arceus-switch/ Nintendo 59.99 USD
+112,false,,
+113,false,,
+114,false,,
+115,false,,
+116,true,paid,https://www.nintendo.com/us/store/products/sega-genesis-nintendo-switch-online-switch/ Nintendo Switch Online 구독 필요
+117,false,,
+118,true,paid,https://www.nintendo.com/us/store/products/metroid-dread-switch/ Nintendo 41.99 USD
+119,false,,
+120,false,,
+121,false,,
+122,true,paid,https://www.nintendo.com/us/store/products/sega-genesis-nintendo-switch-online-switch/ Nintendo Switch Online 구독 필요
+123,true,paid,https://store.steampowered.com/app/55100 Steam 구매 가격 표시
+124,false,,
+125,true,paid,https://www.nintendo.com/us/store/products/super-mario-maker-2-switch/ Nintendo 59.99 USD
+126,true,paid,https://www.xbox.com/en-us/games/store/prey/BVPGZMMDDZ0M Xbox Store 19.99 USD
+127,true,paid,https://www.nintendo.com/us/store/products/splatoon-2-switch/ Nintendo 59.99 USD
+128,true,paid,https://play.google.com/store/apps/details?id=com.square_enix.secret Google Play 11000 KRW
+129,true,paid,https://store.playstation.com/en-us/concept/232300 PlayStation Store 59.99 USD
+130,false,,
+131,false,,
+132,true,free,https://play.google.com/store/apps/details?id=com.supercell.clashofclans Google Play 무료
+133,true,paid,https://www.nintendo.com/us/store/products/nintendo-entertainment-system-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+134,false,,
+135,false,,
+136,true,paid,https://store.playstation.com/en-us/concept/213861 PlayStation Store 19.99 USD
+137,false,,
+138,true,paid,https://www.gog.com/en/game/mortal_kombat_4 GOG 5.99 USD
+139,true,paid,https://www.nintendo.com/us/store/products/game-boy-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+140,false,,
+141,true,paid,https://www.nintendo.com/us/store/products/nintendo-entertainment-system-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+142,true,paid,https://www.nintendo.com/us/store/products/mario-plus-rabbids-kingdom-battle-switch/ Nintendo 39.99 USD
+143,false,,
+144,true,paid,https://store.playstation.com/en-us/concept/202184 PlayStation Store 14.99 USD
+145,false,,
+146,false,,
+147,true,paid,https://www.nintendo.com/us/store/products/sega-genesis-nintendo-switch-online-switch/ Nintendo Switch Online 구독 필요
+148,true,paid,https://www.xbox.com/en-us/games/store/medal-of-honor-airborne/C43H00X6KZRJ Xbox Store 19.99 USD
+149,false,,
+150,false,,
+151,false,,
+152,false,,
+153,false,,
+154,true,paid,https://www.nintendo.com/us/store/products/nintendo-entertainment-system-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+155,false,,
+156,false,,
+157,true,free,https://store.epicgames.com/p/honkai-star-rail Epic Games Store 무료 플레이
+158,false,,
+159,true,paid,https://www.nintendo.com/us/store/products/game-boy-advance-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+160,true,paid,https://www.xbox.com/en-US/games/store/metal-slug-3/bzhs2xcvv5t3 Xbox Store 9.99 USD
+161,false,,
+162,false,,
+163,false,,
+164,true,paid,https://store.playstation.com/en-us/concept/227245 PlayStation Store 5.99 USD
+165,false,,
+166,false,,
+167,false,,
+168,false,,
+169,false,,
+170,false,,
+171,false,,
+172,false,,
+173,false,,
+174,true,paid,https://www.xbox.com/en-us/games/store/catherine/C4GSVXGF65TT Xbox Store 19.99 USD
+175,false,,
+176,false,,
+177,false,,
+178,false,,
+179,false,,
+180,true,paid,https://www.nintendo.com/us/store/products/nintendo-64-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+181,false,,
+182,false,,
+183,false,,
+184,true,paid,https://www.nintendo.com/us/store/products/game-boy-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+185,false,,
+186,false,,
+187,false,,
+188,false,,
+189,false,,
+190,false,,
+191,false,,
+192,true,paid,https://investor.activision.com/news-releases/news-release-details/marvel-and-activision-announce-ultimate-spider-man-webbing 원 출시판 판매 가격 자료
+193,false,,
+194,true,paid,https://www.gamebanshee.com/news/81176-marvel-ultimate-alliance-ships-to-retail.html 원 출시판 판매 가격 자료
+195,false,,
+196,false,,
+197,true,paid,https://www.nintendo.com/us/store/products/nintendo-64-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+198,false,,
+199,false,,
+200,false,,
+201,false,,
+202,false,,
+203,false,,
+204,true,paid,https://www.nintendo.com/us/store/products/game-boy-advance-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+205,false,,
+206,false,,
+207,false,,
+208,true,paid,https://investor.activision.com/news-releases/news-release-details/redoctaners-guitar-hero-iitm-hits-streets-november-7th 원 출시판 판매 가격 자료
+209,false,,
+210,false,,
+211,false,,
+212,true,paid,https://www.nintendo.com/us/store/products/game-boy-advance-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+213,false,,
+214,false,,
+215,false,,
+216,false,,
+217,false,,
+218,true,paid,https://www.nintendo.com/us/store/products/kirby-and-the-forgotten-land-switch/ Nintendo 41.99 USD
+219,false,,
+220,false,,
+221,false,,
+222,true,paid,https://www.nintendo.com/us/store/products/astral-chain-switch/ Nintendo 59.99 USD
+223,false,,
+224,false,,
+225,false,,
+226,false,,
+227,true,paid,https://store.playstation.com/en-us/product/UP9000-PPSA06322_00-SCUS942400000000/ PlayStation Store 9.99 USD
+228,false,,
+229,false,,
+230,false,,
+231,false,,
+232,false,,
+233,false,,
+234,false,,
+235,true,paid,https://store.playstation.com/en-us/concept/10000264 PlayStation Store 59.99 USD
+236,false,,
+237,false,,
+238,false,,
+239,false,,
+240,false,,
+241,false,,
+242,false,,
+243,false,,
+244,false,,
+245,false,,
+246,true,paid,https://store.playstation.com/en-us/product/UP0177-CUSA13186_00-JUDGMENTRYUGAENG PlayStation Store 29.99 USD
+247,true,paid,https://www.nintendo.com/us/store/products/game-boy-advance-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+248,false,,
+249,true,paid,https://www.nintendo.com/us/store/products/game-boy-advance-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+250,false,,
+251,false,,
+252,false,,
+253,false,,
+254,true,paid,https://www.xbox.com/en-us/games/store/timesplitters-future-perfect/9N51S9QZMSB6 Xbox Store 9.99 USD
+255,false,,
+256,false,,
+257,true,paid,https://www.nintendo.com/us/store/products/nintendo-gamecube-nintendo-classics-switch-2/ Nintendo Switch Online + Expansion Pack 구독 필요
+258,true,paid,https://www.nintendo.com/us/store/products/splatoon-3-switch/ Nintendo 59.99 USD
+259,false,,
+260,false,,
+261,false,,
+262,false,,
+263,false,,
+264,false,,
+265,false,,
+266,false,,
+267,false,,
+268,false,,
+269,false,,
+270,false,,
+271,false,,
+272,false,,
+273,false,,
+274,false,,
+275,false,,
+276,true,paid,https://www.xbox.com/en-us/games/store/the-darkness/C035L0NS3SQN Xbox Store 19.99 USD
+277,false,,
+278,true,paid,https://www.xbox.com/en-us/games/store/mortal-kombat-1/9N7271QN4SGB Microsoft Store 구매 가격 표시
+279,false,,
+280,false,,
+281,true,paid,https://www.xbox.com/en-us/games/store/peggle/BSCCQL7DZ9KD Xbox Store 4.99 USD
+282,true,paid,https://www.gog.com/en/game/medal_of_honor_pacific_assault GOG 4.99 USD
+283,true,paid,https://www.nintendo.com/us/store/products/game-boy-nintendo-classics-switch/ Nintendo Switch Online 구독 필요
+284,false,,
+285,true,paid,"https://store.steampowered.com/app/339800/ Steam 구매 ₩ 11,000"
+286,false,,
+287,false,,
+288,false,,
+289,false,,
+290,false,,
+291,false,,
+292,false,,
+293,false,,
+294,false,,
+295,false,,
+296,false,,
+297,false,,
+298,false,,
+299,true,paid,https://store.playstation.com/en-us/product/UP9000-PPSA22288_00-SCUS974640000000 PlayStation Store 9.99 USD
+300,false,,

@@ -51,6 +51,8 @@
 | `npm run prefill:images` | 게관위 모바일 게임 App Store 아이콘·스크린샷 저장 |
 | `npm run prefill:playtime -- [--limit N] [--pages N] [--dry] [--retry]` | RAWG 평균 플레이 시간 저장(인기·랭킹·신작·장르별 IGDB 게임, 기본 500개). RAWG 월 2만 건·게임당 최대 2건 |
 | `npm run prefill:price -- [--ai] [--only steam|appstore|ai] [--pages N] [--limit N] [--recheck] [--dry]` | 유료·무료 저장 → `server/data/price.json`. Steam `is_free`(IGDB 인기 후보, 1.6초 간격) · App Store 가격 0원(게관위 모바일, `app-store.json`에서 찾은 앱) · `--ai`면 스토어 근거 없는 IGDB 게임만 Gemini('모름' 저장) |
+| `npm run prefill:price -- --only steam-list [--dry] [--recheck]` | Steam 상점 검색 목록 전체(가격 포함, 약 7만 개·30분, `.cache/steam-prices.json` 7일)를 IGDB external_games Steam 번호와 맞춰 한 번에 'Steam 기준' 저장(앱 여럿이면 리뷰 많은 앱, 100% 할인은 유료, AI 값과 다르면 Steam 값) |
+| `npm run prefill:price -- --export` → `--import <결과.csv> [--dry] [--force]` | 유료·무료 정보 없는 게임(IGDB 인기 후보 + 화면에 보이는 게관위 게임) 외부 AI용 CSV → `server/data/price-review/price-partN.csv`(300개씩) + `price.map.json`, 질문 `PROMPT-PRICE.md`. 반영은 `known: true`만(출처 'ai', `via: 'external'` → 'AI 추정'), 스토어 근거는 안 건드림 |
 | `npm run import:steam -- --crawl` → `npm run import:steam -- [--min N] [--dry] [--recheck]` | **IGDB·게관위에 없는 Steam 게임 넣기**: Steam 상점 검색(게임만, 약 7만 개)을 `.cache/steam-catalog.json`에 받고 → 리뷰 N개(기본 200) 이상 중 IGDB(external_games Steam 번호·같은 이름)·게관위(같은 이름)에 없는 게임만 Steam 상세(한국어)로 `server/data/steam-games.json`. 프로그램·출시 전·성인 전용은 뺌 |
 | `npm run recheck:grac-igdb -- [--limit N] [--dry]` | **화면에 보이는** 게관위 게임(종료·모름 제외, 약 9천 개, 동시 6묶음)이 IGDB에 있는지 새 방식(괄호 안 이름·플랫폼 표기 제거·전각 정리·slug, 꺼낸 이름은 플랫폼도 일치)으로 다시 확인 → `.cache/grac-igdb-check.json`(v2). 이어서 실행 가능 |
 | `npm run refresh:grac -- [--incremental] [--skip-grac]` | **배포용 데이터 갱신**: 게관위 전체 목록 → `server/data/grac-index.json`, `.cache`의 IGDB 존재 확인·번역 캐시 → `server/data/`로 합쳐 복사. 돌린 뒤 커밋 |
