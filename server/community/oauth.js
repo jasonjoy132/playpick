@@ -30,8 +30,20 @@ export const providerLabel = (p) => PROVIDERS[p]?.label ?? p;
 const fail = (code, message, status = 400) => new DataSourceError(code, message, status);
 const b64 = (s) => Buffer.from(s, 'utf8').toString('base64url');
 const unb64 = (s) => Buffer.from(String(s), 'base64url').toString('utf8');
-/** 돌아갈 화면 주소: 우리 사이트 안의 경로만 */
-export const safeNext = (n) => (typeof n === 'string' && n.startsWith('/') && !n.startsWith('//') && !n.startsWith('/\\') ? n.slice(0, 300) : '/');
+/**
+ * 돌아갈 화면 주소: 우리 사이트 안의 경로만.
+ * 브라우저는 주소를 읽을 때 탭·줄바꿈을 지우고 '\'를 '/'로 바꿔서 '/<탭>/evil.com'이 '//evil.com'(다른 사이트)이 됨
+ * → 제어 문자·'\'가 있으면 거절하고, 실제로 주소를 해석해 같은 사이트인지 확인
+ */
+export function safeNext(n) {
+  if (typeof n !== 'string' || !n.startsWith('/') || n.length > 300 || /[\x00-\x20\x7f\\]/.test(n)) return '/';
+  try {
+    const u = new URL(n, 'http://pp.invalid');
+    return u.origin === 'http://pp.invalid' ? u.pathname + u.search + u.hash : '/';
+  } catch {
+    return '/';
+  }
+}
 
 /**
  * @param {{ google?: {clientId, clientSecret}, discord?: {clientId, clientSecret} }} cfg

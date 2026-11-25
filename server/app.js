@@ -194,7 +194,14 @@ export function createApp(config, deps = {}) {
     eventsIpHour: createDbRateLimiter(db, { name: 'events-ip', limit: 1500, windowMs: 60 * 60e3 }), // 서버 여러 대가 함께 셈
     aiPlaytime: createRateLimiter({ limit: 30, windowMs: 60 * 60e3 }), // 회원 한 명이 AI 플레이 시간을 새로 물을 수 있는 수(시간당)
     aiPlayers: createRateLimiter({ limit: 30, windowMs: 60 * 60e3 }), // 회원 한 명이 AI 추천 인원을 새로 물을 수 있는 수(시간당)
+    // 검색·상세는 로그인 없이 DeepL 번역(유료·월 한도)과 IGDB·게관위 호출을 부름 → IP 하나가 쏟아붓지 못하게
+    // 분당은 메모리(빠름), 시간당은 DB(서버 여러 대가 함께 셈). 학교 와이파이처럼 여럿이 같은 IP여도 넉넉하게
+    search: createRateLimiter({ limit: 40, windowMs: 60e3 }),
+    searchHour: createDbRateLimiter(db, { name: 'search-ip', limit: 600, windowMs: 60 * 60e3 }),
+    detail: createRateLimiter({ limit: 120, windowMs: 60e3 }),
+    detailHour: createDbRateLimiter(db, { name: 'detail-ip', limit: 2000, windowMs: 60 * 60e3 }),
   };
+  const tooMany = () => apiError('RATE_LIMIT', '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.', 429);
   // 게관위 새 게임: 하루 한 번 받아 DB에 두고(스토어 근거 + AI 인원), 색인·AI 판단에 덧붙임 (live 모드만)
   const feed = catalog.gracFeed ?? null;
   const gracNew = feed
@@ -541,7 +548,8 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     }
     if (p === '/api/auth/verify-email' && method === 'POST') {
       if (!(await limits.mail.hit(`verify-use|${ip}`))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
-      return sendJson(res, 200, await accounts.verifyEmail(await readJson(req)));
+      // 관리자 이메일은 그 계정으로 로그인한 브라우저에서만 인증(남이 관리자 이메일로 먼저 가입해 인증 메일을 보내도, 관리자가 링크를 눌러 그 계정이 관리자가 되지 않게)
+      return sendJson(res, 200, await accounts.verifyEmail(await readJson(req), { viewerId: user?.id ?? null, needLogin: (email) => admins.has(email) }));
     }
     if (p === '/api/auth/reset' && method === 'POST') {
       if (!(await limits.mail.hit(`reset|${ip}`))) throw apiError('RATE_LIMIT', '잠시 후 다시 시도해 주세요.', 429);
@@ -1021,6 +1029,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
     if (p === '/api/search') {
       const q = (url.searchParams.get('q') || '').trim();
       if (q.length < 1 || q.length > 50) return sendJson(res, 400, { error: { code: 'INVALID_QUERY', message: '검색어는 1~50자로 입력해 주세요.' } });
+      if (!user?.isAdmin && !(limits.search.hit(ip) && (await limits.searchHour.hit(ip)))) throw tooMany();
       const translate = translator.translateTitles ? (texts, target) => translator.translateTitles(texts, target) : undefined;
       const found = await catalog.search(q, { translate });
       const mine = [...await submissions.search(q), ...(found.translatedQuery ? await submissions.search(found.translatedQuery) : [])];
@@ -1039,6 +1048,7 @@ const POPULAR_POOL = 200; // 인기 게임 PlayPick·합계 순위를 계산하�
       } catch {
         throw apiError('BAD_ID', '잘못된 게임 ID입니다.', 400);
       }
+      if (!user?.isAdmin && !(limits.detail.hit(ip) && (await limits.detailHour.hit(ip)))) throw tooMany();
       const found = await getAnyGame(id);
       const ttbP = found ? igdbTimeToBeat(found).catch(() => null) : null; // 번역 등과 동시에
       if (!found) return sendJson(res, 404, { error: { code: 'NOT_FOUND', message: '게임 정보를 찾을 수 없습니다.' } });

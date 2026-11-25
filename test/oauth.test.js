@@ -4,6 +4,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../server/app.js';
 import { getConfig } from '../server/config.js';
+import { safeNext } from '../server/community/oauth.js';
 
 // 가짜 제공자: code → 프로필
 const PROFILES = {
@@ -202,8 +203,20 @@ test('아이디로 가입한 회원: 이메일 인증 전에는 Google 자동 �
   assert.equal((await browser().api('POST', '/api/auth/verify-email', { token: 'nope' })).status, 400);
   const link = mails.find((m) => m.subject.includes('이메일 인증'))?.link;
   const token = new URL(link).searchParams.get('token');
-  assert.equal((await browser().api('POST', '/api/auth/verify-email', { token })).status, 200);
-  assert.equal((await browser().api('POST', '/api/auth/verify-email', { token })).status, 200, '같은 링크를 다시 열어도 인증됨');
+  // 관리자 이메일: 로그인 안 한 브라우저·다른 계정으로는 인증 안 됨(남이 관리자 이메일로 먼저 가입해 두고 인증 메일을 보내는 것 막기)
+  const anon = await browser().api('POST', '/api/auth/verify-email', { token });
+  assert.equal(anon.status, 401);
+  assert.equal(anon.body.error.code, 'VERIFY_LOGIN_REQUIRED');
+  const other = browser();
+  await other.api('POST', '/api/auth/signup', { loginId: 'other1', password: 'pass1234', nickname: '다른회원', email: 'other@example.com' });
+  // (다른 계정으로 로그인해 열어도 viewerId가 달라 거절 — 인증 링크 시도는 IP당 10분 5번이라 여기선 생략)
+  // 관리자 아닌 이메일은 지금처럼 로그인 안 한 브라우저(휴대폰 메일 앱 등)에서도 인증됨
+  const otherToken = new URL(mails.filter((m) => m.subject.includes('이메일 인증')).at(-1).link).searchParams.get('token');
+  assert.equal((await browser().api('POST', '/api/auth/verify-email', { token: otherToken })).status, 200);
+  assert.equal((await other.api('GET', '/api/auth/me')).body.user.emailVerified, true);
+  assert.equal((await b.api('GET', '/api/auth/me')).body.user.emailVerified, false);
+  assert.equal((await b.api('POST', '/api/auth/verify-email', { token })).status, 200);
+  assert.equal((await b.api('POST', '/api/auth/verify-email', { token })).status, 200, '같은 링크를 다시 열어도 인증됨');
   const after = (await b.api('GET', '/api/auth/me')).body.user;
   assert.equal(after.emailVerified, true);
   assert.equal(after.isAdmin, true);
@@ -257,4 +270,15 @@ test('키가 없으면 버튼 목록이 비고, 시작해도 로그인 화면으
   } finally {
     s2.close();
   }
+});
+
+test('로그인 뒤 돌아갈 주소(next): 탭·줄바꿈·역슬래시로 다른 사이트가 되지 않음', async () => {
+  for (const bad of ['/\t/evil.example', '/\n/evil.example', '/\\evil.example', '/\r\n/evil.example','//evil.example', 'https://evil.example', '/ /evil.example']) {
+    assert.equal(safeNext(bad), '/', JSON.stringify(bad));
+  }
+  assert.equal(safeNext('/games/igdb-1?x=1#a'), '/games/igdb-1?x=1#a');
+  assert.equal(safeNext('/verify-email?token=abc'), '/verify-email?token=abc');
+  // 실제 흐름: 이미 가입한 Google 계정으로 next=/<탭>/evil.example → 홈으로
+  const { location } = await browser().social('google', 'g-new', { next: '/\t/evil.example' });
+  assert.equal(location, '/');
 });

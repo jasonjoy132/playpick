@@ -7,9 +7,16 @@ import { SocialButtons, ProviderMark, oauthErrorText } from '../components/Socia
 import { useAsync } from '../lib/useAsync.js';
 import { Loading } from '../components/Status.jsx';
 
+/** 로그인 뒤 돌아갈 주소: 우리 사이트 안의 경로만(서버 oauth.js safeNext와 같은 규칙 — 탭·'\'로 다른 사이트가 되는 것 막기) */
 const safeNext = (search) => {
   const n = new URLSearchParams(search).get('next') || '/';
-  return n.startsWith('/') && !n.startsWith('//') ? n : '/';
+  if (!n.startsWith('/') || n.length > 300 || /[\x00-\x20\x7f\\]/.test(n)) return '/';
+  try {
+    const u = new URL(n, window.location.origin);
+    return u.origin === window.location.origin ? u.pathname + u.search + u.hash : '/';
+  } catch {
+    return '/';
+  }
 };
 
 function Field({ label, hint, error, ...props }) {
@@ -235,6 +242,8 @@ export function VerifyEmailPage() {
   const r = useAsync(() => (token ? api.verifyEmail({ token }).then(async (x) => (await refreshUser?.(), x)) : Promise.resolve(null)), [token]);
   if (!token) return <Shell title="잘못된 링크예요" desc="메일에 있는 링크로 다시 들어와 주세요." footer={<Link to="/mypage">마이페이지</Link>} />;
   if (r.status === 'loading') return <Loading message="이메일을 확인하는 중이에요…" />;
+  if (r.status === 'error' && r.error?.code === 'VERIFY_LOGIN_REQUIRED')
+    return <Shell title="로그인한 뒤 인증해 주세요" desc={r.error.message} footer={<Link to={`/login?next=${encodeURIComponent(`/verify-email?token=${token}`)}`}>{user ? '다른 계정으로 로그인 →' : '로그인하기 →'}</Link>} />;
   if (r.status === 'error')
     return <Shell title="인증하지 못했어요" desc={r.error?.message} footer={<Link to={user ? '/mypage' : '/login?next=%2Fmypage'}>마이페이지에서 다시 받기 →</Link>} />;
   return <Shell title="이메일 인증을 마쳤어요" desc="이제 이 이메일이 본인 것으로 확인됐어요." footer={<Link to={user ? '/mypage' : '/'}>{user ? '마이페이지로 →' : '홈으로 →'}</Link>} />;

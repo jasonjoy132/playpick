@@ -330,11 +330,13 @@ export function createAccounts(db, { mailer, baseUrl, avatars, now = () => Date.
     },
 
     /** 메일 링크로 이메일 인증 (로그인 안 해도 됨) */
-    async verifyEmail({ token } = {}) {
+    /** @param {{ viewerId?: number|null, needLogin?: (email: string) => boolean }} [opt] needLogin이 참인 이메일(관리자)은 그 계정으로 로그인해 있어야 함 */
+    async verifyEmail({ token } = {}, { viewerId = null, needLogin = () => false } = {}) {
       const row = token ? await q.verify.get(sha256(String(token)), now()) : null;
       const user = row ? await q.byId.get(row.user_id) : null;
       // 링크를 보낸 뒤 이메일이 바뀌었으면 쓸 수 없음
       if (!row || !user || String(user.email).toLowerCase() !== row.email) throw fail('INVALID_TOKEN', '인증 링크가 만료되었거나 이미 사용되었어요. 마이페이지에서 인증 메일을 다시 받아 주세요.', 400);
+      if (needLogin(row.email) && viewerId !== user.id) throw fail('VERIFY_LOGIN_REQUIRED', '관리자 이메일은 그 계정으로 로그인한 상태에서 링크를 열어야 인증돼요. 로그인한 뒤 다시 열어 주세요.', 401);
       await q.setVerified.run(user.id);
       // 토큰은 지우지 않음(같은 링크를 두 번 열어도 '인증됨') — 만료되면 정리됨
       return { ok: true };

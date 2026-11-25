@@ -98,7 +98,8 @@
 - 계정·세션·비밀번호 재설정(메일: Brevo), 찜, 별점·리뷰(1인 1리뷰, 수정 불가·삭제 후 재작성), 최근 본 게임
 - **나를 위한 추천**(회원 전용 `/for-you`, `GET /api/me/for-you`, `server/services/forYou.js`): 규칙 기반 콘텐츠 추천(머신러닝 없음). 별점 4~5점 +3·찜 +2·최근 본 +1·별점 1~2점 −2로 장르·플랫폼·인원 취향표 → 취향 장르 위 3개의 인기 게임(장르별 2쪽)을 후보로 점수 = 4×장르 몫 + 인원(여럿/혼자 취향) + 0.7×인기, 내 플랫폼 아니거나 별점·찜한 게임은 뺌. 카드마다 이유 한 줄(`forYouReason`). 활동 3개 미만이면 안내(`needMore`). 들어가는 곳: 헤더 계정 메뉴·홈 프로필 패널. 추천 인원·플레이 시간은 비회원도 다 보이고 **AI에게 새로 물을 때만** 로그인 필요(아래 Gemini 예외)
 - **이메일 인증**(`users.email_verified`): 아이디 가입 때 인증 메일(`/verify-email?token=`, 24시간, `email_verifications`), 마이페이지 '인증 메일 보내기'(`POST /api/me/verify-email`). 비밀번호 재설정 링크를 쓰거나 같은 이메일의 소셜 계정을 연결해도 인증됨. 소셜 가입은 처음부터 인증
-- **시도 제한**: 로그인·메일·가입·소셜 로그인은 DB `rate_hits`(`createDbRateLimiter`, 서버리스 인스턴스끼리 공유), 글쓰기·AI 질문은 메모리
+- **시도 제한**: 로그인·메일·가입·소셜 로그인은 DB `rate_hits`(`createDbRateLimiter`, 서버리스 인스턴스끼리 공유), 글쓰기·AI 질문은 메모리. 로그인 없이 DeepL 번역·IGDB를 부르는 검색(`/api/search`, IP당 분 40·시간 600)·상세(`/api/games/:id`, 분 120·시간 2000)도 제한(분당 메모리 + 시간당 DB, 관리자 제외, `test/getLimit.test.js`)
+- 로그인 뒤 돌아갈 주소 `next`: 서버 `oauth.js`의 `safeNext`·화면 `AuthPages.jsx`의 `safeNext` 모두 제어 문자·`\`를 거절하고 주소를 해석해 같은 사이트인지 확인(탭으로 `//다른사이트`가 되는 열린 리디렉트 막기)
 - 보안 헤더: API는 `app.js`, 화면(정적 파일)은 `vercel.json` `headers`(X-Frame-Options·frame-ancestors 등)
 - **인기 게임 순위**(예전 '평점 랭킹'을 합침, `/ranking`은 `/popular?by=rating`으로 이동): `/popular?by=&sort=` · `/api/browse/popular?by=count|rating&sort=global|playpick|total`. 순위는 `server/services/ranking.js`의 `rankGames`
   - 평가 많은 순(기본): 글로벌 IGDB 평가 수 · PlayPick 숨김 안 된 회원 리뷰 수(`community.mostReviewed`) · 합계 두 수를 그대로 더함
@@ -118,7 +119,7 @@
     - **고친 플랫폼·장르의 검색 반영**: 빼면 판정(`judge`)에서 빠짐. 넣으면 IGDB 검색에는 안 걸리므로 `retaggedGames`(고친 IGDB 게임)를 추천 목록의 '끼울 게임'(평가 수 자리)·장르별 게임(그 페이지 평가 수 범위)에 끼움. 게관위는 `gracMatches`에 `patch`(`reports.patcher`)를 넘겨 고친 값으로 고름(`patchKey`로 캐시 구분). 제목을 고쳐도 IGDB 검색어로는 안 걸림
   - 리뷰 신고 `reports.js` → 관리자가 숨기면 작성자에게만 보이고 평점·칭호 계산에서 빠짐
   - **관리자는 게임 상세에서 바로**: '관리자 · 정보 바로 수정'(지금 값이 채워진 칸, 바꾼 칸만 보내 바로 승인 → 화면을 조용히 다시 받음 `useAsync`의 `reload`) · 남의 리뷰 '삭제 (관리자)'(`DELETE /api/admin/reviews/:id`, `community.deleteReviewById`, 작성자에게 알림)
-- **관리자**: `.env`의 `ADMIN_EMAILS`(쉼표 구분) 이메일로 가입하고 **그 이메일을 인증한** 계정(인증 전엔 `adminPending`, 마이페이지에 안내). 화면 `/admin`(제보 종류별 탭)
+- **관리자**: `.env`의 `ADMIN_EMAILS`(쉼표 구분) 이메일로 가입하고 **그 이메일을 인증한** 계정(인증 전엔 `adminPending`, 마이페이지에 안내). 화면 `/admin`(제보 종류별 탭). 관리자 이메일의 인증 링크는 **그 계정으로 로그인한 브라우저에서만** 통함(`VERIFY_LOGIN_REQUIRED` → 화면이 로그인 뒤 같은 링크로 돌아옴) — 남이 관리자 이메일로 먼저 가입해 인증 메일을 보내도 관리자가 되지 않게. 일반 이메일은 로그인 없이 인증됨
 - **칭호·뱃지** `badges.js`: 저장 없이 그때그때 계산(대표 칭호 `users.title_badge`, 알림 확인 `users.badges_seen`)
   - 단계: 제보(finder~curator), 리뷰(rv1~rv5), 사진(ph1~ph3), 정보(if1~if3) + 특별 뱃지(pioneer, popular, thorough, local, early, essay, cleaner, firstword)
   - 그림 `client/public/badge-<id>.webp`(128px, 배경 투명). 그림이 없으면 `noImage: true`로 이모지 표시
