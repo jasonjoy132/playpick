@@ -11,7 +11,8 @@ import { Arrow } from './Arrow.jsx';
 
 const MEDAL = ['🥇', '🥈', '🥉'];
 const counts = (c) => [c.games && `게임 ${c.games}`, c.photos && `사진 ${c.photos}`, c.infos && `정보 ${c.infos}`].filter(Boolean).join(' · ');
-const monthLabel = (m) => (m ? `${Number(m.slice(5, 7))}월` : '이번 달');
+// 달 이름: 서버가 준 달(YYYY-MM), 아직 못 받았으면 지금 한국 날짜의 달 → 불러오는 동안에도 'N월' 그대로('이번 달'과 번갈아 바뀌지 않게)
+const monthLabel = (m) => `${m ? Number(m.slice(5, 7)) : new Date(Date.now() + 9 * 3600e3).getUTCMonth() + 1}월`;
 
 /** 점수 기준 (접힌 안내) */
 function ScoreGuide() {
