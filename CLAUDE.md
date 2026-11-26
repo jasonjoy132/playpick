@@ -101,7 +101,7 @@
 - **시도 제한**: 로그인·메일·가입·소셜 로그인은 DB `rate_hits`(`createDbRateLimiter`, 서버리스 인스턴스끼리 공유), 글쓰기·AI 질문은 메모리. 로그인 없이 DeepL 번역·IGDB를 부르는 검색(`/api/search`, IP당 분 40·시간 600)·상세(`/api/games/:id`, 분 120·시간 2000)도 제한(분당 메모리 + 시간당 DB, 관리자 제외, `test/getLimit.test.js`)
 - 로그인 뒤 돌아갈 주소 `next`: 서버 `oauth.js`의 `safeNext`·화면 `AuthPages.jsx`의 `safeNext` 모두 제어 문자·`\`를 거절하고 주소를 해석해 같은 사이트인지 확인(탭으로 `//다른사이트`가 되는 열린 리디렉트 막기)
 - 보안 헤더: API는 `app.js`, 화면(정적 파일)은 `vercel.json` `headers`(X-Frame-Options·frame-ancestors 등)
-- **인기 게임 순위**(예전 '평점 랭킹'을 합침, `/ranking`은 `/popular?by=rating`으로 이동): `/popular?by=&sort=` · `/api/browse/popular?by=count|rating&sort=global|playpick|total`. 순위는 `server/services/ranking.js`의 `rankGames`
+- **인기 게임 순위**(예전 '평점 랭킹'을 합침, `/ranking`은 `/popular?by=rating`으로 이동): `/popular?by=&sort=`(화면 기본 출처는 '종합'(total), 주소에 sort 없으면 종합) · `/api/browse/popular?by=count|rating&sort=global|playpick|total`. 순위는 `server/services/ranking.js`의 `rankGames`
   - 평가 많은 순(기본): 글로벌 IGDB 평가 수 · PlayPick 숨김 안 된 회원 리뷰 수(`community.mostReviewed`) · 합계 두 수를 그대로 더함
   - 평점 높은 순: 글로벌 IGDB 평점(평가 100개 이상, IGDB `top`) · PlayPick 회원 별점 평균(`community.topRated`) · 합계 두 평균을 평가 수만큼 가중한 평균(평가 합 100개 이상, 반올림 전 IGDB 값 `globalRating.exact` 사용)
   - 합계 후보는 글로벌 상위 200개 + 회원 리뷰 있는 게임. 카드에 순위 숫자 표시. `/api/ranking/members`는 예전 주소용으로 남김

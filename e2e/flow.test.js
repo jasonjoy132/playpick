@@ -467,21 +467,24 @@ test('상단 메뉴: 홈·인기 게임(평가 많은 순·평점 높은 순)·�
   await page.waitForURL(/platform=mobile/);
   await page.waitForFunction((n) => document.querySelectorAll('[data-testid=browse-grid] [data-testid=game-card]').length < n, all);
   assert.equal(await nav.getByRole('link', { name: '인기 게임' }).getAttribute('aria-current'), 'page');
-  // 순위 기준(평가 많은 순 기본 · 평점 높은 순) × 출처(글로벌 기본 · PlayPick · 합계)
+  // 순위 기준(평가 많은 순 기본 · 평점 높은 순) × 출처(종합 기본 · 글로벌 · PlayPick)
   assert.equal(await nav.getByRole('link', { name: '평점 랭킹' }).count(), 0, '평점 랭킹은 인기 게임에 합침');
   const by = page.getByRole('tablist', { name: '순위 기준' });
   const src = page.getByRole('tablist', { name: '평가 출처' });
   assert.equal(await by.getByRole('tab', { name: '평가 많은 순' }).getAttribute('aria-selected'), 'true');
-  assert.equal(await src.getByRole('tab', { name: '글로벌' }).getAttribute('aria-selected'), 'true');
+  assert.equal(await src.getByRole('tab', { name: '종합' }).getAttribute('aria-selected'), 'true', '기본은 종합');
+  assert.doesNotMatch(page.url(), /sort=/);
+  await page.getByTestId('browse-grid').getByText(/^종합 \d[\d,]* = 글로벌 [\d,]+ \+ PlayPick [\d,]+$/).first().waitFor();
   await src.getByRole('tab', { name: 'PlayPick' }).click();
   await page.waitForURL(/sort=playpick/);
   await page.getByTestId('browse-empty').waitFor();
-  await src.getByRole('tab', { name: '합계' }).click();
-  await page.waitForURL(/sort=total/);
-  await page.getByTestId('browse-grid').getByText(/^합계 \d[\d,]* = 글로벌 [\d,]+ \+ PlayPick [\d,]+$/).first().waitFor();
+  await src.getByRole('tab', { name: '글로벌' }).click();
+  await page.waitForURL(/sort=global/);
+  await src.getByRole('tab', { name: '종합' }).click();
+  await page.waitForURL((u) => !u.search.includes('sort='));
   await by.getByRole('tab', { name: '평점 높은 순' }).click();
   await page.waitForURL(/by=rating/);
-  assert.match(page.url(), /sort=total/, '출처는 그대로');
+  assert.equal(await src.getByRole('tab', { name: '종합' }).getAttribute('aria-selected'), 'true', '출처는 그대로');
   await page.getByText(/평가 수만큼 반영해 합친 평균/).waitFor();
 
   await nav.getByRole('link', { name: '장르별 게임' }).click();
