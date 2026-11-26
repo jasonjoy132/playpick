@@ -4,6 +4,7 @@ import { criteriaToSearch, hasAnyCriteria } from '../lib/criteria.js';
 import { ChipGroup } from '../components/FinderModal.jsx';
 import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
+import { recall, remember } from '../lib/pageMemory.js';
 import { useFinder } from '../lib/finder.jsx';
 import { Carousel } from '../components/Carousel.jsx';
 import { WishButton } from '../components/WishButton.jsx';
@@ -50,19 +51,22 @@ function metaLine(game, options) {
  */
 /**
  * 화면에 처음 들어올 때 한 번만 보여 주기(data-reveal: hide → show). 처음부터 화면 안이면 그대로 둠.
- * JS·IntersectionObserver가 없으면 아무것도 숨기지 않음
+ * JS·IntersectionObserver가 없으면 아무것도 숨기지 않음. 뒤로 가기로 돌아온 화면(같은 기록 항목에서 이미 본 것)도 그대로 둠
  */
-function useRevealOnce() {
+function useRevealOnce(name) {
   const ref = useRef(null);
   useEffect(() => {
     const el = ref.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
-    if (el.getBoundingClientRect().top < window.innerHeight * 0.85) return;
+    const seen = `reveal:${name}`;
+    if (recall(seen)) return;
+    if (el.getBoundingClientRect().top < window.innerHeight * 0.85) return remember(seen, true);
     el.dataset.reveal = 'hide';
     const io = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {
           el.dataset.reveal = 'show';
+          remember(seen, true);
           io.disconnect();
         }
       },
@@ -70,12 +74,18 @@ function useRevealOnce() {
     );
     io.observe(el);
     return () => io.disconnect();
-  }, []);
+  }, [name]);
   return ref;
 }
 
+/** 화면에 들어올 때 안의 덩어리가 차례로 떠오르는 상자(.reveal-up) */
+function Reveal({ as: Tag = 'div', name, className = '', ...props }) {
+  const ref = useRevealOnce(name);
+  return <Tag ref={ref} className={`${className} reveal-up`.trim()} {...props} />;
+}
+
 function PopularBand({ games, options }) {
-  const revealRef = useRevealOnce();
+  const revealRef = useRevealOnce('popular');
   const peek = usePeek();
   const [lead, ...list] = games;
   if (!lead) return null;
@@ -242,22 +252,22 @@ export function HomePage({ options }) {
       <HeroFinder options={options} feature={feature} />
       <PopularBand games={popular} options={options} />
       {slides.length > 0 && (
-        <section className="row" aria-labelledby="row-spotlight">
+        <Reveal as="section" name="spotlight" className="row" aria-labelledby="row-spotlight">
           <header className="row-head">
             <h2 id="row-spotlight">이번 주 주목할 게임</h2>
           </header>
           <Carousel games={spotlight.length ? spotlight : slides} options={options} />
-        </section>
+        </Reveal>
       )}
       <section className="band band-soft home-community" aria-labelledby="row-community">
-        <div className="community-main">
+        <Reveal name="community" className="community-main">
           <h2 id="row-community">게임 정보는 회원이 같이 다듬어요</h2>
           <p className="community-lead">추천 인원·플레이 시간·구매처가 틀렸거나 비어 있으면 제보해 주세요. 관리자가 확인한 뒤 반영되고, 기여한 만큼 명예의 전당에 올라가요.</p>
           <HomeContributors />
           <Link to="/hall-of-fame" className="btn btn-ghost community-more">
             명예의 전당 보기
           </Link>
-        </div>
+        </Reveal>
         <aside className="hero-side" aria-label="계정">
           {side}
         </aside>

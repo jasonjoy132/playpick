@@ -1564,9 +1564,15 @@ input[type='text'], input[type='search'], input[type='email'], input[type='passw
 [data-reveal='show'] .pop-item:nth-child(3) { transition-delay: 150ms; }
 [data-reveal='show'] .pop-item:nth-child(4) { transition-delay: 200ms; }
 [data-reveal='show'] .pop-item:nth-child(5) { transition-delay: 250ms; }
+/* 홈 나머지 덩어리(주목할 게임·커뮤니티): 띠 배경은 그대로, 안의 제목·내용이 차례로 떠오름 */
+.reveal-up[data-reveal='show'] > * { transition: opacity 400ms var(--ease-out), transform 400ms var(--ease-out); }
+.reveal-up[data-reveal='hide'] > * { opacity: 0; transform: translateY(12px); }
+.reveal-up[data-reveal='show'] > :nth-child(2) { transition-delay: 70ms; }
+.reveal-up[data-reveal='show'] > :nth-child(3) { transition-delay: 140ms; }
+.reveal-up[data-reveal='show'] > :nth-child(n + 4) { transition-delay: 210ms; }
 @media (prefers-reduced-motion: reduce) {
   .btn:active:not(:disabled), .band-more:active, .wish:active:not(:disabled), .chip:active span { transform: none; }
-  [data-reveal='hide'] .pop-lead, [data-reveal='hide'] .pop-item { transform: none; }
+  [data-reveal='hide'] .pop-lead, [data-reveal='hide'] .pop-item, .reveal-up[data-reveal='hide'] > * { transform: none; }
   .pop-lead-art img, .pop-thumb img { transition: none; }
 }
 
